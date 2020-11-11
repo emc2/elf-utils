@@ -1,0 +1,13 @@
+[package]
+name = "elf-utils"
+version = "0.1.0"
+authors = [ "Eric McCorkle <eric@metricspace.net>" ]
+license = "3BSD"
+keywords = ["elf", "binary"]
+exclude = [
+    ".gitignore"
+]
+edition = "2018"
+
+[dependencies]
+
