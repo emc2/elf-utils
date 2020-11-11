@@ -1,6 +1,6 @@
 [package]
 name = "elf-utils"
-version = "0.1.0"
+version = "0.0.0"
 authors = [ "Eric McCorkle <eric@metricspace.net>" ]
 license = "3BSD"
 keywords = ["elf", "binary"]
@@ -10,4 +10,4 @@ exclude = [
 edition = "2018"
 
 [dependencies]
-
+byteorder = { version = "1.3.4", default-features = false }
