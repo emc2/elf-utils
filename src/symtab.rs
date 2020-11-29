@@ -14,6 +14,7 @@
 //! use core::convert::TryFrom;
 //! use elf_utils::Elf64;
 //! use elf_utils::symtab::Symtab;
+//! use elf_utils::symtab::SymtabError;
 //!
 //! const SYMTAB: [u8; 120] = [
 //!     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -33,7 +34,7 @@
 //!     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 //! ];
 //!
-//! let symtab: Result<Symtab<'_, LittleEndian, Elf64>, ()> =
+//! let symtab: Result<Symtab<'_, LittleEndian, Elf64>, SymtabError> =
 //!     Symtab::try_from(&SYMTAB[0..]);
 //!
 //! assert!(symtab.is_ok());
@@ -85,6 +86,7 @@
 //! use elf_utils::symtab::SymBase;
 //! use elf_utils::symtab::SymBind;
 //! use elf_utils::symtab::SymData;
+//! use elf_utils::symtab::SymDataRaw;
 //! use elf_utils::symtab::SymKind;
 //!
 //! const SYMTAB: [u8; 120] = [
@@ -108,7 +110,7 @@
 //! let symtab: Symtab<'_, LittleEndian, Elf64> =
 //!     Symtab::try_from(&SYMTAB[0..]).unwrap();
 //! let sym = symtab.idx(1).unwrap();
-//! let data: SymData<u32, u16, Elf64> = sym.try_into().unwrap();
+//! let data: SymDataRaw<Elf64> = sym.try_into().unwrap();
 //!
 //! assert_eq!(data, SymData { name: Some(1), value: 0, size: 0,
 //!                            kind: SymKind::File, bind: SymBind::Local,
@@ -129,6 +131,7 @@
 //! use elf_utils::symtab::SymBase;
 //! use elf_utils::symtab::SymBind;
 //! use elf_utils::symtab::SymData;
+//! use elf_utils::symtab::SymDataRaw;
 //! use elf_utils::symtab::SymKind;
 //!
 //! const SYMTAB: [u8; 120] = [
@@ -162,7 +165,7 @@
 //! let symtab: Symtab<'_, LittleEndian, Elf64> =
 //!     Symtab::try_from(&SYMTAB[0..]).unwrap();
 //! let sym = symtab.idx(2).unwrap();
-//! let data: SymData<u32, u16, Elf64> = sym.try_into().unwrap();
+//! let data: SymDataRaw<Elf64> = sym.try_into().unwrap();
 //! let with_str = data.with_strtab(strtab).unwrap();
 //!
 //! assert_eq!(with_str, SymData { name: Some(Ok("finalizer")), value: 560,
@@ -172,8 +175,6 @@
 //! ```
 
 use byteorder::ByteOrder;
-use byteorder::BigEndian;
-use byteorder::LittleEndian;
 use core::convert::TryFrom;
 use core::convert::TryInto;
 use core::fmt::Display;
@@ -185,8 +186,26 @@ use crate::elf::Elf32;
 use crate::elf::Elf64;
 use crate::elf::ElfClass;
 use crate::strtab::Strtab;
-use crate::strtab::StrtabError;
+use crate::strtab::StrtabIdxError;
 use crate::strtab::WithStrtab;
+
+/// Trait for things that can be converted from one type to another
+/// with the use of a [Symtab].
+///
+/// This is typically used with objects such as relocations and
+/// dynamic entries that contain a symbol index.  It can also be used
+/// to convert iterators and other objects to produce data that
+/// contains symbol references.
+pub trait WithSymtab<'a, B: ByteOrder, Offsets: SymOffsets> {
+    /// Result of conversion.
+    type Result;
+    /// Errors that can occur.
+    type Error;
+
+    /// Consume the caller to convert it using `symtab`.
+    fn with_symtab(self, symtab: Symtab<'a, B, Offsets>) ->
+        Result<Self::Result, Self::Error>;
+}
 
 /// Offsets for ELF symbol table entries.
 ///
@@ -246,7 +265,7 @@ pub trait SymtabCreate<'a, B: ByteOrder, Offsets: SymOffsets> {
     /// Calculate the number of bytes required to represent the symbol
     /// table built by `syms`.
     fn required_bytes<'b, S, I>(syms: I) -> usize
-        where I: Iterator<Item = &'b RawSymData<Offsets>>,
+        where I: Iterator<Item = &'b SymDataRaw<Offsets>>,
               Offsets: 'b;
 
     /// Attempt to create a `Symtab` in `buf` containing the symbols
@@ -254,7 +273,7 @@ pub trait SymtabCreate<'a, B: ByteOrder, Offsets: SymOffsets> {
     /// if successful.
     fn create_split<'b, I>(buf: &'a mut [u8], syms: I) ->
         Result<(Self, &'a mut [u8]), ()>
-        where I: Iterator<Item = &'b RawSymData<Offsets>>,
+        where I: Iterator<Item = &'b SymDataRaw<Offsets>>,
               Self: Sized,
               Offsets: 'b;
 
@@ -262,7 +281,7 @@ pub trait SymtabCreate<'a, B: ByteOrder, Offsets: SymOffsets> {
     /// in `syms`.
     #[inline]
     fn create<'b, S, I>(buf: &'a mut [u8], syms: I) -> Result<Self, ()>
-        where I: Iterator<Item = &'b RawSymData<Offsets>>,
+        where I: Iterator<Item = &'b SymDataRaw<Offsets>>,
               Self: Sized,
               Offsets: 'b {
         match Self::create_split(buf, syms) {
@@ -313,6 +332,7 @@ pub trait SymtabMutOps<'a, B: ByteOrder, Offsets: SymOffsets> {
 /// use elf_utils::symtab::SymBase;
 /// use elf_utils::symtab::SymBind;
 /// use elf_utils::symtab::SymData;
+/// use elf_utils::symtab::SymDataRaw;
 /// use elf_utils::symtab::SymKind;
 ///
 /// const SYMTAB: [u8; 120] = [
@@ -332,7 +352,7 @@ pub trait SymtabMutOps<'a, B: ByteOrder, Offsets: SymOffsets> {
 ///     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 ///     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 /// ];
-/// const SYMTAB_CONTENTS: [SymData<u32, u16, Elf64>; 5] = [
+/// const SYMTAB_CONTENTS: [SymDataRaw<Elf64>; 5] = [
 ///    SymData { name: None, value: 0, size: 0, kind: SymKind::None,
 ///              bind: SymBind::Local, section: SymBase::Undef },
 ///    SymData { name: Some(1), value: 0, size: 0, kind: SymKind::File,
@@ -350,7 +370,7 @@ pub trait SymtabMutOps<'a, B: ByteOrder, Offsets: SymOffsets> {
 ///
 /// for i in 0 .. 5 {
 ///     let sym = symtab.idx(i).unwrap();
-///     let data: SymData<u32, u16, Elf64> = sym.try_into().unwrap();
+///     let data: SymDataRaw<Elf64> = sym.try_into().unwrap();
 ///
 ///     assert_eq!(data, SYMTAB_CONTENTS[i]);
 /// }
@@ -392,6 +412,7 @@ pub struct SymtabMut<'a, B: ByteOrder, Offsets: SymOffsets> {
 /// use elf_utils::symtab::SymBase;
 /// use elf_utils::symtab::SymBind;
 /// use elf_utils::symtab::SymData;
+/// use elf_utils::symtab::SymDataRaw;
 /// use elf_utils::symtab::SymKind;
 ///
 /// const SYMTAB: [u8; 120] = [
@@ -415,7 +436,7 @@ pub struct SymtabMut<'a, B: ByteOrder, Offsets: SymOffsets> {
 /// let symtab: Symtab<'_, LittleEndian, Elf64> =
 ///     Symtab::try_from(&SYMTAB[0..]).unwrap();
 /// let sym = symtab.idx(1).unwrap();
-/// let data: SymData<u32, u16, Elf64> = sym.try_into().unwrap();
+/// let data: SymDataRaw<Elf64> = sym.try_into().unwrap();
 ///
 /// assert_eq!(data, SymData { name: Some(1), value: 0, size: 0,
 ///                            kind: SymKind::File, bind: SymBind::Local,
@@ -450,6 +471,7 @@ pub struct SymMut<'a, B: ByteOrder, Offsets: SymOffsets> {
 /// use elf_utils::symtab::SymBase;
 /// use elf_utils::symtab::SymBind;
 /// use elf_utils::symtab::SymData;
+/// use elf_utils::symtab::SymDataRaw;
 /// use elf_utils::symtab::SymKind;
 ///
 /// const SYMTAB: [u8; 120] = [
@@ -469,7 +491,7 @@ pub struct SymMut<'a, B: ByteOrder, Offsets: SymOffsets> {
 ///     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 ///     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 /// ];
-/// const SYMTAB_CONTENTS: [SymData<u32, u16, Elf64>; 5] = [
+/// const SYMTAB_CONTENTS: [SymDataRaw<Elf64>; 5] = [
 ///    SymData { name: None, value: 0, size: 0, kind: SymKind::None,
 ///              bind: SymBind::Local, section: SymBase::Undef },
 ///    SymData { name: Some(1), value: 0, size: 0, kind: SymKind::File,
@@ -488,7 +510,7 @@ pub struct SymMut<'a, B: ByteOrder, Offsets: SymOffsets> {
 ///
 /// for i in 0 .. 5 {
 ///     let sym = iter.next().unwrap();
-///     let data: SymData<u32, u16, Elf64> = sym.try_into().unwrap();
+///     let data: SymDataRaw<Elf64> = sym.try_into().unwrap();
 ///
 ///     assert_eq!(data, SYMTAB_CONTENTS[i]);
 /// }
@@ -520,6 +542,8 @@ pub enum SymKind {
     /// The name of the source file.  This typically has `Local`
     /// binding and preceeds all other `Local` symbols.
     File,
+    /// A thread-local storage object.
+    ThreadLocal,
     /// Unknown type.
     ArchSpecific(u8)
 }
@@ -590,6 +614,7 @@ pub enum SymBase<Section, Half> {
 /// use elf_utils::symtab::SymBase;
 /// use elf_utils::symtab::SymBind;
 /// use elf_utils::symtab::SymData;
+/// use elf_utils::symtab::SymDataRaw;
 /// use elf_utils::symtab::SymKind;
 ///
 /// const SYMTAB: [u8; 120] = [
@@ -623,7 +648,7 @@ pub enum SymBase<Section, Half> {
 /// let symtab: Symtab<'_, LittleEndian, Elf64> =
 ///     Symtab::try_from(&SYMTAB[0..]).unwrap();
 /// let sym = symtab.idx(2).unwrap();
-/// let data: SymData<u32, u16, Elf64> = sym.try_into().unwrap();
+/// let data: SymDataRaw<Elf64> = sym.try_into().unwrap();
 ///
 /// assert_eq!(data, SymData { name: Some(10), value: 560, size: 90,
 ///                            kind: SymKind::Function, bind: SymBind::Local,
@@ -652,12 +677,27 @@ pub struct SymData<Name, Section, Class: ElfClass> {
     pub section: SymBase<Section, Class::Half>
 }
 
-/// Type synonym for symbol data read directly from the binary.
-type RawSymData<Class: ElfClass> = SymData<Class::Word, Class::Half, Class>;
+/// Type synonym for [SymData] as projected from a [Sym].
+///
+/// This is obtained directly from the [TryFrom] insance acting on a
+/// [Sym].  This is also used in [Symtab::create] and
+/// [Symtab::create_split].
+pub type SymDataRaw<Class> =
+    SymData<<Class as ElfClass>::Word, <Class as ElfClass>::Half, Class>;
 
-/// Type synonym for symbol data that has been processed with a `Strtab`.
-type StrSymData<'a, Class: ElfClass> = SymData<Result<&'a str, &'a [u8]>,
-                                               Class::Half, Class>;
+/// Type synonym for [SymData] as projected from a [Sym], with symbol
+/// names represented as the results of UTF-8 decoding.
+///
+/// This is obtained from the [WithStrtab] instance on a [SymDataRaw].
+pub type SymDataStrData<'a, Class> =
+    SymData<Result<&'a str, &'a [u8]>, <Class as ElfClass>::Half, Class>;
+
+/// Type synonym for [SymData] as projected from a [Sym], with symbol
+/// names represented as fully-resolved `&'a str`s.
+///
+/// This is obtained from the [WithStrtab] instance on a [SymDataRaw].
+pub type SymDataStr<'a, Class> =
+    SymData<&'a str, <Class as ElfClass>::Half, Class>;
 
 /// Errors that can occur when projecting a [Sym] to a [SymData].
 #[derive(Copy, Clone, Debug, Hash, Eq, Ord, PartialEq, PartialOrd)]
@@ -680,12 +720,21 @@ pub enum StrSymError {
     BadType(u8)
 }
 
+/// Errors that can occur creating a [Symtab].
+///
+/// The only error that can occur is if the data is not a multiple of
+/// the size of a symbol.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum SymtabError {
+    BadSize(usize)
+}
+
 #[inline]
 fn name_lookup<'a, Name, Section, Class>(sym: SymData<Name, Section, Class>,
                                         strtab: Strtab<'a>) ->
     Result<SymData<Result<&'a str, &'a [u8]>, Section, Class>, ()>
     where Class: ElfClass,
-          Name: TryInto<usize> {
+          Name: Clone + TryInto<usize> {
     let SymData { name, value, size, bind, kind, section } = sym;
 
     match name {
@@ -694,7 +743,7 @@ fn name_lookup<'a, Name, Section, Class>(sym: SymData<Name, Section, Class>,
                 Ok(name) => Ok(SymData { name: Some(Ok(name)), value: value,
                                          size: size, bind: bind, kind: kind,
                                          section: section }),
-                Err(StrtabError::UTF8Decode(data)) => {
+                Err(StrtabIdxError::UTF8Decode(data)) => {
                     Ok(SymData { name: Some(Err(data)), value: value,
                                  size: size, bind: bind, kind: kind,
                                  section: section })
@@ -711,8 +760,8 @@ fn name_lookup<'a, Name, Section, Class>(sym: SymData<Name, Section, Class>,
 
 #[inline]
 fn project<'a, B, Offsets>(data: &'a [u8], byteorder: PhantomData<B>,
-                           offsets: PhantomData<Offsets>) ->
-    Result<RawSymData<Offsets>, SymError>
+                           _offsets: PhantomData<Offsets>) ->
+    Result<SymDataRaw<Offsets>, SymError>
     where Offsets: SymOffsets,
           B: ByteOrder {
     let name = Offsets::read_word(&data[Offsets::ST_NAME_START ..
@@ -749,9 +798,9 @@ fn project<'a, B, Offsets>(data: &'a [u8], byteorder: PhantomData<B>,
 
 fn create<'a, 'b, B, I, Offsets>(buf: &'a mut [u8], syms: I,
                                  byteorder: PhantomData<B>,
-                                 offsets: PhantomData<Offsets>) ->
+                                 _offsets: PhantomData<Offsets>) ->
     Result<(&'a mut [u8], &'a mut [u8]), ()>
-    where I: Iterator<Item = &'b RawSymData<Offsets>>,
+    where I: Iterator<Item = &'b SymDataRaw<Offsets>>,
           Offsets: 'b + SymOffsets,
           B: ByteOrder {
     let len = buf.len();
@@ -831,10 +880,11 @@ impl SymOffsets for Elf64 {
 /// use elf_utils::symtab::SymBase;
 /// use elf_utils::symtab::SymBind;
 /// use elf_utils::symtab::SymData;
+/// use elf_utils::symtab::SymDataRaw;
 /// use elf_utils::symtab::SymKind;
 /// use elf_utils::symtab;
 ///
-/// const SYMTAB_CONTENTS: [SymData<u32, u16, Elf64>; 5] = [
+/// const SYMTAB_CONTENTS: [SymDataRaw<Elf64>; 5] = [
 ///    SymData { name: None, value: 0, size: 0, kind: SymKind::None,
 ///              bind: SymBind::Local, section: SymBase::Undef },
 ///    SymData { name: Some(1), value: 0, size: 0, kind: SymKind::File,
@@ -853,7 +903,7 @@ impl SymOffsets for Elf64 {
 /// ```
 #[inline]
 pub fn required_bytes<'b, I, Offsets>(syms: I) -> usize
-    where I: Iterator<Item = &'b RawSymData<Offsets>>,
+    where I: Iterator<Item = &'b SymDataRaw<Offsets>>,
           Offsets: 'b + SymOffsets {
     syms.count() * Offsets::ST_ENT_SIZE
 }
@@ -884,9 +934,10 @@ impl<'a, B, Offsets> Symtab<'a, B, Offsets>
     /// use elf_utils::symtab::SymBase;
     /// use elf_utils::symtab::SymBind;
     /// use elf_utils::symtab::SymData;
+    /// use elf_utils::symtab::SymDataRaw;
     /// use elf_utils::symtab::SymKind;
     ///
-    /// const SYMTAB_CONTENTS: [SymData<u32, u16, Elf64>; 5] = [
+    /// const SYMTAB_CONTENTS: [SymDataRaw<Elf64>; 5] = [
     ///    SymData { name: None, value: 0, size: 0, kind: SymKind::None,
     ///              bind: SymBind::Local, section: SymBase::Undef },
     ///    SymData { name: Some(1), value: 0, size: 0, kind: SymKind::File,
@@ -913,7 +964,7 @@ impl<'a, B, Offsets> Symtab<'a, B, Offsets>
     ///
     /// for i in 0 .. 5 {
     ///     let sym = iter.next().unwrap();
-    ///     let data: SymData<u32, u16, Elf64> = sym.try_into().unwrap();
+    ///     let data: SymDataRaw<Elf64> = sym.try_into().unwrap();
     ///
     ///     assert_eq!(data, SYMTAB_CONTENTS[i]);
     /// }
@@ -923,7 +974,7 @@ impl<'a, B, Offsets> Symtab<'a, B, Offsets>
     #[inline]
     pub fn create_split<'b, I>(buf: &'a mut [u8], syms: I) ->
         Result<(Self, &'a mut [u8]), ()>
-        where I: Iterator<Item = &'b RawSymData<Offsets>>,
+        where I: Iterator<Item = &'b SymDataRaw<Offsets>>,
               Offsets: 'b {
         let byteorder: PhantomData<B> = PhantomData;
         let offsets: PhantomData<Offsets> = PhantomData;
@@ -955,9 +1006,10 @@ impl<'a, B, Offsets> Symtab<'a, B, Offsets>
     /// use elf_utils::symtab::SymBase;
     /// use elf_utils::symtab::SymBind;
     /// use elf_utils::symtab::SymData;
+    /// use elf_utils::symtab::SymDataRaw;
     /// use elf_utils::symtab::SymKind;
     ///
-    /// const SYMTAB_CONTENTS: [SymData<u32, u16, Elf64>; 5] = [
+    /// const SYMTAB_CONTENTS: [SymDataRaw<Elf64>; 5] = [
     ///    SymData { name: None, value: 0, size: 0, kind: SymKind::None,
     ///              bind: SymBind::Local, section: SymBase::Undef },
     ///    SymData { name: Some(1), value: 0, size: 0, kind: SymKind::File,
@@ -979,7 +1031,7 @@ impl<'a, B, Offsets> Symtab<'a, B, Offsets>
     ///
     /// for i in 0 .. 5 {
     ///     let sym = iter.next().unwrap();
-    ///     let data: SymData<u32, u16, Elf64> = sym.try_into().unwrap();
+    ///     let data: SymDataRaw<Elf64> = sym.try_into().unwrap();
     ///
     ///     assert_eq!(data, SYMTAB_CONTENTS[i]);
     /// }
@@ -988,7 +1040,7 @@ impl<'a, B, Offsets> Symtab<'a, B, Offsets>
     /// ```
     #[inline]
     pub fn create<'b, I>(buf: &'a mut [u8], syms: I) -> Result<Self, ()>
-        where I: Iterator<Item = &'b RawSymData<Offsets>>,
+        where I: Iterator<Item = &'b SymDataRaw<Offsets>>,
               Self: Sized,
               Offsets: 'b {
         match Self::create_split(buf, syms) {
@@ -1034,7 +1086,7 @@ impl<'a, B, Offsets> Symtab<'a, B, Offsets>
 impl<'a, B, Offsets> TryFrom<&'a [u8]> for Symtab<'a, B, Offsets>
     where Offsets: SymOffsets,
           B: ByteOrder {
-    type Error = ();
+    type Error = SymtabError;
 
     /// Create a `Symtab` from the data buffer.  This will check that
     /// the data buffer is a multiple of the symbol size.
@@ -1046,7 +1098,7 @@ impl<'a, B, Offsets> TryFrom<&'a [u8]> for Symtab<'a, B, Offsets>
             Ok(Symtab { byteorder: PhantomData, offsets: PhantomData,
                         symtab: data })
         } else {
-            Err(())
+            Err(SymtabError::BadSize(len))
         }
     }
 }
@@ -1054,7 +1106,7 @@ impl<'a, B, Offsets> TryFrom<&'a [u8]> for Symtab<'a, B, Offsets>
 impl<'a, B, Offsets> TryFrom<&'a mut [u8]> for Symtab<'a, B, Offsets>
     where Offsets: SymOffsets,
           B: ByteOrder {
-    type Error = ();
+    type Error = SymtabError;
 
     /// Create a `Symtab` from the data buffer.  This will check that
     /// the data buffer is a multiple of the symbol size.
@@ -1067,7 +1119,7 @@ impl<'a, B, Offsets> TryFrom<&'a mut [u8]> for Symtab<'a, B, Offsets>
             Ok(Symtab { byteorder: PhantomData, offsets: PhantomData,
                         symtab: data })
         } else {
-            Err(())
+            Err(SymtabError::BadSize(len))
         }
     }
 }
@@ -1075,7 +1127,7 @@ impl<'a, B, Offsets> TryFrom<&'a mut [u8]> for Symtab<'a, B, Offsets>
 impl<'a, B, Offsets> TryFrom<&'a mut [u8]> for SymtabMut<'a, B, Offsets>
     where Offsets: SymOffsets,
           B: ByteOrder {
-    type Error = ();
+    type Error = SymtabError;
 
     /// Create a `Symtab` from the data buffer.  This will check that
     /// the data buffer is a multiple of the symbol size.
@@ -1088,7 +1140,7 @@ impl<'a, B, Offsets> TryFrom<&'a mut [u8]> for SymtabMut<'a, B, Offsets>
             Ok(SymtabMut { byteorder: PhantomData, offsets: PhantomData,
                            symtab: data })
         } else {
-            Err(())
+            Err(SymtabError::BadSize(len))
         }
     }
 }
@@ -1130,7 +1182,7 @@ impl<'a, B, Offsets> SymtabCreate<'a, B, Offsets> for SymtabMut<'a, B, Offsets>
           B: ByteOrder {
     #[inline]
     fn required_bytes<'b, S, I>(syms: I) -> usize
-        where I: Iterator<Item = &'b RawSymData<Offsets>>,
+        where I: Iterator<Item = &'b SymDataRaw<Offsets>>,
               Offsets: 'b {
         syms.count() * Offsets::ST_ENT_SIZE
     }
@@ -1138,7 +1190,7 @@ impl<'a, B, Offsets> SymtabCreate<'a, B, Offsets> for SymtabMut<'a, B, Offsets>
     #[inline]
     fn create_split<'b, I>(buf: &'a mut [u8], syms: I) ->
         Result<(Self, &'a mut [u8]), ()>
-        where I: Iterator<Item = &'b RawSymData<Offsets>>,
+        where I: Iterator<Item = &'b SymDataRaw<Offsets>>,
               Offsets: 'b {
         let byteorder: PhantomData<B> = PhantomData;
         let offsets: PhantomData<Offsets> = PhantomData;
@@ -1159,11 +1211,11 @@ impl<Name, Section, Class> Display for SymData<Name, Section, Class>
         match name {
             Some(name) => write!(f, concat!("  name: {}\n  kind: {}\n  ",
                                             "bind: {}\n  value: {:x}\n  ",
-                                            "size: {:x}\n  section: {}\n"),
+                                            "size: {:x}\n  section: {}"),
                        name, kind, bind, value, size, section),
             None => write!(f, concat!("  kind: {}\n  bind: {}\n  ",
                                       "value: {:x}\n  size: {:x}\n  ",
-                                      "section: {}\n"),
+                                      "section: {}"),
                            kind, bind, value, size, section)
         }
     }
@@ -1177,6 +1229,7 @@ impl Display for SymKind {
             SymKind::Function => write!(f, "function"),
             SymKind::Section => write!(f, "section"),
             SymKind::File => write!(f, "file"),
+            SymKind::ThreadLocal => write!(f, "thread-local"),
             SymKind::ArchSpecific(code) =>
                 write!(f, "architecture-specific ({:x})", code)
         }
@@ -1192,6 +1245,7 @@ impl From<SymKind> for u8 {
             SymKind::Function => 2,
             SymKind::Section => 3,
             SymKind::File => 4,
+            SymKind::ThreadLocal => 6,
             SymKind::ArchSpecific(code) => code
         }
     }
@@ -1222,6 +1276,7 @@ impl TryFrom<u8> for SymKind {
             2 => Ok(SymKind::Function),
             3 => Ok(SymKind::Section),
             4 => Ok(SymKind::File),
+            6 => Ok(SymKind::ThreadLocal),
             _ if kind >= 13 => Ok(SymKind::ArchSpecific(kind)),
             bad => Err(bad)
         }
@@ -1355,7 +1410,7 @@ impl<Half: Copy> From<Half> for SymBase<Half, Half>
                 SymBase::ArchSpecific(bind),
             code if code >= 0xff20 && code < 0xff40 =>
                 SymBase::OSSpecific(bind),
-            idx => SymBase::Index(bind)
+            _ => SymBase::Index(bind)
         }
     }
 }
@@ -1379,7 +1434,7 @@ impl<'a, Half: Copy> From<&'a mut Half> for SymBase<Half, Half>
 impl<'a, B, Offsets> WithStrtab<'a> for Sym<'a, B, Offsets>
     where Offsets: 'a + SymOffsets,
           B: ByteOrder {
-    type Result = StrSymData<'a, Offsets>;
+    type Result = SymDataStrData<'a, Offsets>;
     type Error = StrSymError;
 
     #[inline]
@@ -1396,14 +1451,35 @@ impl<'a, B, Offsets> WithStrtab<'a> for Sym<'a, B, Offsets>
     }
 }
 
-impl<'a, B, Offsets> TryFrom<Sym<'a, B, Offsets>> for RawSymData<Offsets>
+impl<'a, Offsets> TryFrom<SymDataStrData<'a, Offsets>>
+    for SymDataStr<'a, Offsets>
+    where Offsets: SymOffsets {
+    type Error = &'a [u8];
+
+    #[inline]
+    fn try_from(sym: SymDataStrData<'a, Offsets>) ->
+        Result<SymDataStr<'a, Offsets>, &'a [u8]> {
+        match sym {
+            SymData { name: Some(Ok(name)), value, size,
+                      bind, kind, section } =>
+                Ok(SymData { name: Some(name), value: value, size: size,
+                             bind: bind, kind: kind, section: section }),
+            SymData { name: None, value, size, bind, kind, section } =>
+                Ok(SymData { name: None, value: value, size: size,
+                             bind: bind, kind: kind, section: section }),
+            SymData { name: Some(Err(data)), .. } => Err(data)
+        }
+    }
+}
+
+impl<'a, B, Offsets> TryFrom<Sym<'a, B, Offsets>> for SymDataRaw<Offsets>
     where Offsets: SymOffsets,
           B: ByteOrder {
     type Error = SymError;
 
     #[inline]
     fn try_from(sym: Sym<'a, B, Offsets>) ->
-        Result<RawSymData<Offsets>, Self::Error> {
+        Result<SymDataRaw<Offsets>, Self::Error> {
         project(sym.sym, sym.byteorder, sym.offsets)
     }
 }
@@ -1428,7 +1504,7 @@ impl<'a, Name, Section, Class> WithStrtab<'a>
                     Ok(name) => Ok(SymData { name: Some(Ok(name)), value: value,
                                              size: size, bind: bind, kind: kind,
                                              section: section }),
-                    Err(StrtabError::UTF8Decode(data)) => {
+                    Err(StrtabIdxError::UTF8Decode(data)) => {
                         Ok(SymData { name: Some(Err(data)), value: value,
                                      size: size, bind: bind, kind: kind,
                                      section: section })
@@ -1493,5 +1569,14 @@ impl<'a, B, Offsets> ExactSizeIterator for SymtabIter<'a, B, Offsets>
     #[inline]
     fn len(&self) -> usize {
         self.symtab.len() / Offsets::ST_ENT_SIZE
+    }
+}
+
+impl Display for SymtabError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
+        match self {
+            SymtabError::BadSize(size) =>
+                write!(f, "bad symbol table size {}", size)
+        }
     }
 }

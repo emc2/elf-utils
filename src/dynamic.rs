@@ -1,4 +1,4 @@
-//! ELF note section functionality.
+//! ELF dynamic section functionality.
 //!
 //! This module provides a [Dynamic] type which acts as a wrapper
 //! around ELF dynamic section data.
@@ -15,6 +15,7 @@
 //! use core::convert::TryFrom;
 //! use elf_utils::Elf32;
 //! use elf_utils::dynamic::Dynamic;
+//! use elf_utils::dynamic::DynamicError;
 //!
 //! const DYNAMIC: [u8; 96] = [
 //!     0x1e, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00,
@@ -31,7 +32,7 @@
 //!     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
 //! ];
 //!
-//! let dynamic: Result<Dynamic<'_, LittleEndian, Elf32>, ()> =
+//! let dynamic: Result<Dynamic<'_, LittleEndian, Elf32>, DynamicError> =
 //!     Dynamic::try_from(&DYNAMIC[0..]);
 //!
 //! assert!(dynamic.is_ok());
@@ -83,6 +84,7 @@
 //! use elf_utils::Elf32;
 //! use elf_utils::dynamic::Dynamic;
 //! use elf_utils::dynamic::DynamicEntData;
+//! use elf_utils::dynamic::DynamicEntDataRaw;
 //!
 //! const DYNAMIC: [u8; 96] = [
 //!     0x1e, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00,
@@ -102,7 +104,7 @@
 //! let dynamic: Dynamic<'_, LittleEndian, Elf32> =
 //!     Dynamic::try_from(&DYNAMIC[0..]).unwrap();
 //! let ent = dynamic.idx(1).unwrap();
-//! let data: DynamicEntData<usize, usize, Elf32> = ent.try_into().unwrap();
+//! let data: DynamicEntDataRaw<Elf32> = ent.try_into().unwrap();
 //!
 //! assert_eq!(data, DynamicEntData::Rel { tab: 0x7f4 });
 //! ```
@@ -110,11 +112,16 @@
 use byteorder::ByteOrder;
 use core::convert::TryFrom;
 use core::convert::TryInto;
+use core::fmt::Display;
+use core::fmt::Formatter;
 use core::iter::FusedIterator;
 use core::marker::PhantomData;
 use crate::elf::Elf32;
 use crate::elf::Elf64;
 use crate::elf::ElfClass;
+use crate::strtab::Strtab;
+use crate::strtab::StrtabIdxError;
+use crate::strtab::WithStrtab;
 
 /// Offsets for ELF dynamic linking table entries.
 ///
@@ -178,6 +185,7 @@ pub trait DynamicOffsets: ElfClass {
 /// use elf_utils::Elf32;
 /// use elf_utils::dynamic::Dynamic;
 /// use elf_utils::dynamic::DynamicEntData;
+/// use elf_utils::dynamic::DynamicEntDataRaw;
 ///
 /// const DYNAMIC: [u8; 96] = [
 ///     0x1e, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00,
@@ -193,7 +201,7 @@ pub trait DynamicOffsets: ElfClass {
 ///     0x1c, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00,
 ///     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
 /// ];
-/// const DYNAMIC_ENTS: [DynamicEntData<usize, usize, Elf32>; 12] = [
+/// const DYNAMIC_ENTS: [DynamicEntDataRaw<Elf32>; 12] = [
 ///     DynamicEntData::Flags { flags: 0x2 },
 ///     DynamicEntData::Rel { tab: 0x7f4 },
 ///     DynamicEntData::RelSize { size: 1512 },
@@ -213,7 +221,7 @@ pub trait DynamicOffsets: ElfClass {
 ///
 /// for i in 0 .. 12 {
 ///     let ent = dynamic.idx(i).unwrap();
-///     let data: DynamicEntData<usize, usize, Elf32> = ent.try_into().unwrap();
+///     let data: DynamicEntDataRaw<Elf32> = ent.try_into().unwrap();
 ///
 ///     assert_eq!(data, DYNAMIC_ENTS[i]);
 /// }
@@ -248,6 +256,7 @@ pub struct Dynamic<'a, B: ByteOrder, Offsets: DynamicOffsets> {
 /// use elf_utils::Elf32;
 /// use elf_utils::dynamic::Dynamic;
 /// use elf_utils::dynamic::DynamicEntData;
+/// use elf_utils::dynamic::DynamicEntDataRaw;
 ///
 /// const DYNAMIC: [u8; 96] = [
 ///     0x1e, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00,
@@ -267,7 +276,7 @@ pub struct Dynamic<'a, B: ByteOrder, Offsets: DynamicOffsets> {
 /// let dynamic: Dynamic<'_, LittleEndian, Elf32> =
 ///     Dynamic::try_from(&DYNAMIC[0..]).unwrap();
 /// let ent = dynamic.idx(1).unwrap();
-/// let data: DynamicEntData<usize, usize, Elf32> = ent.try_into().unwrap();
+/// let data: DynamicEntDataRaw<Elf32> = ent.try_into().unwrap();
 ///
 /// assert_eq!(data, DynamicEntData::Rel { tab: 0x7f4 });
 /// ```
@@ -294,6 +303,7 @@ pub struct DynamicEnt<'a, B: ByteOrder, Offsets: DynamicOffsets> {
 /// use elf_utils::Elf32;
 /// use elf_utils::dynamic::Dynamic;
 /// use elf_utils::dynamic::DynamicEntData;
+/// use elf_utils::dynamic::DynamicEntDataRaw;
 ///
 /// const DYNAMIC: [u8; 96] = [
 ///     0x1e, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00,
@@ -309,7 +319,7 @@ pub struct DynamicEnt<'a, B: ByteOrder, Offsets: DynamicOffsets> {
 ///     0x1c, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00,
 ///     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
 /// ];
-/// const DYNAMIC_ENTS: [DynamicEntData<usize, usize, Elf32>; 12] = [
+/// const DYNAMIC_ENTS: [DynamicEntDataRaw<Elf32>; 12] = [
 ///     DynamicEntData::Flags { flags: 0x2 },
 ///     DynamicEntData::Rel { tab: 0x7f4 },
 ///     DynamicEntData::RelSize { size: 1512 },
@@ -330,7 +340,7 @@ pub struct DynamicEnt<'a, B: ByteOrder, Offsets: DynamicOffsets> {
 ///
 /// for i in 0 .. 12 {
 ///     let ent = iter.next().unwrap();
-///     let data: DynamicEntData<usize, usize, Elf32> = ent.try_into().unwrap();
+///     let data: DynamicEntDataRaw<Elf32> = ent.try_into().unwrap();
 ///
 ///     assert_eq!(data, DYNAMIC_ENTS[i]);
 /// }
@@ -343,6 +353,43 @@ pub struct DynamicIter<'a, B: ByteOrder, Offsets: DynamicOffsets> {
     idx: usize
 }
 
+/// Errors that can occur creating a [Dynamic].
+///
+/// The only error that can occur is if the data is not a multiple of
+/// the size of a dynamic entry.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum DynamicError {
+    /// Buffer size was not a multiple of a dynamic entry.
+    BadSize(usize)
+}
+
+/// Errors that can occur when projecting a [DynamicEnt] into
+/// [DynamicEntData].
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum DynamicEntDataError<Class: ElfClass> {
+    /// Bad relocation type code.
+    BadRelocs(Class::Offset),
+    /// Type code could not be decoded.
+    ///
+    /// This can only happen if the type code value is too large for
+    /// the host `usize`.
+    BadKind(Class::Offset),
+}
+
+/// Errors that can occur when projecting a [DynamicEnt] into
+/// [DynamicEntData].
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum DynamicEntStrsError<Class: ElfClass> {
+    /// Bad relocation type code.
+    BadRelocs(Class::Offset),
+    /// Type code could not be decoded.
+    ///
+    /// This can only happen if the type code value is too large for
+    /// the host `usize`.
+    BadKind(Class::Offset),
+    /// Name index was out-of-bounds.
+    BadName(Class::Offset),
+}
 
 /// Projected ELF dynamic linking data.
 ///
@@ -522,10 +569,39 @@ pub enum DynamicEntData<Name, Idx, Class: ElfClass> {
     }
 }
 
+/// Type synonym for [DynamicEntData] as projected from a [DynamicEnt].
+///
+/// This is obtained directly from the [TryFrom] insance acting on a
+/// [DynamicEnt].  This is also used in [Dynamic::create] and
+/// [Dynamic::create_split].
+pub type DynamicEntDataRaw<Class> =
+    DynamicEntData<<Class as ElfClass>::Offset, <Class as ElfClass>::Offset,
+                   Class>;
+
+/// Type synonym for [DynamicEntData] as projected from a
+/// [DynamicEnt], with symbol names represented as the results of
+/// UTF-8 decoding.
+///
+/// This is obtained from the [WithStrtab] instance on a
+/// [DynamicEntDataRaw].
+pub type DynamicEntDataStrData<'a, Class> =
+    DynamicEntData<Result<&'a str, &'a [u8]>, <Class as ElfClass>::Offset,
+                   Class>;
+
+/// Type synonym for [DynamicEntData] as projected from a
+/// [DynamicEnt], with symbol names represented as fully-resolved `&'a
+/// str`s.
+///
+/// This is obtained from the [WithStrtab] instance on a
+/// [DynamicEntDataRaw].
+pub type DynamicEntDataStr<'a, Class> =
+    DynamicEntData<&'a str, <Class as ElfClass>::Offset, Class>;
+
 #[inline]
 fn project<'a, B, Offsets>(data: &'a [u8], byteorder: PhantomData<B>,
-                           offsets: PhantomData<Offsets>) ->
-    Result<DynamicEntData<usize, usize, Offsets>, ()>
+                           _offsets: PhantomData<Offsets>) ->
+    Result<DynamicEntData<Offsets::Offset, Offsets::Offset, Offsets>,
+           DynamicEntDataError<Offsets>>
     where Offsets: DynamicOffsets,
           B: ByteOrder {
     let tag = Offsets::read_offset(&data[Offsets::D_TAG_START ..
@@ -535,14 +611,11 @@ fn project<'a, B, Offsets>(data: &'a [u8], byteorder: PhantomData<B>,
     match tag.try_into() {
         Ok(0) => Ok(DynamicEntData::None),
         Ok(1) => {
-            let val = Offsets::read_offset(&data[Offsets::D_VAL_START ..
-                                                 Offsets::D_VAL_END],
-                                           byteorder);
+            let name = Offsets::read_offset(&data[Offsets::D_VAL_START ..
+                                                  Offsets::D_VAL_END],
+                                            byteorder);
 
-            match val.try_into() {
-                Ok(name) => Ok(DynamicEntData::Needed { name: name }),
-                Err(_) => Err(())
-            }
+            Ok(DynamicEntData::Needed { name: name })
         },
         Ok(2) => {
             let val = Offsets::read_offset(&data[Offsets::D_VAL_START ..
@@ -629,24 +702,18 @@ fn project<'a, B, Offsets>(data: &'a [u8], byteorder: PhantomData<B>,
             Ok(DynamicEntData::Fini { func: ptr })
         },
         Ok(14) => {
-            let val = Offsets::read_offset(&data[Offsets::D_VAL_START ..
-                                                 Offsets::D_VAL_END],
-                                           byteorder);
+            let name = Offsets::read_offset(&data[Offsets::D_VAL_START ..
+                                                  Offsets::D_VAL_END],
+                                            byteorder);
 
-            match val.try_into() {
-                Ok(name) => Ok(DynamicEntData::Name { name: name }),
-                Err(_) => Err(())
-            }
+            Ok(DynamicEntData::Name { name: name })
         },
         Ok(15) => {
-            let val = Offsets::read_offset(&data[Offsets::D_VAL_START ..
-                                                 Offsets::D_VAL_END],
-                                           byteorder);
+            let path = Offsets::read_offset(&data[Offsets::D_VAL_START ..
+                                                  Offsets::D_VAL_END],
+                                            byteorder);
 
-            match val.try_into() {
-                Ok(path) => Ok(DynamicEntData::RPath { path: path }),
-                Err(_) => Err(())
-            }
+            Ok(DynamicEntData::RPath { path: path })
         },
         Ok(16) => Ok(DynamicEntData::Symbolic),
         Ok(17) => {
@@ -678,7 +745,8 @@ fn project<'a, B, Offsets>(data: &'a [u8], byteorder: PhantomData<B>,
             match val.try_into() {
                 Ok(7) => Ok(DynamicEntData::PLTRela { rela: true }),
                 Ok(17) => Ok(DynamicEntData::PLTRela { rela: false }),
-                _ => Err(())
+                Ok(_) => Err(DynamicEntDataError::BadRelocs(val)),
+                Err(_) => Err(DynamicEntDataError::BadRelocs(val))
             }
         },
         Ok(21) => {
@@ -726,14 +794,11 @@ fn project<'a, B, Offsets>(data: &'a [u8], byteorder: PhantomData<B>,
             Ok(DynamicEntData::FiniArraySize { size: val })
         },
         Ok(29) => {
-            let val = Offsets::read_offset(&data[Offsets::D_VAL_START ..
-                                                 Offsets::D_VAL_END],
-                                           byteorder);
+            let path = Offsets::read_offset(&data[Offsets::D_VAL_START ..
+                                                  Offsets::D_VAL_END],
+                                            byteorder);
 
-            match val.try_into() {
-                Ok(path) => Ok(DynamicEntData::RPath { path: path }),
-                Err(_) => Err(())
-            }
+            Ok(DynamicEntData::RPath { path: path })
         },
         Ok(30) => {
             let val = Offsets::read_offset(&data[Offsets::D_PTR_START ..
@@ -757,14 +822,11 @@ fn project<'a, B, Offsets>(data: &'a [u8], byteorder: PhantomData<B>,
             Ok(DynamicEntData::PreInitArraySize { size: val })
         },
         Ok(34) => {
-            let val = Offsets::read_offset(&data[Offsets::D_VAL_START ..
+            let idx = Offsets::read_offset(&data[Offsets::D_VAL_START ..
                                                  Offsets::D_VAL_END],
                                            byteorder);
 
-            match val.try_into() {
-                Ok(idx) => Ok(DynamicEntData::SymtabIdx { idx: idx }),
-                Err(_) => Err(())
-            }
+            Ok(DynamicEntData::SymtabIdx { idx: idx })
         },
         Ok(_) => {
             let val = Offsets::read_offset(&data[Offsets::D_VAL_START ..
@@ -773,15 +835,16 @@ fn project<'a, B, Offsets>(data: &'a [u8], byteorder: PhantomData<B>,
 
             Ok(DynamicEntData::Unknown { tag: tag, info: val })
         },
-        Err(_) => Err(())
+        Err(_) => Err(DynamicEntDataError::BadKind(tag))
     }
 }
 
 fn create<'a, B, I, Offsets>(buf: &'a mut [u8], ents: I,
                              byteorder: PhantomData<B>,
-                             offsets: PhantomData<Offsets>) ->
+                             _offsets: PhantomData<Offsets>) ->
     Result<(&'a mut [u8], &'a mut [u8]), ()>
-    where I: Iterator<Item = DynamicEntData<usize, usize, Offsets>>,
+    where I: Iterator<Item = DynamicEntData<Offsets::Offset, Offsets::Offset,
+                                            Offsets>>,
           Offsets: DynamicOffsets,
           B: ByteOrder {
     let len = buf.len();
@@ -800,16 +863,13 @@ fn create<'a, B, I, Offsets>(buf: &'a mut [u8], ents: I,
                                                     Offsets::D_VAL_END],
                                           (0 as u8).into(), byteorder);
                 },
-                DynamicEntData::Needed { name } => match name.try_into() {
-                    Ok(name) => {
-                        Offsets::write_offset(&mut data[Offsets::D_TAG_START ..
-                                                        Offsets::D_TAG_END],
-                                              (1 as u8).into(), byteorder);
-                        Offsets::write_offset(&mut data[Offsets::D_VAL_START ..
-                                                        Offsets::D_VAL_END],
-                                              name, byteorder);
-                    },
-                    Err(_) => return Err(())
+                DynamicEntData::Needed { name } => {
+                    Offsets::write_offset(&mut data[Offsets::D_TAG_START ..
+                                                    Offsets::D_TAG_END],
+                                          (1 as u8).into(), byteorder);
+                    Offsets::write_offset(&mut data[Offsets::D_VAL_START ..
+                                                    Offsets::D_VAL_END],
+                                          name, byteorder);
                 },
                 DynamicEntData::PLTRelSize { size } => {
                     Offsets::write_offset(&mut data[Offsets::D_TAG_START ..
@@ -907,27 +967,21 @@ fn create<'a, B, I, Offsets>(buf: &'a mut [u8], ents: I,
                                                   Offsets::D_PTR_END],
                                         func, byteorder);
                 },
-                DynamicEntData::Name { name } => match name.try_into() {
-                    Ok(name) => {
-                        Offsets::write_offset(&mut data[Offsets::D_TAG_START ..
-                                                        Offsets::D_TAG_END],
-                                              (14 as u8).into(), byteorder);
-                        Offsets::write_offset(&mut data[Offsets::D_PTR_START ..
-                                                        Offsets::D_PTR_END],
-                                              name, byteorder);
-                    },
-                    Err(_) => return Err(())
+                DynamicEntData::Name { name } => {
+                    Offsets::write_offset(&mut data[Offsets::D_TAG_START ..
+                                                    Offsets::D_TAG_END],
+                                          (14 as u8).into(), byteorder);
+                    Offsets::write_offset(&mut data[Offsets::D_PTR_START ..
+                                                    Offsets::D_PTR_END],
+                                          name, byteorder);
                 },
-                DynamicEntData::RPath { path } => match path.try_into() {
-                    Ok(path) => {
-                        Offsets::write_offset(&mut data[Offsets::D_TAG_START ..
-                                                        Offsets::D_TAG_END],
-                                              (29 as u8).into(), byteorder);
-                        Offsets::write_offset(&mut data[Offsets::D_PTR_START ..
-                                                        Offsets::D_PTR_END],
-                                              path, byteorder);
-                    },
-                    Err(_) => return Err(())
+                DynamicEntData::RPath { path } => {
+                    Offsets::write_offset(&mut data[Offsets::D_TAG_START ..
+                                                    Offsets::D_TAG_END],
+                                          (29 as u8).into(), byteorder);
+                    Offsets::write_offset(&mut data[Offsets::D_PTR_START ..
+                                                    Offsets::D_PTR_END],
+                                          path, byteorder);
                 },
                 DynamicEntData::Symbolic => {
                     Offsets::write_offset(&mut data[Offsets::D_TAG_START ..
@@ -1065,16 +1119,13 @@ fn create<'a, B, I, Offsets>(buf: &'a mut [u8], ents: I,
                                                     Offsets::D_VAL_END],
                                           size, byteorder);
                 },
-                DynamicEntData::SymtabIdx { idx: idx } => match idx.try_into() {
-                    Ok(shidx) => {
-                        Offsets::write_offset(&mut data[Offsets::D_TAG_START ..
-                                                        Offsets::D_TAG_END],
-                                              (34 as u8).into(), byteorder);
-                        Offsets::write_offset(&mut data[Offsets::D_VAL_START ..
-                                                        Offsets::D_VAL_END],
-                                              shidx, byteorder);
-                    },
-                    Err(_) => return Err(())
+                DynamicEntData::SymtabIdx { idx } => {
+                    Offsets::write_offset(&mut data[Offsets::D_TAG_START ..
+                                                    Offsets::D_TAG_END],
+                                          (34 as u8).into(), byteorder);
+                    Offsets::write_offset(&mut data[Offsets::D_VAL_START ..
+                                                    Offsets::D_VAL_END],
+                                          idx, byteorder);
                 },
                 DynamicEntData::Unknown { tag, info } => {
                     Offsets::write_offset(&mut data[Offsets::D_TAG_START ..
@@ -1108,7 +1159,7 @@ impl DynamicOffsets for Elf64 {
 impl<'a, B, Offsets: DynamicOffsets> TryFrom<&'a [u8]>
     for Dynamic<'a, B, Offsets>
     where B: ByteOrder {
-    type Error = ();
+    type Error = DynamicError;
 
     /// Create a `Dynamic` from the data buffer.  This will check that
     /// the data buffer is a multiple of the dynamic linking entry
@@ -1122,15 +1173,16 @@ impl<'a, B, Offsets: DynamicOffsets> TryFrom<&'a [u8]>
             Ok(Dynamic { byteorder: PhantomData, offsets: PhantomData,
                          data: data })
         } else {
-            Err(())
+            Err(DynamicError::BadSize(len))
         }
     }
 }
 
 impl<'a, B, Offsets: DynamicOffsets> TryFrom<&'a mut [u8]>
     for Dynamic<'a, B, Offsets>
-    where B: ByteOrder {
-    type Error = ();
+    where Offsets: DynamicOffsets,
+          B: ByteOrder {
+    type Error = DynamicError;
 
     /// Create a `Dynamic` from the data buffer.  This will check that
     /// the data buffer is a multiple of the dynamic linking entry
@@ -1144,7 +1196,7 @@ impl<'a, B, Offsets: DynamicOffsets> TryFrom<&'a mut [u8]>
             Ok(Dynamic { byteorder: PhantomData, offsets: PhantomData,
                          data: data })
         } else {
-            Err(())
+            Err(DynamicError::BadSize(len))
         }
     }
 }
@@ -1163,9 +1215,10 @@ impl<'a, B, Offsets: DynamicOffsets> TryFrom<&'a mut [u8]>
 /// use elf_utils::Elf32;
 /// use elf_utils::dynamic::Dynamic;
 /// use elf_utils::dynamic::DynamicEntData;
+/// use elf_utils::dynamic::DynamicEntDataRaw;
 /// use elf_utils::dynamic;
 ///
-/// const DYNAMIC_ENTS: [DynamicEntData<usize, usize, Elf32>; 12] = [
+/// const DYNAMIC_ENTS: [DynamicEntDataRaw<Elf32>; 12] = [
 ///     DynamicEntData::Flags { flags: 0x2 },
 ///     DynamicEntData::Rel { tab: 0x7f4 },
 ///     DynamicEntData::RelSize { size: 1512 },
@@ -1184,7 +1237,7 @@ impl<'a, B, Offsets: DynamicOffsets> TryFrom<&'a mut [u8]>
 /// ```
 #[inline]
 pub fn required_bytes<I, Offsets>(ents: I) -> usize
-    where I: Iterator<Item = DynamicEntData<usize, usize, Offsets>>,
+    where I: Iterator<Item = DynamicEntDataRaw<Offsets>>,
           Offsets: DynamicOffsets {
     ents.count() * Offsets::DYNAMIC_SIZE
 }
@@ -1216,9 +1269,10 @@ impl<'a, B, Offsets> Dynamic<'a, B, Offsets>
     /// use elf_utils::Elf32;
     /// use elf_utils::dynamic::Dynamic;
     /// use elf_utils::dynamic::DynamicEntData;
+    /// use elf_utils::dynamic::DynamicEntDataRaw;
     /// use elf_utils::dynamic;
     ///
-    /// const DYNAMIC_ENTS: [DynamicEntData<usize, usize, Elf32>; 12] = [
+    /// const DYNAMIC_ENTS: [DynamicEntDataRaw<Elf32>; 12] = [
     ///     DynamicEntData::Flags { flags: 0x2 },
     ///     DynamicEntData::Rel { tab: 0x7f4 },
     ///     DynamicEntData::RelSize { size: 1512 },
@@ -1246,7 +1300,7 @@ impl<'a, B, Offsets> Dynamic<'a, B, Offsets>
     ///
     /// for i in 0 .. 12 {
     ///     let sym = iter.next().unwrap();
-    ///     let data: DynamicEntData<usize, usize, Elf32> =
+    ///     let data: DynamicEntDataRaw<Elf32> =
     ///         sym.try_into().unwrap();
     ///
     ///     assert_eq!(data, DYNAMIC_ENTS[i]);
@@ -1257,7 +1311,7 @@ impl<'a, B, Offsets> Dynamic<'a, B, Offsets>
     #[inline]
     pub fn create_split<I>(buf: &'a mut [u8], ents: I) ->
         Result<(Self, &'a mut [u8]), ()>
-        where I: Iterator<Item = DynamicEntData<usize, usize, Offsets>> {
+        where I: Iterator<Item = DynamicEntDataRaw<Offsets>> {
         let byteorder: PhantomData<B> = PhantomData;
         let offsets: PhantomData<Offsets> = PhantomData;
         let (data, out) = create(buf, ents, byteorder, offsets)?;
@@ -1290,9 +1344,10 @@ impl<'a, B, Offsets> Dynamic<'a, B, Offsets>
     /// use elf_utils::Elf32;
     /// use elf_utils::dynamic::Dynamic;
     /// use elf_utils::dynamic::DynamicEntData;
+    /// use elf_utils::dynamic::DynamicEntDataRaw;
     /// use elf_utils::dynamic;
     ///
-    /// const DYNAMIC_ENTS: [DynamicEntData<usize, usize, Elf32>; 12] = [
+    /// const DYNAMIC_ENTS: [DynamicEntDataRaw<Elf32>; 12] = [
     ///     DynamicEntData::Flags { flags: 0x2 },
     ///     DynamicEntData::Rel { tab: 0x7f4 },
     ///     DynamicEntData::RelSize { size: 1512 },
@@ -1315,7 +1370,7 @@ impl<'a, B, Offsets> Dynamic<'a, B, Offsets>
     ///
     /// for i in 0 .. 12 {
     ///     let sym = iter.next().unwrap();
-    ///     let data: DynamicEntData<usize, usize, Elf32> =
+    ///     let data: DynamicEntDataRaw<Elf32> =
     ///         sym.try_into().unwrap();
     ///
     ///     assert_eq!(data, DYNAMIC_ENTS[i]);
@@ -1325,7 +1380,7 @@ impl<'a, B, Offsets> Dynamic<'a, B, Offsets>
     /// ```
     #[inline]
     pub fn create<I>(buf: &'a mut [u8], ents: I) -> Result<Self, ()>
-        where I: Iterator<Item = DynamicEntData<usize, usize, Offsets>>,
+        where I: Iterator<Item = DynamicEntDataRaw<Offsets>>,
               Self: Sized {
         match Self::create_split(buf, ents) {
             Ok((out, _)) => Ok(out),
@@ -1367,15 +1422,291 @@ impl<'a, B, Offsets> Dynamic<'a, B, Offsets>
     }
 }
 
-impl<'a, B, Offsets: DynamicOffsets> TryFrom<DynamicEnt<'a, B, Offsets>>
-    for DynamicEntData<usize, usize, Offsets>
-    where B: ByteOrder {
-    type Error = ();
+impl<'a, B, Offsets> TryFrom<DynamicEnt<'a, B, Offsets>>
+    for DynamicEntDataRaw<Offsets>
+    where Offsets: DynamicOffsets,
+          B: ByteOrder {
+    type Error = DynamicEntDataError<Offsets>;
 
     #[inline]
     fn try_from(ent: DynamicEnt<'a, B, Offsets>) ->
-        Result<DynamicEntData<usize, usize, Offsets>, Self::Error> {
+        Result<DynamicEntData<Offsets::Offset, Offsets::Offset, Offsets>,
+               Self::Error> {
         project(ent.data, ent.byteorder, ent.offsets)
+    }
+}
+
+impl<'a, B, Offsets> WithStrtab<'a> for DynamicEnt<'a, B, Offsets>
+    where Offsets: DynamicOffsets,
+          B: ByteOrder {
+    type Error = DynamicEntStrsError<Offsets>;
+    type Result = DynamicEntData<Result<&'a str, &'a [u8]>,
+                                 Offsets::Offset, Offsets>;
+
+    #[inline]
+    fn with_strtab(self, strtab: Strtab<'a>) ->
+        Result<Self::Result, Self::Error> {
+        match project(self.data, self.byteorder, self.offsets) {
+            Ok(DynamicEntData::None) =>
+                Ok(DynamicEntData::None),
+            Ok(DynamicEntData::Needed { name }) => match strtab.idx(name) {
+                Ok(name) => Ok(DynamicEntData::Needed { name: Ok(name) }),
+                Err(StrtabIdxError::UTF8Decode(data)) =>
+                    Ok(DynamicEntData::Needed { name: Err(data) }),
+                _ => Err(DynamicEntStrsError::BadName(name))
+            },
+            Ok(DynamicEntData::PLTRelSize { size }) =>
+                Ok(DynamicEntData::PLTRelSize { size: size }),
+            Ok(DynamicEntData::PLTGOT { tab }) =>
+                Ok(DynamicEntData::PLTGOT { tab: tab }),
+            Ok(DynamicEntData::Hash { tab }) =>
+                Ok(DynamicEntData::Hash { tab: tab }),
+            Ok(DynamicEntData::Symtab { tab }) =>
+                Ok(DynamicEntData::Symtab { tab: tab }),
+            Ok(DynamicEntData::Strtab { tab }) =>
+                Ok(DynamicEntData::Strtab { tab: tab }),
+            Ok(DynamicEntData::Rela { tab }) =>
+                Ok(DynamicEntData::Rela { tab: tab }),
+            Ok(DynamicEntData::RelaSize { size }) =>
+                Ok(DynamicEntData::RelaSize { size: size }),
+            Ok(DynamicEntData::RelaEntSize { size }) =>
+                Ok(DynamicEntData::RelaEntSize { size: size }),
+            Ok(DynamicEntData::StrtabSize { size }) =>
+                Ok(DynamicEntData::StrtabSize { size: size }),
+            Ok(DynamicEntData::SymtabEntSize { size }) =>
+                Ok(DynamicEntData::SymtabEntSize { size: size }),
+            Ok(DynamicEntData::Init { func }) =>
+                Ok(DynamicEntData::Init { func: func }),
+            Ok(DynamicEntData::Fini { func }) =>
+                Ok(DynamicEntData::Fini { func: func }),
+            Ok(DynamicEntData::Name { name }) => match strtab.idx(name) {
+                Ok(name) => Ok(DynamicEntData::Name { name: Ok(name) }),
+                Err(StrtabIdxError::UTF8Decode(data)) =>
+                    Ok(DynamicEntData::Name { name: Err(data) }),
+                _ => Err(DynamicEntStrsError::BadName(name))
+            },
+            Ok(DynamicEntData::RPath { path }) => match strtab.idx(path) {
+                Ok(path) => Ok(DynamicEntData::RPath { path: Ok(path) }),
+                Err(StrtabIdxError::UTF8Decode(data)) =>
+                    Ok(DynamicEntData::RPath { path: Err(data) }),
+                _ => Err(DynamicEntStrsError::BadName(path))
+            },
+            Ok(DynamicEntData::Symbolic) =>
+                Ok(DynamicEntData::Symbolic),
+            Ok(DynamicEntData::Rel { tab }) =>
+                Ok(DynamicEntData::Rel { tab: tab }),
+            Ok(DynamicEntData::RelSize { size }) =>
+                Ok(DynamicEntData::RelSize { size: size }),
+            Ok(DynamicEntData::RelEntSize { size }) =>
+                Ok(DynamicEntData::RelEntSize { size: size }),
+            Ok(DynamicEntData::PLTRela { rela }) =>
+                Ok(DynamicEntData::PLTRela { rela: rela }),
+            Ok(DynamicEntData::Debug { tab }) =>
+                Ok(DynamicEntData::Debug { tab: tab }),
+            Ok(DynamicEntData::TextRel) => Ok(DynamicEntData::TextRel),
+            Ok(DynamicEntData::JumpRel { tab }) =>
+                Ok(DynamicEntData::JumpRel { tab: tab }),
+            Ok(DynamicEntData::BindNow) => Ok(DynamicEntData::BindNow),
+            Ok(DynamicEntData::InitArray { arr }) =>
+                Ok(DynamicEntData::InitArray { arr: arr }),
+            Ok(DynamicEntData::FiniArray { arr }) =>
+                Ok(DynamicEntData::FiniArray { arr: arr }),
+            Ok(DynamicEntData::InitArraySize { size }) =>
+                Ok(DynamicEntData::InitArraySize { size: size }),
+            Ok(DynamicEntData::FiniArraySize { size }) =>
+                Ok(DynamicEntData::FiniArraySize { size: size }),
+            Ok(DynamicEntData::Flags { flags }) =>
+                Ok(DynamicEntData::Flags { flags: flags }),
+            Ok(DynamicEntData::PreInitArray { arr }) =>
+                Ok(DynamicEntData::PreInitArray { arr: arr }),
+            Ok(DynamicEntData::PreInitArraySize { size }) =>
+                Ok(DynamicEntData::PreInitArraySize { size: size }),
+            Ok(DynamicEntData::SymtabIdx { idx }) =>
+                Ok(DynamicEntData::SymtabIdx { idx: idx }),
+            Ok(DynamicEntData::Unknown { tag, info }) =>
+                Ok(DynamicEntData::Unknown { tag: tag, info: info }),
+            Err(DynamicEntDataError::BadRelocs(reloc)) =>
+                Err(DynamicEntStrsError::BadRelocs(reloc)),
+            Err(DynamicEntDataError::BadKind(kind)) =>
+                Err(DynamicEntStrsError::BadKind(kind))
+        }
+    }
+}
+
+impl<'a, Name, Idx, Class> WithStrtab<'a>
+    for DynamicEntData<Name, Idx, Class>
+    where Class: ElfClass,
+          Name: Copy + TryInto<usize> {
+    type Error = Name;
+    type Result = DynamicEntData<Result<&'a str, &'a [u8]>, Idx, Class>;
+
+    #[inline]
+    fn with_strtab(self, strtab: Strtab<'a>) ->
+        Result<Self::Result, Self::Error> {
+        match self {
+            DynamicEntData::None =>
+                Ok(DynamicEntData::None),
+            DynamicEntData::Needed { name } => match strtab.idx(name) {
+                Ok(name) => Ok(DynamicEntData::Needed { name: Ok(name) }),
+                Err(StrtabIdxError::UTF8Decode(data)) =>
+                    Ok(DynamicEntData::Needed { name: Err(data) }),
+                _ => Err(name)
+            },
+            DynamicEntData::PLTRelSize { size } =>
+                Ok(DynamicEntData::PLTRelSize { size: size }),
+            DynamicEntData::PLTGOT { tab } =>
+                Ok(DynamicEntData::PLTGOT { tab: tab }),
+            DynamicEntData::Hash { tab } =>
+                Ok(DynamicEntData::Hash { tab: tab }),
+            DynamicEntData::Symtab { tab } =>
+                Ok(DynamicEntData::Symtab { tab: tab }),
+            DynamicEntData::Strtab { tab } =>
+                Ok(DynamicEntData::Strtab { tab: tab }),
+            DynamicEntData::Rela { tab } =>
+                Ok(DynamicEntData::Rela { tab: tab }),
+            DynamicEntData::RelaSize { size } =>
+                Ok(DynamicEntData::RelaSize { size: size }),
+            DynamicEntData::RelaEntSize { size } =>
+                Ok(DynamicEntData::RelaEntSize { size: size }),
+            DynamicEntData::StrtabSize { size } =>
+                Ok(DynamicEntData::StrtabSize { size: size }),
+            DynamicEntData::SymtabEntSize { size } =>
+                Ok(DynamicEntData::SymtabEntSize { size: size }),
+            DynamicEntData::Init { func } =>
+                Ok(DynamicEntData::Init { func: func }),
+            DynamicEntData::Fini { func } =>
+                Ok(DynamicEntData::Fini { func: func }),
+            DynamicEntData::Name { name } => match strtab.idx(name) {
+                Ok(name) => Ok(DynamicEntData::Name { name: Ok(name) }),
+                Err(StrtabIdxError::UTF8Decode(data)) =>
+                    Ok(DynamicEntData::Name { name: Err(data) }),
+                _ => Err(name)
+            },
+            DynamicEntData::RPath { path } => match strtab.idx(path) {
+                Ok(path) => Ok(DynamicEntData::RPath { path: Ok(path) }),
+                Err(StrtabIdxError::UTF8Decode(data)) =>
+                    Ok(DynamicEntData::RPath { path: Err(data) }),
+                _ => Err(path)
+            },
+            DynamicEntData::Symbolic =>
+                Ok(DynamicEntData::Symbolic),
+            DynamicEntData::Rel { tab } =>
+                Ok(DynamicEntData::Rel { tab: tab }),
+            DynamicEntData::RelSize { size } =>
+                Ok(DynamicEntData::RelSize { size: size }),
+            DynamicEntData::RelEntSize { size } =>
+                Ok(DynamicEntData::RelEntSize { size: size }),
+            DynamicEntData::PLTRela { rela } =>
+                Ok(DynamicEntData::PLTRela { rela: rela }),
+            DynamicEntData::Debug { tab } =>
+                Ok(DynamicEntData::Debug { tab: tab }),
+            DynamicEntData::TextRel => Ok(DynamicEntData::TextRel),
+            DynamicEntData::JumpRel { tab } =>
+                Ok(DynamicEntData::JumpRel { tab: tab }),
+            DynamicEntData::BindNow => Ok(DynamicEntData::BindNow),
+            DynamicEntData::InitArray { arr } =>
+                Ok(DynamicEntData::InitArray { arr: arr }),
+            DynamicEntData::FiniArray { arr } =>
+                Ok(DynamicEntData::FiniArray { arr: arr }),
+            DynamicEntData::InitArraySize { size } =>
+                Ok(DynamicEntData::InitArraySize { size: size }),
+            DynamicEntData::FiniArraySize { size } =>
+                Ok(DynamicEntData::FiniArraySize { size: size }),
+            DynamicEntData::Flags { flags } =>
+                Ok(DynamicEntData::Flags { flags: flags }),
+            DynamicEntData::PreInitArray { arr } =>
+                Ok(DynamicEntData::PreInitArray { arr: arr }),
+            DynamicEntData::PreInitArraySize { size } =>
+                Ok(DynamicEntData::PreInitArraySize { size: size }),
+            DynamicEntData::SymtabIdx { idx } =>
+                Ok(DynamicEntData::SymtabIdx { idx: idx }),
+            DynamicEntData::Unknown { tag, info } =>
+                Ok(DynamicEntData::Unknown { tag: tag, info: info }),
+        }
+    }
+}
+
+impl<'a, Idx, Class> TryFrom<DynamicEntData<Result<&'a str, &'a [u8]>,
+                                            Idx, Class>>
+    for DynamicEntData<&'a str, Idx, Class>
+    where Class: ElfClass {
+    type Error = &'a [u8];
+
+    #[inline]
+    fn try_from(data: DynamicEntData<Result<&'a str, &'a [u8]>,
+                                     Idx, Class>) ->
+        Result<DynamicEntData<&'a str, Idx, Class>, Self::Error> {
+        match data {
+            DynamicEntData::None =>
+                Ok(DynamicEntData::None),
+            DynamicEntData::Needed { name: Ok(name) } =>
+                Ok(DynamicEntData::Needed { name: name }),
+            DynamicEntData::Needed { name: Err(err) } => Err(err),
+            DynamicEntData::PLTRelSize { size } =>
+                Ok(DynamicEntData::PLTRelSize { size: size }),
+            DynamicEntData::PLTGOT { tab } =>
+                Ok(DynamicEntData::PLTGOT { tab: tab }),
+            DynamicEntData::Hash { tab } =>
+                Ok(DynamicEntData::Hash { tab: tab }),
+            DynamicEntData::Symtab { tab } =>
+                Ok(DynamicEntData::Symtab { tab: tab }),
+            DynamicEntData::Strtab { tab } =>
+                Ok(DynamicEntData::Strtab { tab: tab }),
+            DynamicEntData::Rela { tab } =>
+                Ok(DynamicEntData::Rela { tab: tab }),
+            DynamicEntData::RelaSize { size } =>
+                Ok(DynamicEntData::RelaSize { size: size }),
+            DynamicEntData::RelaEntSize { size } =>
+                Ok(DynamicEntData::RelaEntSize { size: size }),
+            DynamicEntData::StrtabSize { size } =>
+                Ok(DynamicEntData::StrtabSize { size: size }),
+            DynamicEntData::SymtabEntSize { size } =>
+                Ok(DynamicEntData::SymtabEntSize { size: size }),
+            DynamicEntData::Init { func } =>
+                Ok(DynamicEntData::Init { func: func }),
+            DynamicEntData::Fini { func } =>
+                Ok(DynamicEntData::Fini { func: func }),
+            DynamicEntData::Name { name: Ok(name) } =>
+                Ok(DynamicEntData::Name { name: name }),
+            DynamicEntData::Name { name: Err(err) } => Err(err),
+            DynamicEntData::RPath { path: Ok(path) } =>
+                Ok(DynamicEntData::RPath { path: path }),
+            DynamicEntData::RPath { path: Err(err) } => Err(err),
+            DynamicEntData::Symbolic =>
+                Ok(DynamicEntData::Symbolic),
+            DynamicEntData::Rel { tab } =>
+                Ok(DynamicEntData::Rel { tab: tab }),
+            DynamicEntData::RelSize { size } =>
+                Ok(DynamicEntData::RelSize { size: size }),
+            DynamicEntData::RelEntSize { size } =>
+                Ok(DynamicEntData::RelEntSize { size: size }),
+            DynamicEntData::PLTRela { rela } =>
+                Ok(DynamicEntData::PLTRela { rela: rela }),
+            DynamicEntData::Debug { tab } =>
+                Ok(DynamicEntData::Debug { tab: tab }),
+            DynamicEntData::TextRel => Ok(DynamicEntData::TextRel),
+            DynamicEntData::JumpRel { tab } =>
+                Ok(DynamicEntData::JumpRel { tab: tab }),
+            DynamicEntData::BindNow => Ok(DynamicEntData::BindNow),
+            DynamicEntData::InitArray { arr } =>
+                Ok(DynamicEntData::InitArray { arr: arr }),
+            DynamicEntData::FiniArray { arr } =>
+                Ok(DynamicEntData::FiniArray { arr: arr }),
+            DynamicEntData::InitArraySize { size } =>
+                Ok(DynamicEntData::InitArraySize { size: size }),
+            DynamicEntData::FiniArraySize { size } =>
+                Ok(DynamicEntData::FiniArraySize { size: size }),
+            DynamicEntData::Flags { flags } =>
+                Ok(DynamicEntData::Flags { flags: flags }),
+            DynamicEntData::PreInitArray { arr } =>
+                Ok(DynamicEntData::PreInitArray { arr: arr }),
+            DynamicEntData::PreInitArraySize { size } =>
+                Ok(DynamicEntData::PreInitArraySize { size: size }),
+            DynamicEntData::SymtabIdx { idx } =>
+                Ok(DynamicEntData::SymtabIdx { idx: idx }),
+            DynamicEntData::Unknown { tag, info } =>
+                Ok(DynamicEntData::Unknown { tag: tag, info: info }),
+        }
     }
 }
 
@@ -1428,3 +1759,146 @@ impl<'a, B, Offsets: DynamicOffsets> ExactSizeIterator
 
 impl<'a, B, Offsets: DynamicOffsets> FusedIterator
     for DynamicIter<'a, B, Offsets> where B: ByteOrder {}
+
+impl Display for DynamicError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
+        match self {
+            DynamicError::BadSize(size) =>
+                write!(f, "bad dynamic table size {}", size)
+        }
+    }
+}
+
+impl<Offsets> Display for DynamicEntDataError<Offsets>
+    where Offsets: ElfClass {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
+        match self {
+            DynamicEntDataError::BadRelocs(code) =>
+                write!(f, "bad relocation type code {:x}", code),
+            DynamicEntDataError::BadKind(code) =>
+                write!(f, "bad type code {:x}", code)
+        }
+    }
+}
+
+impl<Offsets> Display for DynamicEntStrsError<Offsets>
+    where Offsets: ElfClass {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
+        match self {
+            DynamicEntStrsError::BadRelocs(code) =>
+                write!(f, "bad relocation type code {:x}", code),
+            DynamicEntStrsError::BadKind(code) =>
+                write!(f, "bad type code {:x}", code),
+            DynamicEntStrsError::BadName(idx) =>
+                write!(f, "bad name index {:x}", idx),
+        }
+    }
+}
+
+impl<Name, Idx, Offsets> Display for DynamicEntData<Name, Idx, Offsets>
+    where Offsets: DynamicOffsets,
+          Name: Display,
+          Idx: Display {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
+        match self {
+            DynamicEntData::None => write!(f, "none"),
+            DynamicEntData::Needed { name } => {
+                write!(f, "Needed library: {}", name)
+            },
+            DynamicEntData::PLTRelSize { size } => {
+                write!(f, "PLT relocation table size: 0x{:x}", size)
+            },
+            DynamicEntData::PLTGOT { tab } => {
+                write!(f, "PLT/GOT: 0x{:x}", tab)
+            },
+            DynamicEntData::Hash { tab } => {
+                write!(f, "Symbol hash table: 0x{:x}", tab)
+            },
+            DynamicEntData::Symtab { tab } => {
+                write!(f, "Symbol table: 0x{:x}", tab)
+            },
+            DynamicEntData::Strtab { tab } => {
+                write!(f, "String table: 0x{:x}", tab)
+            },
+            DynamicEntData::Rela { tab } => {
+                write!(f, "Relocation table (explicit addends): 0x{:x}", tab)
+            },
+            DynamicEntData::RelaSize { size } => {
+                write!(f, "Relocation table size: 0x{:x}", size)
+            },
+            DynamicEntData::RelaEntSize { size } => {
+                write!(f, "Relocation table entry size: 0x{:x}", size)
+            },
+            DynamicEntData::StrtabSize { size } => {
+                write!(f, "String table size: 0x{:x}", size)
+            },
+            DynamicEntData::SymtabEntSize { size } => {
+                write!(f, "Symbol table entry size: 0x{:x}", size)
+            },
+            DynamicEntData::Init { func } => {
+                write!(f, "Initializer: 0x{:x}", func)
+            },
+            DynamicEntData::Fini { func } => {
+                write!(f, "Initializer: 0x{:x}", func)
+            },
+            DynamicEntData::Name { name } => {
+                write!(f, "Dynamic object name: {}", name)
+            }
+            DynamicEntData::RPath { path } => {
+                write!(f, "Dynamic linking path: {}", path)
+            }
+            DynamicEntData::Symbolic => write!(f, "Symbolic linking"),
+            DynamicEntData::Rel { tab } => {
+                write!(f, "Relocation table: 0x{:x}", tab)
+            },
+            DynamicEntData::RelSize { size } => {
+                write!(f, "Relocation table size: 0x{:x}", size)
+            },
+            DynamicEntData::RelEntSize { size } => {
+                write!(f, "Relocation table entry size: 0x{:x}", size)
+            },
+            DynamicEntData::PLTRela { rela: true } => {
+                write!(f, "PLT relocation table has explicit addends")
+            },
+            DynamicEntData::PLTRela { rela: false } => {
+                write!(f, "PLT relocation table has no addends")
+            },
+            DynamicEntData::Debug { tab } => {
+                write!(f, "Debug table: 0x{:x}", tab)
+            },
+            DynamicEntData::TextRel =>
+                write!(f, "Relocations modify non-writable segments"),
+            DynamicEntData::JumpRel { tab } => {
+                write!(f, "PLT relocation table: 0x{:x}", tab)
+            },
+            DynamicEntData::BindNow => write!(f, "Eager relocation processing"),
+            DynamicEntData::InitArray { arr } => {
+                write!(f, "Initializer array: 0x{:x}", arr)
+            },
+            DynamicEntData::FiniArray { arr } => {
+                write!(f, "Finalizer array: 0x{:x}", arr)
+            },
+            DynamicEntData::InitArraySize { size } => {
+                write!(f, "Initializer array size: 0x{:x}", size)
+            },
+            DynamicEntData::FiniArraySize { size } => {
+                write!(f, "Initializer array size: 0x{:x}", size)
+            },
+            DynamicEntData::Flags { flags } => {
+                write!(f, "Flags: 0x{:x}", flags)
+            },
+            DynamicEntData::PreInitArray { arr } => {
+                write!(f, "Pre-initializer array: 0x{:x}", arr)
+            },
+            DynamicEntData::PreInitArraySize { size } => {
+                write!(f, "Pre-initializer array size: 0x{:x}", size)
+            },
+            DynamicEntData::SymtabIdx { idx } => {
+                write!(f, "Symbol table: {}", idx)
+            },
+            DynamicEntData::Unknown { tag, info } => {
+                write!(f, "Unknown type 0x{:x}: 0x{:x}", tag, info)
+            }
+        }
+    }
+}

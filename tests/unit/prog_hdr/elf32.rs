@@ -5,6 +5,7 @@ use elf_utils::Elf32;
 use elf_utils::prog_hdr::ProgHdr;
 use elf_utils::prog_hdr::ProgHdrData;
 use elf_utils::prog_hdr::ProgHdrs;
+use elf_utils::prog_hdr::ProgHdrsError;
 use elf_utils::prog_hdr::Segment;
 
 const ELF32_PROG_HDR_BYTES: usize = 320;
@@ -92,7 +93,7 @@ const ELF32_PROG_HDR_CONTENTS_BARE: [ProgHdrData<Elf32, Segment<u32>,
 
 #[test]
 fn test_ProgHdrs_from_bytes_just_right() {
-    let prog_hdr: Result<ProgHdrs<'_, LittleEndian, Elf32>, ()> =
+    let prog_hdr: Result<ProgHdrs<'_, LittleEndian, Elf32>, ProgHdrsError> =
         ProgHdrs::try_from(&ELF32_PROG_HDR[0..]);
 
     assert!(prog_hdr.is_ok());
@@ -100,7 +101,7 @@ fn test_ProgHdrs_from_bytes_just_right() {
 
 #[test]
 fn test_ProgHdrs_from_bytes_too_small() {
-    let prog_hdr: Result<ProgHdrs<'_, LittleEndian, Elf32>, ()> =
+    let prog_hdr: Result<ProgHdrs<'_, LittleEndian, Elf32>, ProgHdrsError> =
         ProgHdrs::try_from(&ELF32_PROG_HDR[0 .. ELF32_PROG_HDR.len() - 1]);
 
     assert!(prog_hdr.is_err());
@@ -128,7 +129,7 @@ fn test_ProgHdrs_from_bytes_iter_len() {
 #[test]
 fn test_ProgHdrs_from_bytes_just_right_mut() {
     let mut buf = ELF32_PROG_HDR.clone();
-    let prog_hdr: Result<ProgHdrs<'_, LittleEndian, Elf32>, ()> =
+    let prog_hdr: Result<ProgHdrs<'_, LittleEndian, Elf32>, ProgHdrsError> =
         ProgHdrs::try_from(&mut buf[0..]);
 
     assert!(prog_hdr.is_ok());
@@ -137,7 +138,7 @@ fn test_ProgHdrs_from_bytes_just_right_mut() {
 #[test]
 fn test_ProgHdrs_from_bytes_too_small_mut() {
     let mut buf = ELF32_PROG_HDR.clone();
-    let prog_hdr: Result<ProgHdrs<'_, LittleEndian, Elf32>, ()> =
+    let prog_hdr: Result<ProgHdrs<'_, LittleEndian, Elf32>, ProgHdrsError> =
         ProgHdrs::try_from(&mut buf[0 .. ELF32_PROG_HDR.len() - 1]);
 
     assert!(prog_hdr.is_err());
@@ -216,7 +217,8 @@ fn test_ProgHdrs_from_bytes_idx() {
 #[test]
 fn test_ProgHdrs_create_just_right() {
     let mut buf = [0; ELF32_PROG_HDR_BYTES];
-    let dynamic: Result<(ProgHdrs<'_, LittleEndian, Elf32>, &'_ mut [u8]), ()> =
+    let dynamic: Result<(ProgHdrs<'_, LittleEndian, Elf32>, &'_ mut [u8]),
+                        ()> =
         ProgHdrs::create_split(&mut buf[0..],
                                ELF32_PROG_HDR_CONTENTS_BARE.iter().map(|x| *x));
 
@@ -230,7 +232,8 @@ fn test_ProgHdrs_create_just_right() {
 #[test]
 fn test_ProgHdrs_create_too_big() {
     let mut buf = [0; ELF32_PROG_HDR_BYTES + 1];
-    let dynamic: Result<(ProgHdrs<'_, LittleEndian, Elf32>, &'_ mut [u8]), ()> =
+    let dynamic: Result<(ProgHdrs<'_, LittleEndian, Elf32>, &'_ mut [u8]),
+                        ()> =
         ProgHdrs::create_split(&mut buf[0..],
                                ELF32_PROG_HDR_CONTENTS_BARE.iter().map(|x| *x));
 
@@ -244,7 +247,8 @@ fn test_ProgHdrs_create_too_big() {
 #[test]
 fn test_ProgHdrs_create_too_small() {
     let mut buf = [0; ELF32_PROG_HDR_BYTES - 1];
-    let dynamic: Result<(ProgHdrs<'_, LittleEndian, Elf32>, &'_ mut [u8]), ()> =
+    let dynamic: Result<(ProgHdrs<'_, LittleEndian, Elf32>, &'_ mut [u8]),
+                        ()> =
         ProgHdrs::create_split(&mut buf[0..],
                                ELF32_PROG_HDR_CONTENTS_BARE.iter().map(|x| *x));
 
@@ -255,7 +259,8 @@ fn test_ProgHdrs_create_too_small() {
 #[test]
 fn test_ProgHdrs_create_iter() {
     let mut buf = [0; ELF32_PROG_HDR_BYTES];
-    let dynamic: Result<(ProgHdrs<'_, LittleEndian, Elf32>, &'_ mut [u8]), ()> =
+    let dynamic: Result<(ProgHdrs<'_, LittleEndian, Elf32>, &'_ mut [u8]),
+                        ()> =
         ProgHdrs::create_split(&mut buf[0..],
                                ELF32_PROG_HDR_CONTENTS_BARE.iter().map(|x| *x));
 
@@ -287,7 +292,8 @@ fn test_ProgHdrs_create_iter() {
 #[test]
 fn test_ProgHdrs_create_idx() {
     let mut buf = [0; ELF32_PROG_HDR_BYTES];
-    let dynamic: Result<(ProgHdrs<'_, LittleEndian, Elf32>, &'_ mut [u8]), ()> =
+    let dynamic: Result<(ProgHdrs<'_, LittleEndian, Elf32>, &'_ mut [u8]),
+                        ()> =
         ProgHdrs::create_split(&mut buf[0..],
                                ELF32_PROG_HDR_CONTENTS_BARE.iter().map(|x| *x));
 

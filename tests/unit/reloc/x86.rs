@@ -5,6 +5,7 @@ use elf_utils::Elf32;
 use elf_utils::reloc::RelData;
 use elf_utils::reloc::Rels;
 use elf_utils::reloc::x86::X86Reloc;
+use elf_utils::reloc::x86::X86RelocError;
 
 const X86_RELS_SIZE: usize = 208;
 
@@ -80,7 +81,7 @@ fn test_Rels_from_bytes_iter() {
         assert!(rel.is_some());
 
         let raw: RelData<u32, Elf32> = rel.unwrap().into();
-        let data: Result<X86Reloc<u32>, ()> = raw.try_into();
+        let data: Result<X86Reloc<u32>, X86RelocError> = raw.try_into();
 
         assert!(data.is_ok());
 
@@ -105,7 +106,7 @@ fn test_Rels_from_bytes_idx() {
         assert!(rel.is_some());
 
         let raw: RelData<u32, Elf32> = rel.unwrap().into();
-        let data: Result<X86Reloc<u32>, ()> = raw.try_into();
+        let data: Result<X86Reloc<u32>, X86RelocError> = raw.try_into();
 
         assert!(data.is_ok());
 

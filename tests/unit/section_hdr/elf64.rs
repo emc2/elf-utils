@@ -5,6 +5,7 @@ use elf_utils::Elf64;
 use elf_utils::section_hdr::SectionHdr;
 use elf_utils::section_hdr::SectionHdrData;
 use elf_utils::section_hdr::SectionHdrs;
+use elf_utils::section_hdr::SectionHdrsError;
 use elf_utils::section_hdr::SectionPos;
 use elf_utils::strtab::Strtab;
 use elf_utils::strtab::WithStrtab;
@@ -549,7 +550,8 @@ const ELF64_SECTION_HDR_CONTENTS_STRS: [SectionHdrData<Elf64,
 
 #[test]
 fn test_SectionHdrs_from_bytes_just_right() {
-    let section_hdr: Result<SectionHdrs<'_, LittleEndian, Elf64>, ()> =
+    let section_hdr: Result<SectionHdrs<'_, LittleEndian, Elf64>,
+                            SectionHdrsError> =
         SectionHdrs::try_from(&ELF64_SECTION_HDR[0..]);
 
     assert!(section_hdr.is_ok());
@@ -557,7 +559,8 @@ fn test_SectionHdrs_from_bytes_just_right() {
 
 #[test]
 fn test_SectionHdrs_from_bytes_too_small() {
-    let section_hdr: Result<SectionHdrs<'_, LittleEndian, Elf64>, ()> =
+    let section_hdr: Result<SectionHdrs<'_, LittleEndian, Elf64>,
+                            SectionHdrsError> =
         SectionHdrs::try_from(&ELF64_SECTION_HDR[0 ..
                                                  ELF64_SECTION_HDR.len() - 1]);
 
@@ -586,7 +589,8 @@ fn test_SectionHdrs_from_bytes_iter_len() {
 #[test]
 fn test_SectionHdrs_from_bytes_just_right_mut() {
     let mut buf = ELF64_SECTION_HDR.clone();
-    let section_hdr: Result<SectionHdrs<'_, LittleEndian, Elf64>, ()> =
+    let section_hdr: Result<SectionHdrs<'_, LittleEndian, Elf64>,
+                            SectionHdrsError> =
         SectionHdrs::try_from(&mut buf[0..]);
 
     assert!(section_hdr.is_ok());
@@ -595,7 +599,8 @@ fn test_SectionHdrs_from_bytes_just_right_mut() {
 #[test]
 fn test_SectionHdrs_from_bytes_too_small_mut() {
     let mut buf = ELF64_SECTION_HDR.clone();
-    let section_hdr: Result<SectionHdrs<'_, LittleEndian, Elf64>, ()> =
+    let section_hdr: Result<SectionHdrs<'_, LittleEndian, Elf64>,
+                            SectionHdrsError> =
         SectionHdrs::try_from(&mut buf[0 .. ELF64_SECTION_HDR.len() - 1]);
 
     assert!(section_hdr.is_err());

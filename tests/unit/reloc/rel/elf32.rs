@@ -3,6 +3,7 @@ use core::convert::TryFrom;
 use elf_utils::Elf32;
 use elf_utils::reloc::RelData;
 use elf_utils::reloc::Rels;
+use elf_utils::reloc::RelsError;
 
 const ELF32_RELS_SIZE: usize = 208;
 
@@ -68,7 +69,7 @@ const ELF32_RELS_CONTENTS_BARE: [RelData<u32, Elf32>; ELF32_NUM_RELS] = [
 
 #[test]
 fn test_Rels_from_bytes_just_right() {
-    let rels: Result<Rels<'_, LittleEndian, Elf32>, ()> =
+    let rels: Result<Rels<'_, LittleEndian, Elf32>, RelsError> =
         Rels::try_from(&ELF32_RELS[0..]);
 
     assert!(rels.is_ok());
@@ -76,7 +77,7 @@ fn test_Rels_from_bytes_just_right() {
 
 #[test]
 fn test_Rels_from_bytes_too_small() {
-    let rels: Result<Rels<'_, LittleEndian, Elf32>, ()> =
+    let rels: Result<Rels<'_, LittleEndian, Elf32>, RelsError> =
         Rels::try_from(&ELF32_RELS[0 .. ELF32_RELS.len() - 1]);
 
     assert!(rels.is_err());
@@ -102,7 +103,7 @@ fn test_Rels_from_bytes_iter_len() {
 #[test]
 fn test_Rels_from_bytes_just_right_mut() {
     let mut buf = ELF32_RELS.clone();
-    let rels: Result<Rels<'_, LittleEndian, Elf32>, ()> =
+    let rels: Result<Rels<'_, LittleEndian, Elf32>, RelsError> =
         Rels::try_from(&mut buf[0..]);
 
     assert!(rels.is_ok());
@@ -111,7 +112,7 @@ fn test_Rels_from_bytes_just_right_mut() {
 #[test]
 fn test_Rels_from_bytes_too_small_mut() {
     let mut buf = ELF32_RELS.clone();
-    let rels: Result<Rels<'_, LittleEndian, Elf32>, ()> =
+    let rels: Result<Rels<'_, LittleEndian, Elf32>, RelsError> =
         Rels::try_from(&mut buf[0 .. ELF32_RELS.len() - 1]);
 
     assert!(rels.is_err());

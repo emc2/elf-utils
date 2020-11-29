@@ -3,6 +3,7 @@ use core::convert::TryFrom;
 use elf_utils::Elf64;
 use elf_utils::reloc::RelaData;
 use elf_utils::reloc::Relas;
+use elf_utils::reloc::RelasError;
 
 const ELF64_RELAS_SIZE: usize = 600;
 
@@ -116,7 +117,7 @@ const ELF64_RELAS_CONTENTS_BARE: [RelaData<u32, Elf64>; ELF64_NUM_RELAS] = [
 
 #[test]
 fn test_Relas_from_bytes_just_right() {
-    let relas: Result<Relas<'_, LittleEndian, Elf64>, ()> =
+    let relas: Result<Relas<'_, LittleEndian, Elf64>, RelasError> =
         Relas::try_from(&ELF64_RELAS[0..]);
 
     assert!(relas.is_ok());
@@ -124,7 +125,7 @@ fn test_Relas_from_bytes_just_right() {
 
 #[test]
 fn test_Relas_from_bytes_too_small() {
-    let relas: Result<Relas<'_, LittleEndian, Elf64>, ()> =
+    let relas: Result<Relas<'_, LittleEndian, Elf64>, RelasError> =
         Relas::try_from(&ELF64_RELAS[0 .. ELF64_RELAS.len() - 1]);
 
     assert!(relas.is_err());
@@ -150,7 +151,7 @@ fn test_Relas_from_bytes_iter_len() {
 #[test]
 fn test_Relas_from_bytes_just_right_mut() {
     let mut buf = ELF64_RELAS.clone();
-    let relas: Result<Relas<'_, LittleEndian, Elf64>, ()> =
+    let relas: Result<Relas<'_, LittleEndian, Elf64>, RelasError> =
         Relas::try_from(&mut buf[0..]);
 
     assert!(relas.is_ok());
@@ -159,7 +160,7 @@ fn test_Relas_from_bytes_just_right_mut() {
 #[test]
 fn test_Relas_from_bytes_too_small_mut() {
     let mut buf = ELF64_RELAS.clone();
-    let relas: Result<Relas<'_, LittleEndian, Elf64>, ()> =
+    let relas: Result<Relas<'_, LittleEndian, Elf64>, RelasError> =
         Relas::try_from(&mut buf[0 .. ELF64_RELAS.len() - 1]);
 
     assert!(relas.is_err());

@@ -10,6 +10,7 @@ use elf_utils::symtab::SymData;
 use elf_utils::symtab::SymKind;
 use elf_utils::symtab::Symtab;
 use elf_utils::symtab::SymtabCreate;
+use elf_utils::symtab::SymtabError;
 use elf_utils::symtab::SymtabIter;
 use elf_utils::symtab::SymtabMut;
 use elf_utils::symtab::SymtabMutOps;
@@ -356,7 +357,7 @@ const ELF64_SYMTAB_CONTENTS: [SymData<Result<&'static str, &'static [u8]>,
 
 #[test]
 fn test_Symtab_from_bytes_just_right() {
-    let symtab: Result<Symtab<'_, LittleEndian, Elf64>, ()> =
+    let symtab: Result<Symtab<'_, LittleEndian, Elf64>, SymtabError> =
         Symtab::try_from(&ELF64_SYMTAB[0..]);
 
     assert!(symtab.is_ok());
@@ -364,7 +365,7 @@ fn test_Symtab_from_bytes_just_right() {
 
 #[test]
 fn test_Symtab_from_bytes_too_small() {
-    let symtab: Result<Symtab<'_, LittleEndian, Elf64>, ()> =
+    let symtab: Result<Symtab<'_, LittleEndian, Elf64>, SymtabError> =
         Symtab::try_from(&ELF64_SYMTAB[0 .. ELF64_SYMTAB.len() - 1]);
 
     assert!(symtab.is_err());
@@ -390,7 +391,7 @@ fn test_Symtab_from_bytes_iter_len() {
 #[test]
 fn test_Symtab_from_bytes_just_right_mut() {
     let mut buf = ELF64_SYMTAB.clone();
-    let symtab: Result<Symtab<'_, LittleEndian, Elf64>, ()> =
+    let symtab: Result<Symtab<'_, LittleEndian, Elf64>, SymtabError> =
         Symtab::try_from(&mut buf[0..]);
 
     assert!(symtab.is_ok());
@@ -399,7 +400,7 @@ fn test_Symtab_from_bytes_just_right_mut() {
 #[test]
 fn test_Symtab_from_bytes_too_small_mut() {
     let mut buf = ELF64_SYMTAB.clone();
-    let symtab: Result<Symtab<'_, LittleEndian, Elf64>, ()> =
+    let symtab: Result<Symtab<'_, LittleEndian, Elf64>, SymtabError> =
         Symtab::try_from(&mut buf[0 .. ELF64_SYMTAB.len() - 1]);
 
     assert!(symtab.is_err());
@@ -630,7 +631,7 @@ fn test_Symtab_create_idx() {
 #[test]
 fn test_SymtabMut_from_bytes_just_right_mut() {
     let mut buf = ELF64_SYMTAB.clone();
-    let symtab: Result<SymtabMut<'_, LittleEndian, Elf64>, ()> =
+    let symtab: Result<SymtabMut<'_, LittleEndian, Elf64>, SymtabError> =
         SymtabMut::try_from(&mut buf[0..]);
 
     assert!(symtab.is_ok());
@@ -639,7 +640,7 @@ fn test_SymtabMut_from_bytes_just_right_mut() {
 #[test]
 fn test_SymtabMut_from_bytes_too_small_mut() {
     let mut buf = ELF64_SYMTAB.clone();
-    let symtab: Result<SymtabMut<'_, LittleEndian, Elf64>, ()> =
+    let symtab: Result<SymtabMut<'_, LittleEndian, Elf64>, SymtabError> =
         SymtabMut::try_from(&mut buf[0 .. ELF64_SYMTAB.len() - 1]);
 
     assert!(symtab.is_err());
