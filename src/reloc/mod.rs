@@ -16,6 +16,7 @@
 //! use core::convert::TryFrom;
 //! use elf_utils::Elf64;
 //! use elf_utils::reloc::Relas;
+//! use elf_utils::reloc::RelasError;
 //!
 //! const RELAS: [u8; 96] = [
 //!     0x22, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -32,7 +33,7 @@
 //!     0xfc, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
 //! ];
 //!
-//! let relas: Result<Relas<'_, LittleEndian, Elf64>, ()> =
+//! let relas: Result<Relas<'_, LittleEndian, Elf64>, RelasError> =
 //!     Relas::try_from(&RELAS[0..]);
 //!
 //! assert!(relas.is_ok());
@@ -79,6 +80,7 @@
 //! use elf_utils::Elf64;
 //! use elf_utils::reloc::Relas;
 //! use elf_utils::reloc::RelaData;
+//! use elf_utils::reloc::RelaDataRaw;
 //!
 //! const RELAS: [u8; 96] = [
 //!     0x22, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -99,22 +101,32 @@
 //!     Relas::try_from(&RELAS[0..]).unwrap();
 //!
 //! let rela = relas.idx(1).unwrap();
-//! let data: RelaData<u32, Elf64> = rela.try_into().unwrap();
+//! let data: RelaDataRaw<Elf64> = rela.try_into().unwrap();
 //!
 //! assert_eq!(data, RelaData { offset: 0x2c, sym: 36, kind: 2, addend: -4 });
 //! ```
 pub mod x86;
+pub mod x86_64;
 
 use byteorder::ByteOrder;
 use core::convert::TryFrom;
+use core::convert::TryInto;
 use core::fmt::Display;
 use core::fmt::Formatter;
-use core::fmt::LowerHex;
 use core::iter::FusedIterator;
 use core::marker::PhantomData;
 use crate::elf::Elf32;
 use crate::elf::Elf64;
 use crate::elf::ElfClass;
+use crate::strtab::Strtab;
+use crate::strtab::WithStrtab;
+use crate::symtab::SymDataRaw;
+use crate::symtab::SymDataStr;
+use crate::symtab::SymDataStrData;
+use crate::symtab::Symtab;
+use crate::symtab::SymError;
+use crate::symtab::SymOffsets;
+use crate::symtab::WithSymtab;
 
 /// Extension to [ElfClass](crate::ElfClass) providing formatting
 /// information specific to relocations.
@@ -261,6 +273,7 @@ pub struct Rels<'a, B: ByteOrder, Offsets: RelOffsets> {
 /// use elf_utils::Elf64;
 /// use elf_utils::reloc::Relas;
 /// use elf_utils::reloc::RelaData;
+/// use elf_utils::reloc::RelaDataRaw;
 ///
 /// const RELAS: [u8; 96] = [
 ///     0x22, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -276,7 +289,7 @@ pub struct Rels<'a, B: ByteOrder, Offsets: RelOffsets> {
 ///     0x04, 0x00, 0x00, 0x00, 0x23, 0x00, 0x00, 0x00,
 ///     0xfc, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
 /// ];
-/// const RELAS_CONTENTS: [RelaData<u32, Elf64>; 4] = [
+/// const RELAS_CONTENTS: [RelaDataRaw<Elf64>; 4] = [
 ///    RelaData { offset: 0x22, sym: 36, kind: 2, addend: -5 },
 ///    RelaData { offset: 0x2c, sym: 36, kind: 2, addend: -4 },
 ///    RelaData { offset: 0x42, sym: 21, kind: 10, addend: 0 },
@@ -288,7 +301,7 @@ pub struct Rels<'a, B: ByteOrder, Offsets: RelOffsets> {
 ///
 /// for i in 0 .. 4 {
 ///     let rela = relas.idx(i).unwrap();
-///     let data: RelaData<u32, Elf64> = rela.try_into().unwrap();
+///     let data: RelaDataRaw<Elf64> = rela.try_into().unwrap();
 ///
 ///     assert_eq!(data, RELAS_CONTENTS[i]);
 /// }
@@ -378,6 +391,7 @@ pub struct Rel<'a, B: ByteOrder, Offsets: RelOffsets> {
 /// use elf_utils::Elf64;
 /// use elf_utils::reloc::Relas;
 /// use elf_utils::reloc::RelaData;
+/// use elf_utils::reloc::RelaDataRaw;
 ///
 /// const RELAS: [u8; 96] = [
 ///     0x22, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -397,7 +411,7 @@ pub struct Rel<'a, B: ByteOrder, Offsets: RelOffsets> {
 /// let relas: Relas<'_, LittleEndian, Elf64> =
 ///     Relas::try_from(&RELAS[0..]).unwrap();
 /// let rela = relas.idx(1).unwrap();
-/// let data: RelaData<u32, Elf64> = rela.try_into().unwrap();
+/// let data: RelaDataRaw<Elf64> = rela.try_into().unwrap();
 ///
 /// assert_eq!(data, RelaData { offset: 0x2c, sym: 36, kind: 2, addend: -4 });
 /// ```
@@ -471,6 +485,7 @@ pub struct RelIter<'a, B: ByteOrder, Offsets: RelOffsets> {
 /// use elf_utils::Elf64;
 /// use elf_utils::reloc::Relas;
 /// use elf_utils::reloc::RelaData;
+/// use elf_utils::reloc::RelaDataRaw;
 ///
 /// const RELAS: [u8; 96] = [
 ///     0x22, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -486,7 +501,7 @@ pub struct RelIter<'a, B: ByteOrder, Offsets: RelOffsets> {
 ///     0x04, 0x00, 0x00, 0x00, 0x23, 0x00, 0x00, 0x00,
 ///     0xfc, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
 /// ];
-/// const RELAS_CONTENTS: [RelaData<u32, Elf64>; 4] = [
+/// const RELAS_CONTENTS: [RelaDataRaw<Elf64>; 4] = [
 ///    RelaData { offset: 0x22, sym: 36, kind: 2, addend: -5 },
 ///    RelaData { offset: 0x2c, sym: 36, kind: 2, addend: -4 },
 ///    RelaData { offset: 0x42, sym: 21, kind: 10, addend: 0 },
@@ -499,7 +514,7 @@ pub struct RelIter<'a, B: ByteOrder, Offsets: RelOffsets> {
 ///
 /// for i in 0 .. 4 {
 ///     let rela = iter.next().unwrap();
-///     let data: RelaData<u32, Elf64> = rela.try_into().unwrap();
+///     let data: RelaDataRaw<Elf64> = rela.try_into().unwrap();
 ///
 ///     assert_eq!(data, RELAS_CONTENTS[i]);
 /// }
@@ -522,10 +537,53 @@ pub struct RelaIter<'a, B: ByteOrder, Offsets: RelaOffsets> {
 /// [create_split](Rels::create_split).
 #[derive(Clone, Debug, Hash, Eq, Ord, PartialEq, PartialOrd)]
 pub struct RelData<Name, Class: RelClass> {
+    /// Offset into the section at wich to perform the relocation.
     pub offset: Class::Offset,
+    /// Symbol reference used in the relocation.
     pub sym: Name,
+    /// Type of relocation.
     pub kind: Class::RelKind
 }
+
+/// Type synonym for [RelData] as projected from a [Rel].
+///
+/// This is obtained directly from the [TryFrom] insance acting on a
+/// [Rel].  This is also used in [Rels::create] and
+/// [Rels::create_split].
+pub type RelDataRaw<Class> = RelData<<Class as ElfClass>::Word, Class>;
+
+/// Type synonym for [RelData] with [SymDataRaw] as the symbol type.
+///
+/// This is obtained directly from the [WithSymtab] instance acting on a
+/// [RelData].
+pub type RelDataRawSym<Class> = RelData<SymDataRaw<Class>, Class>;
+
+/// Type synonym for [RelData] with [SymDataStrData] as the symbol type.
+///
+/// This is obtained directly from the [WithStrtab] instance acting on
+/// a [RelDataRawSym].
+pub type RelDataStrDataSym<'a, Class> =
+    RelData<SymDataStrData<'a, Class>, Class>;
+
+/// Type synonym for [RelData] with [SymDataStr] as the symbol type.
+///
+/// This is obtained directly from the [TryFrom] instance acting on
+/// a [RelDataStrDataSym].
+pub type RelDataStrData<'a, Class> =
+    RelData<Option<Result<&'a str, &'a [u8]>>, Class>;
+
+/// Type synonym for [RelData] with UTF-8 decoded string data as the
+/// symbol type.
+///
+/// This is obtained directly from the [TryFrom] instance acting on
+/// a [RelDataStrDataSym].
+pub type RelDataStrSym<'a, Class> = RelData<SymDataStr<'a, Class>, Class>;
+
+/// Type synonym for [RelData] with a `&'a str`s as the symbol type.
+///
+/// This is obtained directly from the [TryFrom] instance acting on
+/// a [RelDataStrSym].
+pub type RelDataStr<'a, Class> = RelData<Option<&'a str>, Class>;
 
 /// Projected ELF relocation data with explicit addends.
 ///
@@ -534,18 +592,90 @@ pub struct RelData<Name, Class: RelClass> {
 /// create a new [Relas] using [create](Rels::create) or
 /// [create_split](Relas::create_split).
 #[derive(Clone, Debug, Hash, Eq, Ord, PartialEq, PartialOrd)]
-pub struct RelaData<Name, Class: RelClass> {
+pub struct RelaData<Sym, Class: RelClass> {
+    /// Offset into the section at wich to perform the relocation.
     pub offset: Class::Offset,
-    pub addend: Class::Addend,
-    pub sym: Name,
+    /// Symbol reference used in the relocation.
+    pub sym: Sym,
+    /// Type of relocation.
     pub kind: Class::RelKind,
+    /// Explicit addend to the relocation.
+    pub addend: Class::Addend,
+}
+
+/// Type synonym for [RelaData] as projected from a [Rela].
+///
+/// This is obtained directly from the [TryFrom] insance acting on a
+/// [Rela].  This is also used in [Rels::create] and
+/// [Relas::create_split].
+pub type RelaDataRaw<Class> = RelaData<<Class as ElfClass>::Word, Class>;
+
+/// Type synonym for [RelaData] with [SymDataRaw] as the symbol type.
+///
+/// This is obtained directly from the [WithSymtab] instance acting on a
+/// [RelaData].
+pub type RelaDataRawSym<Class> = RelaData<SymDataRaw<Class>, Class>;
+
+/// Type synonym for [RelaData] with [SymDataStrData] as the symbol type.
+///
+/// This is obtained directly from the [WithStrtab] instance acting on
+/// a [RelaDataRawSym].
+pub type RelaDataStrDataSym<'a, Class> =
+    RelaData<SymDataStrData<'a, Class>, Class>;
+
+/// Type synonym for [RelaData] with [SymDataStr] as the symbol type.
+///
+/// This is obtained directly from the [TryFrom] instance acting on
+/// a [RelaDataStrDataSym].
+pub type RelaDataStrData<'a, Class> =
+    RelaData<Option<Result<&'a str, &'a [u8]>>, Class>;
+
+/// Type synonym for [RelaData] with UTF-8 decoded string data as the
+/// symbol type.
+///
+/// This is obtained directly from the [TryFrom] instance acting on
+/// a [RelaDataStrDataSym].
+pub type RelaDataStrSym<'a, Class> = RelaData<SymDataStr<'a, Class>, Class>;
+
+/// Type synonym for [RelaData] with a `&'a str`s as the symbol type.
+///
+/// This is obtained directly from the [TryFrom] instance acting on
+/// a [RelaDataStrSym].
+pub type RelaDataStr<'a, Class> = RelaData<Option<&'a str>, Class>;
+
+/// Errors that can occur creating a [Rels].
+///
+/// The only error that can occur is if the data is not a multiple of
+/// the size of a relocation.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum RelsError {
+    /// Size is not a multiple of the size of a relocation.
+    BadSize(usize)
+}
+
+/// Errors that can occur creating a [Relas].
+///
+/// The only error that can occur is if the data is not a multiple of
+/// the size of a relocation.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum RelasError {
+    BadSize(usize)
+}
+
+/// Errors that can occur when converting a relocation using a [Symtab].
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum RelocSymtabError<Class: ElfClass> {
+    /// Bad symbol index.
+    BadIdx(Class::Word),
+    /// Error reading symbol data.
+    SymError(SymError)
 }
 
 fn create_relas<'a, 'b, B, I, Offsets>(buf: &'a mut [u8], relas: I,
                                        byteorder: PhantomData<B>,
-                                       offsets: PhantomData<Offsets>) ->
+                                       _offsets: PhantomData<Offsets>) ->
     Result<(&'a mut [u8], &'a mut [u8]), ()>
-    where I: Iterator<Item = &'b RelaData<Offsets::Word, Offsets>>,
+    where I: Iterator<Item = &'b RelaDataRaw<Offsets>>,
           Offsets: 'b + RelaOffsets,
           B: ByteOrder {
     let len = buf.len();
@@ -575,7 +705,7 @@ fn create_relas<'a, 'b, B, I, Offsets>(buf: &'a mut [u8], relas: I,
 
 fn create_rels<'a, 'b, B, I, Offsets>(buf: &'a mut [u8], rels: I,
                                       byteorder: PhantomData<B>,
-                                      offsets: PhantomData<Offsets>) ->
+                                      _offsets: PhantomData<Offsets>) ->
     Result<(&'a mut [u8], &'a mut [u8]), ()>
     where I: Iterator<Item = &'b RelData<Offsets::Word, Offsets>>,
           Offsets: 'b + RelOffsets,
@@ -605,7 +735,7 @@ fn create_rels<'a, 'b, B, I, Offsets>(buf: &'a mut [u8], rels: I,
 impl RelClass for Elf32 {
     type RelKind = u8;
 
-    fn read_info<B: ByteOrder>(data: &[u8], byteorder: PhantomData<B>) ->
+    fn read_info<B: ByteOrder>(data: &[u8], _byteorder: PhantomData<B>) ->
         (Self::RelKind, Self::Word) {
         let info = B::read_u32(data);
         let kind = (info & 0xff) as u8;
@@ -615,7 +745,7 @@ impl RelClass for Elf32 {
     }
 
     fn write_info<B: ByteOrder>(data: &mut [u8], kind: Self::RelKind,
-                                sym: Self::Word, byteorder: PhantomData<B>) {
+                                sym: Self::Word, _byteorder: PhantomData<B>) {
         let info = ((sym as u32) << 8) | (kind as u32);
 
         B::write_u32(data, info);
@@ -626,7 +756,7 @@ impl RelClass for Elf32 {
 impl RelClass for Elf64 {
     type RelKind = u32;
 
-    fn read_info<B: ByteOrder>(data: &[u8], byteorder: PhantomData<B>) ->
+    fn read_info<B: ByteOrder>(data: &[u8], _byteorder: PhantomData<B>) ->
         (Self::RelKind, Self::Word) {
         let info = B::read_u64(data);
         let kind = (info & 0xffffffff) as u32;
@@ -636,7 +766,7 @@ impl RelClass for Elf64 {
     }
 
     fn write_info<B: ByteOrder>(data: &mut [u8], kind: Self::RelKind,
-                                sym: Self::Word, byteorder: PhantomData<B>) {
+                                sym: Self::Word, _byteorder: PhantomData<B>) {
         let info = ((sym as u64) << 32) | (kind as u64);
 
         B::write_u64(data, info);
@@ -702,9 +832,10 @@ pub fn rels_required_bytes<'b, I, Offsets>(rels: I) -> usize
 /// use elf_utils::Elf64;
 /// use elf_utils::reloc::Relas;
 /// use elf_utils::reloc::RelaData;
+/// use elf_utils::reloc::RelaDataRaw;
 /// use elf_utils::reloc;
 ///
-/// const RELAS_CONTENTS: [RelaData<u32, Elf64>; 4] = [
+/// const RELAS_CONTENTS: [RelaDataRaw<Elf64>; 4] = [
 ///    RelaData { offset: 0x22, sym: 36, kind: 2, addend: -5 },
 ///    RelaData { offset: 0x2c, sym: 36, kind: 2, addend: -4 },
 ///    RelaData { offset: 0x42, sym: 21, kind: 10, addend: 0 },
@@ -715,7 +846,7 @@ pub fn rels_required_bytes<'b, I, Offsets>(rels: I) -> usize
 /// ```
 #[inline]
 pub fn relas_required_bytes<'b, I, Offsets>(relas: I) -> usize
-    where I: Iterator<Item = &'b RelaData<Offsets::Word, Offsets>>,
+    where I: Iterator<Item = &'b RelaDataRaw<Offsets>>,
           Offsets: 'b + RelaOffsets {
     relas.count() * Offsets::RELA_SIZE
 }
@@ -744,9 +875,10 @@ impl<'a, B, Offsets> Relas<'a, B, Offsets>
     /// use elf_utils::Elf64;
     /// use elf_utils::reloc::Relas;
     /// use elf_utils::reloc::RelaData;
+    /// use elf_utils::reloc::RelaDataRaw;
     /// use elf_utils::reloc;
     ///
-    /// const RELAS_CONTENTS: [RelaData<u32, Elf64>; 4] = [
+    /// const RELAS_CONTENTS: [RelaDataRaw<Elf64>; 4] = [
     ///    RelaData { offset: 0x22, sym: 36, kind: 2, addend: -5 },
     ///    RelaData { offset: 0x2c, sym: 36, kind: 2, addend: -4 },
     ///    RelaData { offset: 0x42, sym: 21, kind: 10, addend: 0 },
@@ -765,7 +897,7 @@ impl<'a, B, Offsets> Relas<'a, B, Offsets>
     ///
     /// for i in 0 .. 4 {
     ///     let rela = iter.next().unwrap();
-    ///     let data: RelaData<u32, Elf64> = rela.try_into().unwrap();
+    ///     let data: RelaDataRaw<Elf64> = rela.try_into().unwrap();
     ///
     ///     assert_eq!(data, RELAS_CONTENTS[i]);
     /// }
@@ -775,7 +907,7 @@ impl<'a, B, Offsets> Relas<'a, B, Offsets>
     #[inline]
     pub fn create_split<'b, I>(buf: &'a mut [u8], relas: I) ->
         Result<(Self, &'a mut [u8]), ()>
-        where I: Iterator<Item = &'b RelaData<Offsets::Word, Offsets>>,
+        where I: Iterator<Item = &'b RelaDataRaw<Offsets>>,
               Offsets: 'b {
         let byteorder: PhantomData<B> = PhantomData;
         let offsets: PhantomData<Offsets> = PhantomData;
@@ -804,9 +936,10 @@ impl<'a, B, Offsets> Relas<'a, B, Offsets>
     /// use elf_utils::Elf64;
     /// use elf_utils::reloc::Relas;
     /// use elf_utils::reloc::RelaData;
+    /// use elf_utils::reloc::RelaDataRaw;
     /// use elf_utils::reloc;
     ///
-    /// const RELAS_CONTENTS: [RelaData<u32, Elf64>; 4] = [
+    /// const RELAS_CONTENTS: [RelaDataRaw<Elf64>; 4] = [
     ///    RelaData { offset: 0x22, sym: 36, kind: 2, addend: -5 },
     ///    RelaData { offset: 0x2c, sym: 36, kind: 2, addend: -4 },
     ///    RelaData { offset: 0x42, sym: 21, kind: 10, addend: 0 },
@@ -820,7 +953,7 @@ impl<'a, B, Offsets> Relas<'a, B, Offsets>
     ///
     /// for i in 0 .. 4 {
     ///     let rela = iter.next().unwrap();
-    ///     let data: RelaData<u32, Elf64> = rela.try_into().unwrap();
+    ///     let data: RelaDataRaw<Elf64> = rela.try_into().unwrap();
     ///
     ///     assert_eq!(data, RELAS_CONTENTS[i]);
     /// }
@@ -829,7 +962,7 @@ impl<'a, B, Offsets> Relas<'a, B, Offsets>
     /// ```
     #[inline]
     pub fn create<'b, I>(buf: &'a mut [u8], relas: I) -> Result<Self, ()>
-        where I: Iterator<Item = &'b RelaData<Offsets::Word, Offsets>>,
+        where I: Iterator<Item = &'b RelaDataRaw<Offsets>>,
               Self: Sized,
               Offsets: 'b {
         match Self::create_split(buf, relas) {
@@ -1027,7 +1160,7 @@ impl<'a, B, Offsets> Rels<'a, B, Offsets>
 
 impl<'a, B, Offsets: RelOffsets> TryFrom<&'a [u8]> for Rels<'a, B, Offsets>
     where B: ByteOrder {
-    type Error = ();
+    type Error = RelsError;
 
     /// Create a `Rels` from the data buffer.  This will check that
     /// the data buffer is a multiple of the relocation size.
@@ -1039,14 +1172,14 @@ impl<'a, B, Offsets: RelOffsets> TryFrom<&'a [u8]> for Rels<'a, B, Offsets>
             Ok(Rels { byteorder: PhantomData, offsets: PhantomData,
                       data: data })
         } else {
-            Err(())
+            Err(RelsError::BadSize(len))
         }
     }
 }
 
 impl<'a, B, Offsets: RelOffsets> TryFrom<&'a mut [u8]> for Rels<'a, B, Offsets>
     where B: ByteOrder {
-    type Error = ();
+    type Error = RelsError;
 
     /// Create a `Rels` from the data buffer.  This will check that
     /// the data buffer is a multiple of the relocation size.
@@ -1059,7 +1192,7 @@ impl<'a, B, Offsets: RelOffsets> TryFrom<&'a mut [u8]> for Rels<'a, B, Offsets>
             Ok(Rels { byteorder: PhantomData, offsets: PhantomData,
                       data: data })
         } else {
-            Err(())
+            Err(RelsError::BadSize(len))
         }
     }
 }
@@ -1067,7 +1200,7 @@ impl<'a, B, Offsets: RelOffsets> TryFrom<&'a mut [u8]> for Rels<'a, B, Offsets>
 impl<'a, B, Offsets: RelaOffsets> TryFrom<&'a [u8]>
     for Relas<'a, B, Offsets>
     where B: ByteOrder {
-    type Error = ();
+    type Error = RelasError;
 
     /// Create a `Rels` from the data buffer.  This will check that
     /// the data buffer is a multiple of the relocation size.
@@ -1079,7 +1212,7 @@ impl<'a, B, Offsets: RelaOffsets> TryFrom<&'a [u8]>
             Ok(Relas { byteorder: PhantomData, offsets: PhantomData,
                        data: data })
         } else {
-            Err(())
+            Err(RelasError::BadSize(len))
         }
     }
 }
@@ -1087,7 +1220,7 @@ impl<'a, B, Offsets: RelaOffsets> TryFrom<&'a [u8]>
 impl<'a, B, Offsets: RelaOffsets> TryFrom<&'a mut [u8]>
     for Relas<'a, B, Offsets>
     where B: ByteOrder {
-    type Error = ();
+    type Error = RelasError;
 
     /// Create a `Rels` from the data buffer.  This will check that
     /// the data buffer is a multiple of the relocation size.
@@ -1100,7 +1233,7 @@ impl<'a, B, Offsets: RelaOffsets> TryFrom<&'a mut [u8]>
             Ok(Relas { byteorder: PhantomData, offsets: PhantomData,
                        data: data })
         } else {
-            Err(())
+            Err(RelasError::BadSize(len))
         }
     }
 }
@@ -1132,12 +1265,221 @@ impl<Name: Display, Class> Display for RelData<Name, Class>
     }
 }
 
+impl<'a, B, Offsets> WithSymtab<'a, B, Offsets>
+    for Rel<'a, B, Offsets>
+    where Offsets: SymOffsets + RelOffsets,
+          B: ByteOrder {
+    type Result = RelDataRawSym<Offsets>;
+    type Error = RelocSymtabError<Offsets>;
+
+    #[inline]
+    fn with_symtab(self, symtab: Symtab<'a, B, Offsets>) ->
+        Result<Self::Result, Self::Error> {
+        let sym: RelData<Offsets::Word, Offsets> = self.into();
+
+        sym.with_symtab(symtab)
+    }
+}
+
+impl<'a, B, Offsets> WithSymtab<'a, B, Offsets>
+    for Rela<'a, B, Offsets>
+    where Offsets: SymOffsets + RelaOffsets,
+          B: ByteOrder {
+    type Result = RelaDataRawSym<Offsets>;
+    type Error = RelocSymtabError<Offsets>;
+
+    #[inline]
+    fn with_symtab(self, symtab: Symtab<'a, B, Offsets>) ->
+        Result<Self::Result, Self::Error> {
+        let sym: RelaDataRaw<Offsets> = self.into();
+
+        sym.with_symtab(symtab)
+    }
+}
+
+impl<'a, B, Offsets> WithSymtab<'a, B, Offsets>
+    for RelData<Offsets::Word, Offsets>
+    where Offsets: SymOffsets + RelOffsets,
+          B: ByteOrder {
+    type Result = RelDataRawSym<Offsets>;
+    type Error = RelocSymtabError<Offsets>;
+
+    #[inline]
+    fn with_symtab(self, symtab: Symtab<'a, B, Offsets>) ->
+        Result<Self::Result, Self::Error> {
+        let RelData { offset, sym, kind } = self;
+
+        match sym.try_into() {
+            Ok(idx) => match symtab.idx(idx) {
+                Some(sym) => match sym.try_into() {
+                    Ok(symdata) => {
+                        Ok(RelData { offset: offset, sym: symdata, kind: kind })
+                    },
+                    Err(err) => Err(RelocSymtabError::SymError(err))
+                },
+                None => Err(RelocSymtabError::BadIdx(sym))
+            }
+            Err(_) => Err(RelocSymtabError::BadIdx(sym))
+        }
+    }
+}
+
+impl<'a, B, Offsets> WithSymtab<'a, B, Offsets>
+    for RelaDataRaw<Offsets>
+    where Offsets: SymOffsets + RelaOffsets,
+          B: ByteOrder {
+    type Result = RelaDataRawSym<Offsets>;
+    type Error = RelocSymtabError<Offsets>;
+
+    #[inline]
+    fn with_symtab(self, symtab: Symtab<'a, B, Offsets>) ->
+        Result<Self::Result, Self::Error> {
+        let RelaData { offset, sym, kind, addend } = self;
+
+        match sym.try_into() {
+            Ok(idx) => match symtab.idx(idx) {
+                Some(sym) => match sym.try_into() {
+                    Ok(symdata) => {
+                        Ok(RelaData { offset: offset, sym: symdata,
+                                      kind: kind, addend: addend })
+                    },
+                    Err(err) => Err(RelocSymtabError::SymError(err))
+                },
+                None => Err(RelocSymtabError::BadIdx(sym))
+            }
+            Err(_) => Err(RelocSymtabError::BadIdx(sym))
+        }
+    }
+}
+
+impl<'a, Offsets> WithStrtab<'a>
+    for RelDataRawSym<Offsets>
+    where Offsets: SymOffsets + RelOffsets {
+    type Result = RelDataStrDataSym<'a, Offsets>;
+    type Error = Offsets::Word;
+
+    #[inline]
+    fn with_strtab(self, strtab: Strtab<'a>) ->
+        Result<Self::Result, Self::Error> {
+        let RelData { offset, sym, kind } = self;
+
+        match sym.with_strtab(strtab) {
+            Ok(sym) => Ok(RelData { offset: offset, kind: kind, sym: sym }),
+            Err(err) => Err(err)
+        }
+    }
+}
+
+impl<'a, Offsets> WithStrtab<'a>
+    for RelaDataRawSym<Offsets>
+    where Offsets: SymOffsets + RelOffsets {
+    type Result = RelaDataStrDataSym<'a, Offsets>;
+    type Error = Offsets::Word;
+
+    #[inline]
+    fn with_strtab(self, strtab: Strtab<'a>) ->
+        Result<Self::Result, Self::Error> {
+        let RelaData { offset, sym, kind, addend } = self;
+
+        match sym.with_strtab(strtab) {
+            Ok(sym) => Ok(RelaData { offset: offset, kind: kind,
+                                     sym: sym, addend: addend }),
+            Err(err) => Err(err)
+        }
+    }
+}
+
+impl<'a, Offsets> TryFrom<RelaDataStrDataSym<'a, Offsets>>
+    for RelaDataStrSym<'a, Offsets>
+    where Offsets: SymOffsets + RelaOffsets {
+    type Error = &'a [u8];
+
+    #[inline]
+    fn try_from(sym: RelaDataStrDataSym<'a, Offsets>) ->
+        Result<RelaDataStrSym<'a, Offsets>, Self::Error> {
+        let RelaData { offset, sym, kind, addend } = sym;
+
+        match sym.try_into() {
+            Ok(sym) => Ok(RelaData { offset: offset, sym: sym,
+                                     kind: kind, addend: addend }),
+            Err(err) => Err(err)
+        }
+    }
+}
+
+impl<'a, Offsets> TryFrom<RelDataStrDataSym<'a, Offsets>>
+    for RelDataStrSym<'a, Offsets>
+    where Offsets: SymOffsets + RelOffsets {
+    type Error = &'a [u8];
+
+    #[inline]
+    fn try_from(sym: RelDataStrDataSym<'a, Offsets>) ->
+        Result<RelDataStrSym<'a, Offsets>, Self::Error> {
+        let RelData { offset, sym, kind } = sym;
+
+        match sym.try_into() {
+            Ok(sym) => Ok(RelData { offset: offset, sym: sym, kind: kind }),
+            Err(err) => Err(err)
+        }
+    }
+}
+
+impl<'a, Offsets> From<RelaDataStrDataSym<'a, Offsets>>
+    for RelaDataStrData<'a, Offsets>
+    where Offsets: SymOffsets + RelaOffsets {
+
+    #[inline]
+    fn from(reloc: RelaDataStrDataSym<'a, Offsets>) ->
+        RelaDataStrData<'a, Offsets> {
+        let RelaData { offset, sym, kind, addend } = reloc;
+
+        RelaData { offset: offset, sym: sym.name, kind: kind, addend: addend }
+    }
+}
+
+impl<'a, Offsets> From<RelDataStrDataSym<'a, Offsets>>
+    for RelDataStrData<'a, Offsets>
+    where Offsets: SymOffsets + RelaOffsets {
+
+    #[inline]
+    fn from(reloc: RelDataStrDataSym<'a, Offsets>) ->
+        RelDataStrData<'a, Offsets> {
+        let RelData { offset, sym, kind } = reloc;
+
+        RelData { offset: offset, sym: sym.name, kind: kind }
+    }
+}
+
+impl<'a, Offsets> From<RelaDataStrSym<'a, Offsets>>
+    for RelaDataStr<'a, Offsets>
+    where Offsets: SymOffsets + RelaOffsets {
+
+    #[inline]
+    fn from(reloc: RelaDataStrSym<'a, Offsets>) -> RelaDataStr<'a, Offsets> {
+        let RelaData { offset, sym, kind, addend } = reloc;
+
+        RelaData { offset: offset, sym: sym.name, kind: kind, addend: addend }
+    }
+}
+
+impl<'a, Offsets> From<RelDataStrSym<'a, Offsets>>
+    for RelDataStr<'a, Offsets>
+    where Offsets: SymOffsets + RelaOffsets {
+
+    #[inline]
+    fn from(reloc: RelDataStrSym<'a, Offsets>) -> RelDataStr<'a, Offsets> {
+        let RelData { offset, sym, kind } = reloc;
+
+        RelData { offset: offset, sym: sym.name, kind: kind }
+    }
+}
+
 impl<'a, B, Offsets> From<Rela<'a, B, Offsets>>
-    for RelaData<Offsets::Word, Offsets>
+    for RelaDataRaw<Offsets>
     where Offsets: RelaOffsets,
           B: ByteOrder {
     #[inline]
-    fn from(rel: Rela<'a, B, Offsets>) -> RelaData<Offsets::Word, Offsets> {
+    fn from(rel: Rela<'a, B, Offsets>) -> RelaDataRaw<Offsets> {
         let offset = Offsets::read_offset(&rel.data[Offsets::R_OFFSET_START ..
                                                     Offsets::R_OFFSET_END],
                                         rel.byteorder);
@@ -1257,5 +1599,23 @@ impl<'a, B, Offsets: RelaOffsets> ExactSizeIterator for RelaIter<'a, B, Offsets>
     #[inline]
     fn len(&self) -> usize {
         self.data.len() / Offsets::RELA_SIZE
+    }
+}
+
+impl Display for RelsError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
+        match self {
+            RelsError::BadSize(size) =>
+                write!(f, "bad relocation table size {}", size)
+        }
+    }
+}
+
+impl Display for RelasError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
+        match self {
+            RelasError::BadSize(size) =>
+                write!(f, "bad relocation table size {}", size)
+        }
     }
 }

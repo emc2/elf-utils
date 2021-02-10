@@ -1,4 +1,4 @@
-//! ELF note program header functionality.
+//! ELF program header functionality.
 //!
 //! This module provides a [ProgHdrs] type which acts as a wrapper
 //! around ELF program header data.
@@ -15,6 +15,7 @@
 //! use core::convert::TryFrom;
 //! use elf_utils::Elf32;
 //! use elf_utils::prog_hdr::ProgHdrs;
+//! use elf_utils::prog_hdr::ProgHdrsError;
 //!
 //! const PROG_HDR: [u8; 192] = [
 //!     0x06, 0x00, 0x00, 0x00, 0x34, 0x00, 0x00, 0x00,
@@ -43,7 +44,7 @@
 //!     0x06, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00
 //! ];
 //!
-//! let hdrs: Result<ProgHdrs<'_, LittleEndian, Elf32>, ()> =
+//! let hdrs: Result<ProgHdrs<'_, LittleEndian, Elf32>, ProgHdrsError> =
 //!     ProgHdrs::try_from(&PROG_HDR[0..]);
 //!
 //! assert!(hdrs.is_ok());
@@ -106,6 +107,7 @@
 //! use elf_utils::Elf32;
 //! use elf_utils::prog_hdr::ProgHdrs;
 //! use elf_utils::prog_hdr::ProgHdrData;
+//! use elf_utils::prog_hdr::ProgHdrDataRaw;
 //! use elf_utils::prog_hdr::Segment;
 //!
 //! const PROG_HDR: [u8; 192] = [
@@ -138,8 +140,7 @@
 //! let hdrs: ProgHdrs<'_, LittleEndian, Elf32> =
 //!     ProgHdrs::try_from(&PROG_HDR[0..]).unwrap();
 //! let ent = hdrs.idx(1).unwrap();
-//! let data: ProgHdrData<Elf32, Segment<u32>, Segment<u32>,  Segment<u32>> =
-//!     ent.try_into().unwrap();
+//! let data: ProgHdrDataRaw<Elf32> = ent.try_into().unwrap();
 //!
 //! assert_eq!(data, ProgHdrData::Load { virt_addr: 0, phys_addr: 0,
 //!                                      mem_size: 0x46bc, align: 0x1000,
@@ -150,8 +151,15 @@
 use byteorder::ByteOrder;
 use core::convert::TryFrom;
 use core::convert::TryInto;
+use core::fmt::Display;
+use core::fmt::Formatter;
+use core::fmt::LowerHex;
 use core::iter::FusedIterator;
 use core::marker::PhantomData;
+use core::str::from_utf8;
+use crate::dynamic::Dynamic;
+use crate::dynamic::DynamicError;
+use crate::dynamic::DynamicOffsets;
 use crate::elf::ElfClass;
 use crate::elf::Elf32;
 use crate::elf::Elf64;
@@ -258,6 +266,7 @@ pub trait ProgHdrOffsets: ElfClass {
 /// use elf_utils::Elf32;
 /// use elf_utils::prog_hdr::ProgHdrs;
 /// use elf_utils::prog_hdr::ProgHdrData;
+/// use elf_utils::prog_hdr::ProgHdrDataRaw;
 /// use elf_utils::prog_hdr::Segment;
 ///
 /// const PROG_HDR: [u8; 192] = [
@@ -287,8 +296,7 @@ pub trait ProgHdrOffsets: ElfClass {
 ///     0x06, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00
 /// ];
 ///
-/// const PROG_HDR_CONTENTS: [ProgHdrData<Elf32, Segment<u32>, Segment<u32>,
-///                                       Segment<u32>>; 6] = [
+/// const PROG_HDR_CONTENTS: [ProgHdrDataRaw<Elf32>; 6] = [
 ///     ProgHdrData::ProgHdr { virt_addr: 0x34, phys_addr: 0x34,
 ///                            content: Segment { offset: 0x34, size: 0x140 } },
 ///     ProgHdrData::Load { virt_addr: 0, phys_addr: 0,
@@ -318,8 +326,7 @@ pub trait ProgHdrOffsets: ElfClass {
 ///
 /// for i in 0 .. 6 {
 ///     let ent = hdrs.idx(i).unwrap();
-///     let data: ProgHdrData<Elf32, Segment<u32>, Segment<u32>, Segment<u32>> =
-///         ent.try_into().unwrap();
+///     let data: ProgHdrDataRaw<Elf32> = ent.try_into().unwrap();
 ///
 ///     assert_eq!(data, PROG_HDR_CONTENTS[i]);
 /// }
@@ -354,6 +361,7 @@ pub struct ProgHdrs<'a, B, Offsets: ProgHdrOffsets> {
 /// use elf_utils::Elf32;
 /// use elf_utils::prog_hdr::ProgHdrs;
 /// use elf_utils::prog_hdr::ProgHdrData;
+/// use elf_utils::prog_hdr::ProgHdrDataRaw;
 /// use elf_utils::prog_hdr::Segment;
 ///
 /// const PROG_HDR: [u8; 192] = [
@@ -386,8 +394,7 @@ pub struct ProgHdrs<'a, B, Offsets: ProgHdrOffsets> {
 /// let hdrs: ProgHdrs<'_, LittleEndian, Elf32> =
 ///     ProgHdrs::try_from(&PROG_HDR[0..]).unwrap();
 /// let ent = hdrs.idx(1).unwrap();
-/// let data: ProgHdrData<Elf32, Segment<u32>, Segment<u32>,  Segment<u32>> =
-///     ent.try_into().unwrap();
+/// let data: ProgHdrDataRaw<Elf32> = ent.try_into().unwrap();
 ///
 /// assert_eq!(data, ProgHdrData::Load { virt_addr: 0, phys_addr: 0,
 ///                                      mem_size: 0x46bc, align: 0x1000,
@@ -424,6 +431,7 @@ pub struct ProgHdrMut<'a, B: ByteOrder, Offsets: ProgHdrOffsets> {
 /// use elf_utils::Elf32;
 /// use elf_utils::prog_hdr::ProgHdrs;
 /// use elf_utils::prog_hdr::ProgHdrData;
+/// use elf_utils::prog_hdr::ProgHdrDataRaw;
 /// use elf_utils::prog_hdr::Segment;
 ///
 /// const PROG_HDR: [u8; 192] = [
@@ -453,8 +461,7 @@ pub struct ProgHdrMut<'a, B: ByteOrder, Offsets: ProgHdrOffsets> {
 ///     0x06, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00
 /// ];
 ///
-/// const PROG_HDR_CONTENTS: [ProgHdrData<Elf32, Segment<u32>, Segment<u32>,
-///                                       Segment<u32>>; 6] = [
+/// const PROG_HDR_CONTENTS: [ProgHdrDataRaw<Elf32>; 6] = [
 ///     ProgHdrData::ProgHdr { virt_addr: 0x34, phys_addr: 0x34,
 ///                            content: Segment { offset: 0x34, size: 0x140 } },
 ///     ProgHdrData::Load { virt_addr: 0, phys_addr: 0,
@@ -485,8 +492,7 @@ pub struct ProgHdrMut<'a, B: ByteOrder, Offsets: ProgHdrOffsets> {
 ///
 /// for i in 0 .. 6 {
 ///     let ent = iter.next().unwrap();
-///     let data: ProgHdrData<Elf32, Segment<u32>, Segment<u32>, Segment<u32>> =
-///         ent.try_into().unwrap();
+///     let data: ProgHdrDataRaw<Elf32> = ent.try_into().unwrap();
 ///
 ///     assert_eq!(data, PROG_HDR_CONTENTS[i]);
 /// }
@@ -499,6 +505,15 @@ pub struct ProgHdrIter<'a, B: ByteOrder, Offsets: ProgHdrOffsets> {
     idx: usize
 }
 
+/// Errors that can occur creating a [ProgHdrs].
+///
+/// The only error that can occur is if the data is not a multiple of
+/// the size of a program header.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum ProgHdrsError {
+    BadSize(usize)
+}
+
 /// Projected ELF program header data.
 ///
 /// This is a representation of an ELF program header table entry
@@ -507,7 +522,7 @@ pub struct ProgHdrIter<'a, B: ByteOrder, Offsets: ProgHdrOffsets> {
 /// [create](ProgHdrs::create) or
 /// [create_split](ProgHdrs::create_split).
 #[derive(Copy, Clone, Debug, Hash, Eq, Ord, PartialEq, PartialOrd)]
-pub enum ProgHdrData<Offsets: ProgHdrOffsets, Data, Str, Dyn> {
+pub enum ProgHdrData<Offsets: ElfClass, Data, Str, Dyn> {
     /// Null program header.
     Null,
     /// Loadable segment.
@@ -599,6 +614,47 @@ pub enum ProgHdrData<Offsets: ProgHdrOffsets, Data, Str, Dyn> {
     }
 }
 
+/// Type alias for [ProgHdrData] as projected from a [ProgHdr].
+///
+/// This is obtained directly from the [TryFrom] insance acting on a
+/// [ProgHdr].  This is also used in [ProgHdrs::create] and
+/// [ProgHdrs::create_split].
+pub type ProgHdrDataRaw<Class> =
+    ProgHdrData<Class, Segment<<Class as ElfClass>::Offset>,
+                Segment<<Class as ElfClass>::Offset>,
+                Segment<<Class as ElfClass>::Offset>>;
+
+/// Type alias for [ProgHdrData] with `&[u8]` buffers for all
+/// segments.
+///
+/// This is produced from a [ProgHdrDataRaw] using the [WithElfData]
+/// instance.
+pub type ProgHdrDataBufs<'a, Class> =
+    ProgHdrData<Class, &'a [u8], &'a [u8], &'a [u8]>;
+
+/// Type alias for [ProgHdrData] with `&str` representing the
+/// interpreter name.
+///
+/// This is obtained from the use of a [TryFrom] instance operating on
+/// a [ProgHdrDataBufs].
+pub type ProgHdrDataStr<'a, Class> =
+    ProgHdrData<Class, &'a [u8], &'a [u8], &'a [u8]>;
+
+/// Type alias for [ProgHdrData] with dynamic linking data represented
+/// as a [Dynamic](crate::dynamic::Dynamic).
+///
+/// This is obtained from the use of a [TryFrom] instance operating on
+/// a [ProgHdrDataBufs].
+pub type ProgHdrDataDyn<'a, B, Offsets> =
+    ProgHdrData<Offsets, &'a [u8], &'a str, Dynamic<'a, B, Offsets>>;
+
+/// Type alias for [ProgHdrData] fully interpreted.
+///
+/// This is obtained from the use of [TryFrom] instances operating on
+/// [ProgHdrDataBufs].
+pub type ProgHdrDataFull<'a, B, Offsets> =
+    ProgHdrData<Offsets, &'a [u8], &'a str, Dynamic<'a, B, Offsets>>;
+
 /// Errors that can occur when projecting a [ProgHdr] to a [ProgHdrData].
 #[derive(Clone, Copy, Debug, Hash, Eq, Ord, PartialEq, PartialOrd)]
 pub enum ProgHdrError<Offsets: ProgHdrOffsets> {
@@ -627,9 +683,8 @@ pub struct Segment<Word> {
 
 #[inline]
 fn project<'a, B, Offsets>(ent: &'a [u8], byteorder: PhantomData<B>,
-                           offsets: PhantomData<Offsets>) ->
-    Result<ProgHdrData<Offsets, Segment<Offsets::Offset>,
-                       Segment<Offsets::Offset>, Segment<Offsets::Offset>>,
+                           _offsets: PhantomData<Offsets>) ->
+    Result<ProgHdrDataRaw<Offsets>,
            ProgHdrError<Offsets>>
     where Offsets: ProgHdrOffsets,
           B: ByteOrder {
@@ -781,11 +836,9 @@ fn project<'a, B, Offsets>(ent: &'a [u8], byteorder: PhantomData<B>,
 
 fn create<'a, B, I, Offsets>(buf: &'a mut [u8], ents: I,
                              byteorder: PhantomData<B>,
-                             offsets: PhantomData<Offsets>) ->
+                             _offsets: PhantomData<Offsets>) ->
     Result<(&'a mut [u8], &'a mut [u8]), ()>
-    where I: Iterator<Item = ProgHdrData<Offsets, Segment<Offsets::Offset>,
-                                         Segment<Offsets::Offset>,
-                                         Segment<Offsets::Offset>>>,
+    where I: Iterator<Item = ProgHdrDataRaw<Offsets>>,
           Offsets: ProgHdrOffsets,
           B: ByteOrder {
     let len = buf.len();
@@ -1083,11 +1136,11 @@ impl ProgHdrOffsets for Elf64 {
 /// use elf_utils::Elf32;
 /// use elf_utils::prog_hdr::ProgHdrs;
 /// use elf_utils::prog_hdr::ProgHdrData;
+/// use elf_utils::prog_hdr::ProgHdrDataRaw;
 /// use elf_utils::prog_hdr::Segment;
 /// use elf_utils::prog_hdr;
 ///
-/// const PROG_HDR_CONTENTS: [ProgHdrData<Elf32, Segment<u32>, Segment<u32>,
-///                                       Segment<u32>>; 6] = [
+/// const PROG_HDR_CONTENTS: [ProgHdrDataRaw<Elf32>; 6] = [
 ///     ProgHdrData::ProgHdr { virt_addr: 0x34, phys_addr: 0x34,
 ///                            content: Segment { offset: 0x34, size: 0x140 } },
 ///     ProgHdrData::Load { virt_addr: 0, phys_addr: 0,
@@ -1118,9 +1171,7 @@ impl ProgHdrOffsets for Elf64 {
 /// ```
 #[inline]
 pub fn required_bytes<I, Offsets>(hdrs: I) -> usize
-    where I: Iterator<Item = ProgHdrData<Offsets, Segment<Offsets::Offset>,
-                                         Segment<Offsets::Offset>,
-                                         Segment<Offsets::Offset>>>,
+    where I: Iterator<Item = ProgHdrDataRaw<Offsets>>,
           Offsets: ProgHdrOffsets {
     hdrs.count() * Offsets::PROG_HDR_SIZE
 }
@@ -1151,10 +1202,10 @@ impl<'a, B, Offsets: ProgHdrOffsets> ProgHdrs<'a, B, Offsets>
     /// use elf_utils::Elf32;
     /// use elf_utils::prog_hdr::ProgHdrs;
     /// use elf_utils::prog_hdr::ProgHdrData;
+    /// use elf_utils::prog_hdr::ProgHdrDataRaw;
     /// use elf_utils::prog_hdr::Segment;
     ///
-    /// const PROG_HDR_CONTENTS: [ProgHdrData<Elf32, Segment<u32>, Segment<u32>,
-    ///                                       Segment<u32>>; 6] = [
+    /// const PROG_HDR_CONTENTS: [ProgHdrDataRaw<Elf32>; 6] = [
     ///     ProgHdrData::ProgHdr { virt_addr: 0x34, phys_addr: 0x34,
     ///                            content: Segment { offset: 0x34,
     ///                                               size: 0x140 } },
@@ -1195,9 +1246,7 @@ impl<'a, B, Offsets: ProgHdrOffsets> ProgHdrs<'a, B, Offsets>
     ///
     /// for i in 0 .. 6 {
     ///     let ent = iter.next().unwrap();
-    ///     let data: ProgHdrData<Elf32, Segment<u32>, Segment<u32>,
-    ///                           Segment<u32>> =
-    ///         ent.try_into().unwrap();
+    ///     let data: ProgHdrDataRaw<Elf32> = ent.try_into().unwrap();
     ///
     ///     assert_eq!(data, PROG_HDR_CONTENTS[i]);
     /// }
@@ -1205,9 +1254,7 @@ impl<'a, B, Offsets: ProgHdrOffsets> ProgHdrs<'a, B, Offsets>
     #[inline]
     pub fn create_split<I>(buf: &'a mut [u8], hdrs: I) ->
         Result<(Self, &'a mut [u8]), ()>
-        where I: Iterator<Item = ProgHdrData<Offsets, Segment<Offsets::Offset>,
-                                             Segment<Offsets::Offset>,
-                                             Segment<Offsets::Offset>>> {
+        where I: Iterator<Item = ProgHdrDataRaw<Offsets>> {
         let byteorder: PhantomData<B> = PhantomData;
         let offsets: PhantomData<Offsets> = PhantomData;
         let (hdrs, out) = create(buf, hdrs, byteorder, offsets)?;
@@ -1240,10 +1287,10 @@ impl<'a, B, Offsets: ProgHdrOffsets> ProgHdrs<'a, B, Offsets>
     /// use elf_utils::Elf32;
     /// use elf_utils::prog_hdr::ProgHdrs;
     /// use elf_utils::prog_hdr::ProgHdrData;
+    /// use elf_utils::prog_hdr::ProgHdrDataRaw;
     /// use elf_utils::prog_hdr::Segment;
     ///
-    /// const PROG_HDR_CONTENTS: [ProgHdrData<Elf32, Segment<u32>, Segment<u32>,
-    ///                                       Segment<u32>>; 6] = [
+    /// const PROG_HDR_CONTENTS: [ProgHdrDataRaw<Elf32>; 6] = [
     ///     ProgHdrData::ProgHdr { virt_addr: 0x34, phys_addr: 0x34,
     ///                            content: Segment { offset: 0x34,
     ///                                               size: 0x140 } },
@@ -1280,18 +1327,14 @@ impl<'a, B, Offsets: ProgHdrOffsets> ProgHdrs<'a, B, Offsets>
     ///
     /// for i in 0 .. 6 {
     ///     let ent = iter.next().unwrap();
-    ///     let data: ProgHdrData<Elf32, Segment<u32>, Segment<u32>,
-    ///                           Segment<u32>> =
-    ///         ent.try_into().unwrap();
+    ///     let data: ProgHdrDataRaw<Elf32> = ent.try_into().unwrap();
     ///
     ///     assert_eq!(data, PROG_HDR_CONTENTS[i]);
     /// }
     /// ```
     #[inline]
     pub fn create<I>(buf: &'a mut [u8], hdrs: I) -> Result<Self, ()>
-        where I: Iterator<Item = ProgHdrData<Offsets, Segment<Offsets::Offset>,
-                                             Segment<Offsets::Offset>,
-                                             Segment<Offsets::Offset>>>,
+        where I: Iterator<Item = ProgHdrDataRaw<Offsets>>,
               Self: Sized {
         match Self::create_split(buf, hdrs) {
             Ok((out, _)) => Ok(out),
@@ -1334,16 +1377,14 @@ impl<'a, B, Offsets: ProgHdrOffsets> ProgHdrs<'a, B, Offsets>
 }
 
 impl<'a, Offsets> WithElfData<'a>
-    for ProgHdrData<Offsets, Segment<Offsets::Offset>, Segment<Offsets::Offset>,
-                    Segment<Offsets::Offset>>
+    for ProgHdrDataRaw<Offsets>
     where Offsets: ProgHdrOffsets {
-    type Result = ProgHdrData<Offsets, &'a [u8], &'a [u8], &'a [u8]>;
+    type Result = ProgHdrDataBufs<'a, Offsets>;
     type Error = ProgHdrError<Offsets>;
 
     #[inline]
     fn with_elf_data(self, data: &'a [u8]) ->
-        Result<ProgHdrData<Offsets, &'a [u8], &'a [u8], &'a [u8]>,
-               Self::Error> {
+        Result<Self::Result, Self::Error> {
         match self {
             ProgHdrData::Null => Ok(ProgHdrData::Null),
             ProgHdrData::Load { content: Segment { offset, size },
@@ -1426,17 +1467,18 @@ impl<'a, Offsets> WithElfData<'a>
 impl<'a, B, Offsets> TryFrom<&'a [u8]> for ProgHdrs<'a, B, Offsets>
     where Offsets: ProgHdrOffsets,
           B: ByteOrder {
-    type Error = ();
+    type Error = ProgHdrsError;
 
     #[inline]
-    fn try_from(hdrs: &'a [u8]) -> Result<ProgHdrs<'a, B, Offsets>, ()> {
+    fn try_from(hdrs: &'a [u8]) -> Result<ProgHdrs<'a, B, Offsets>,
+                                          Self::Error> {
         let len = hdrs.len();
 
         if hdrs.len() % Offsets::PROG_HDR_SIZE == 0 {
             Ok(ProgHdrs { byteorder: PhantomData, offsets: PhantomData,
                           hdrs: hdrs })
         } else {
-            Err(())
+            Err(ProgHdrsError::BadSize(len))
         }
     }
 }
@@ -1444,52 +1486,124 @@ impl<'a, B, Offsets> TryFrom<&'a [u8]> for ProgHdrs<'a, B, Offsets>
 impl<'a, B, Offsets> TryFrom<&'a mut [u8]> for ProgHdrs<'a, B, Offsets>
     where Offsets: ProgHdrOffsets,
           B: ByteOrder {
-    type Error = ();
+    type Error = ProgHdrsError;
 
     #[inline]
-    fn try_from(hdrs: &'a mut [u8]) -> Result<ProgHdrs<'a, B, Offsets>, ()> {
+    fn try_from(hdrs: &'a mut [u8]) -> Result<ProgHdrs<'a, B, Offsets>,
+                                              ProgHdrsError> {
         let len = hdrs.len();
 
         if hdrs.len() % Offsets::PROG_HDR_SIZE == 0 {
             Ok(ProgHdrs { byteorder: PhantomData, offsets: PhantomData,
                           hdrs: hdrs })
         } else {
-            Err(())
+            Err(ProgHdrsError::BadSize(len))
         }
     }
 }
 
 impl<'a, B, Offsets> TryFrom<ProgHdr<'a, B, Offsets>>
-    for ProgHdrData<Offsets, Segment<Offsets::Offset>, Segment<Offsets::Offset>,
-                    Segment<Offsets::Offset>>
+    for ProgHdrDataRaw<Offsets>
     where Offsets: ProgHdrOffsets,
           B: ByteOrder {
     type Error = ProgHdrError<Offsets>;
 
     #[inline]
     fn try_from(ent: ProgHdr<'a, B, Offsets>) ->
-        Result<ProgHdrData<Offsets, Segment<Offsets::Offset>,
-                           Segment<Offsets::Offset>,
-                           Segment<Offsets::Offset>>,
+        Result<ProgHdrDataRaw<Offsets>,
                Self::Error> {
         project(ent.ent, ent.byteorder, ent.offsets)
     }
 }
 
 impl<'a, B, Offsets> TryFrom<ProgHdrMut<'a, B, Offsets>>
-    for ProgHdrData<Offsets, Segment<Offsets::Offset>, Segment<Offsets::Offset>,
-                    Segment<Offsets::Offset>>
+    for ProgHdrDataRaw<Offsets>
     where Offsets: ProgHdrOffsets,
           B: ByteOrder {
     type Error = ProgHdrError<Offsets>;
 
     #[inline]
     fn try_from(ent: ProgHdrMut<'a, B, Offsets>) ->
-        Result<ProgHdrData<Offsets, Segment<Offsets::Offset>,
-                           Segment<Offsets::Offset>,
-                           Segment<Offsets::Offset>>,
+        Result<ProgHdrDataRaw<Offsets>,
                Self::Error> {
         project(ent.ent, ent.byteorder, ent.offsets)
+    }
+}
+
+impl<'a, B, Offsets, Data, Str> TryFrom<ProgHdrData<Offsets, Data,
+                                                    Str, &'a [u8]>>
+    for ProgHdrData<Offsets, Data, Str, Dynamic<'a, B, Offsets>>
+    where Offsets: ProgHdrOffsets + DynamicOffsets,
+          B: ByteOrder {
+    type Error = DynamicError;
+
+    #[inline]
+    fn try_from(ent: ProgHdrData<Offsets, Data, Str, &'a [u8]>) ->
+        Result<ProgHdrData<Offsets, Data, Str, Dynamic<'a, B, Offsets>>,
+               Self::Error> {
+        match ent {
+            ProgHdrData::Null => Ok(ProgHdrData::Null),
+            ProgHdrData::Load { content, virt_addr, phys_addr, mem_size,
+                                align, read, write, exec } =>
+                Ok(ProgHdrData::Load { content, virt_addr, phys_addr, mem_size,
+                                       align, read, write, exec }),
+            ProgHdrData::Dynamic { content, virt_addr, phys_addr } =>
+                match Dynamic::try_from(content) {
+                    Ok(content) =>
+                        Ok(ProgHdrData::Dynamic { content, virt_addr,
+                                                  phys_addr }),
+                    Err(err) => Err(err)
+                },
+            ProgHdrData::Interp { str, virt_addr, phys_addr } =>
+                Ok(ProgHdrData::Interp { str, virt_addr, phys_addr }),
+            ProgHdrData::Note { content, virt_addr, phys_addr } =>
+                Ok(ProgHdrData::Note { content, virt_addr, phys_addr }),
+            ProgHdrData::Shlib => Ok(ProgHdrData::Shlib),
+            ProgHdrData::ProgHdr { content, virt_addr, phys_addr } =>
+                Ok(ProgHdrData::ProgHdr { content, virt_addr, phys_addr }),
+            ProgHdrData::Unknown { tag, flags, offset, file_size, mem_size,
+                                   phys_addr, virt_addr, align } =>
+                Ok(ProgHdrData::Unknown { tag, flags, offset, file_size,
+                                          mem_size, phys_addr, virt_addr,
+                                          align })
+        }
+    }
+}
+
+impl<'a, Offsets, Data, Dyn> TryFrom<ProgHdrData<Offsets, Data, &'a [u8], Dyn>>
+    for ProgHdrData<Offsets, Data, &'a str, Dyn>
+    where Offsets: ProgHdrOffsets {
+    type Error = &'a [u8];
+
+    #[inline]
+    fn try_from(ent: ProgHdrData<Offsets, Data, &'a [u8], Dyn>) ->
+        Result<ProgHdrData<Offsets, Data, &'a str, Dyn>,
+               Self::Error> {
+        match ent {
+            ProgHdrData::Null => Ok(ProgHdrData::Null),
+            ProgHdrData::Load { content, virt_addr, phys_addr, mem_size,
+                                align, read, write, exec } =>
+                Ok(ProgHdrData::Load { content, virt_addr, phys_addr, mem_size,
+                                       align, read, write, exec }),
+            ProgHdrData::Dynamic { content, virt_addr, phys_addr } =>
+                Ok(ProgHdrData::Dynamic { content, virt_addr, phys_addr }),
+            ProgHdrData::Interp { str, virt_addr, phys_addr } =>
+                match from_utf8(str) {
+                    Ok(str) => Ok(ProgHdrData::Interp { str, virt_addr,
+                                                        phys_addr }),
+                    Err(_) => Err(str)
+                }
+            ProgHdrData::Note { content, virt_addr, phys_addr } =>
+                Ok(ProgHdrData::Note { content, virt_addr, phys_addr }),
+            ProgHdrData::Shlib => Ok(ProgHdrData::Shlib),
+            ProgHdrData::ProgHdr { content, virt_addr, phys_addr } =>
+                Ok(ProgHdrData::ProgHdr { content, virt_addr, phys_addr }),
+            ProgHdrData::Unknown { tag, flags, offset, file_size, mem_size,
+                                   phys_addr, virt_addr, align } =>
+                Ok(ProgHdrData::Unknown { tag, flags, offset, file_size,
+                                          mem_size, phys_addr, virt_addr,
+                                          align })
+        }
     }
 }
 
@@ -1542,5 +1656,86 @@ impl<'a, B, Offsets: ProgHdrOffsets> ExactSizeIterator
     #[inline]
     fn len(&self) -> usize {
         self.hdrs.len() / Offsets::PROG_HDR_SIZE
+    }
+}
+
+impl<Offset> Display for Segment<Offset>
+    where Offset: LowerHex {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
+        let Segment { offset, size } = self;
+
+        write!(f, "offset = 0x{:x}, size = 0x{:x}", offset, size)
+    }
+}
+
+impl<Offsets, Data, Str, Dyn> Display for ProgHdrData<Offsets, Data, Str, Dyn>
+    where Offsets: ProgHdrOffsets,
+          Data: Display,
+          Str: Display,
+          Dyn: Display {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
+        match self {
+            ProgHdrData::Null => write!(f, "  Null"),
+            ProgHdrData::Load { content, virt_addr, phys_addr, mem_size,
+                                align, read, write, exec } =>
+                write!(f, concat!("  Loadable data\n",
+                                  "    Virtual address: 0x{:x}\n",
+                                  "    Physical address: 0x{:x}\n",
+                                  "    Memory size: 0x{:x}\n",
+                                  "    Alignment: 0x{:x}\n",
+                                  "    Readable: {}\n",
+                                  "    Writable: {}\n",
+                                  "    Executable: {}\n",
+                                  "    Content: {}"),
+                       virt_addr, phys_addr, mem_size, align,
+                       read, write, exec, content),
+            ProgHdrData::Dynamic { content, virt_addr, phys_addr } =>
+                write!(f, concat!("  Dynamic linking table\n",
+                                  "    Virtual address: 0x{:x}\n",
+                                  "    Physical address: 0x{:x}\n",
+                                  "    Content: {}"),
+                       virt_addr, phys_addr, content),
+            ProgHdrData::Interp { str, virt_addr, phys_addr } =>
+                write!(f, concat!("  Interpreter\n",
+                                  "    Virtual address: 0x{:x}\n",
+                                  "    Physical address: 0x{:x}\n",
+                                  "    Content: {}"),
+                       virt_addr, phys_addr, str),
+            ProgHdrData::Note { content, virt_addr, phys_addr } =>
+                write!(f, concat!("  Notes\n",
+                                  "    Virtual address: 0x{:x}\n",
+                                  "    Physical address: 0x{:x}\n",
+                                  "    Content: {}"),
+                       virt_addr, phys_addr, content),
+            ProgHdrData::Shlib => write!(f, "  Shlib"),
+            ProgHdrData::ProgHdr { content, virt_addr, phys_addr } =>
+                write!(f, concat!("  Program headers\n",
+                                  "    Virtual address: 0x{:x}\n",
+                                  "    Physical address: 0x{:x}\n",
+                                  "    Content: {}"),
+                       virt_addr, phys_addr, content),
+            ProgHdrData::Unknown { tag, flags, offset, file_size, mem_size,
+                                   phys_addr, virt_addr, align } =>
+                write!(f, concat!("  Unknown type 0x{:x}\n",
+                                  "    Virtual address: 0x{:x}\n",
+                                  "    Physical address: 0x{:x}\n",
+                                  "    Memory size: 0x{:x}\n",
+                                  "    Alignment: 0x{:x}\n",
+                                  "    Flags: 0x{:x}\n",
+                                  "    Offset: 0x{:x}\n",
+                                  "    File size: 0x{:x}"),
+                       tag, virt_addr, phys_addr, mem_size, align,
+                       flags, offset, file_size)
+        }
+    }
+}
+
+    impl Display for ProgHdrsError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
+        match self {
+            ProgHdrsError::BadSize(size) =>
+                write!(f, "bad program header table size {}",
+                       size)
+        }
     }
 }

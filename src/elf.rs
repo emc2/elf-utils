@@ -3,17 +3,21 @@ use byteorder::ByteOrder;
 use byteorder::LittleEndian;
 use core::convert::TryFrom;
 use core::convert::TryInto;
+use core::fmt::Debug;
 use core::fmt::Display;
 use core::fmt::Formatter;
 use core::fmt::LowerHex;
+use core::hash::Hash;
 use core::marker::PhantomData;
 use core::ops::Add;
 use core::ops::BitAnd;
 use core::ops::Mul;
 use crate::prog_hdr::ProgHdrs;
+use crate::prog_hdr::ProgHdrsError;
 use crate::prog_hdr::ProgHdrOffsets;
 use crate::section_hdr::SectionHdrs;
 use crate::section_hdr::SectionHdrOffsets;
+use crate::section_hdr::SectionHdrsError;
 
 const ELF_MAGIC: [u8; 4] = [ 0x7f, 'E' as u8, 'L' as u8, 'F' as u8 ];
 const ELF_CLASS_OFFSET: usize = 0x04;
@@ -32,22 +36,27 @@ pub trait ElfByteOrder: ByteOrder {
 }
 
 /// Trait defining ELF sizes and types.
-pub trait ElfClass: Copy {
+pub trait ElfClass: Copy + PartialEq + PartialOrd {
     /// A half-word.
-    type Half: Copy + Display + Eq + From<u8> + From<u16> + Into<u16> +
-               LowerHex + TryInto<usize>;
+    type Half: Copy + Debug + Display + Eq + From<u8> + From<u16> + Hash +
+               Into<u16> + LowerHex + Ord + PartialEq + PartialOrd +
+               TryInto<usize>;
     /// A full-word.
-    type Word: BitAnd<Output = Self::Word> + Copy + Display + Eq +
-               From<u8> + From<u32> + Into<u32> + LowerHex + TryInto<usize>;
+    type Word: BitAnd<Output = Self::Word> + Copy + Debug + Display + Eq +
+               From<u8> + From<u32> + Hash + Into<u32> + LowerHex +
+               Ord + PartialEq + PartialOrd + TryInto<usize>;
     /// A memory address.
-    type Addr: Copy + Display + Eq + From<u8> + TryFrom<usize> +
-               LowerHex + TryInto<usize>;
+    type Addr: Copy + Debug + Display + Eq + From<u8> + Hash +
+               LowerHex + PartialEq + PartialOrd + TryFrom<usize> +
+               TryInto<usize>;
     /// An offset (into the file or memory).
     type Offset: Add<Output = Self::Offset> + BitAnd<Output = Self::Offset> +
-                 Copy + Display + Eq + From<u8> + LowerHex +
-                 Mul<Output = Self::Offset> + TryFrom<usize> + TryInto<usize>;
+                 Copy + Debug + Display + Eq + From<u8> + Hash + LowerHex +
+                 Mul<Output = Self::Offset> + Ord + PartialEq + PartialOrd +
+                 TryFrom<usize> + TryInto<usize>;
     /// An addend (a signed offset).
-    type Addend: Copy + Display + Eq + From<u8> + LowerHex + TryInto<usize>;
+    type Addend: Copy + Debug + Display + Eq + From<u8> + Hash + LowerHex +
+                 Ord + PartialEq + PartialOrd + TryInto<usize>;
 
     /// Size of a half-word.
     const HALF_SIZE: usize;
@@ -249,6 +258,7 @@ pub struct Elf64;
 /// use elf_utils::ElfError;
 /// use elf_utils::ElfHdrData;
 /// use elf_utils::ElfHdrDataError;
+/// use elf_utils::ElfHdrDataRaw;
 /// use elf_utils::ElfKind;
 /// use elf_utils::ElfTable;
 ///
@@ -268,8 +278,7 @@ pub struct Elf64;
 ///
 /// assert!(elf.is_ok());
 ///
-/// let hdr: ElfHdrData<LittleEndian, Elf64, ElfTable<Elf64>,
-///                     ElfTable<Elf64>, u16> =
+/// let hdr: ElfHdrDataRaw<LittleEndian, Elf64> =
 ///     elf.unwrap().try_into().unwrap();
 ///
 /// assert_eq!(hdr, ElfHdrData { byteorder: PhantomData, abi: ElfABI::FreeBSD,
@@ -750,7 +759,7 @@ pub struct ElfTable<Class: ElfClass> {
 /// representation of program and section headers using the
 /// [WithElfData] instance.
 #[derive(Copy, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct ElfHdrData<B: ByteOrder, Offsets: ElfHdrOffsets, P, S, T> {
+pub struct ElfHdrData<B: ByteOrder, Class: ElfClass, P, S, T> {
     /// `PhantomData` for the byte order.
     pub byteorder: PhantomData<B>,
     /// OS ABI for this ELF data.
@@ -762,9 +771,9 @@ pub struct ElfHdrData<B: ByteOrder, Offsets: ElfHdrOffsets, P, S, T> {
     /// Processor architecture
     pub arch: ElfArch,
     /// Entry point for execution.
-    pub entry: Offsets::Addr,
+    pub entry: Class::Addr,
     /// Processor-specific flags.
-    pub flags: Offsets::Word,
+    pub flags: Class::Word,
     /// Program header table, or `None`
     pub prog_hdrs: Option<P>,
     /// Section header table.
@@ -772,6 +781,32 @@ pub struct ElfHdrData<B: ByteOrder, Offsets: ElfHdrOffsets, P, S, T> {
     /// Section header string table.
     pub section_hdr_strtab: T
 }
+
+/// Type alias for [ElfHdrData] as projected from an [Elf].
+///
+/// This is obtained directly from the [TryFrom] insance acting on an
+/// [Elf].  This is also used in [Elf::create] and [Elf::create_split].
+pub type ElfHdrDataRaw<B, Class> =
+    ElfHdrData<B, Class, ElfTable<Class>, ElfTable<Class>,
+               <Class as ElfClass>::Half>;
+
+/// Type alias for [ElfHdrData] with `&[u8]` buffers for section and
+/// program header tables.
+///
+/// This is produced from an [ElfHdrDataRaw] using the [WithElfData]
+/// instance.
+pub type ElfHdrDataBufs<'a, B, Class> =
+    ElfHdrData<B, Class, &'a [u8], &'a [u8], <Class as ElfClass>::Half>;
+
+/// Type alias for [ElfHdrData] with
+/// [ProgHdrs](crate::prog_hdr::ProgHdrs) and
+/// [SectionHdrs](crate::section_hdr::SectionHdrs) as program and
+/// section header types.
+///
+/// This is produced from an [ElfHdrDataBufs] with the [TryInto] instance.
+pub type ElfHdrDataHdrs<'a, B, Class> =
+    ElfHdrData<B, Class, ProgHdrs<'a, B, Class>,
+               SectionHdrs<'a, B, Class>, <Class as ElfClass>::Half>;
 
 pub struct ElfHdrMut<'a, B: ByteOrder, Offsets: ElfHdrOffsets> {
     byte_ord: PhantomData<B>,
@@ -800,6 +835,7 @@ pub struct ElfHdrMut<'a, B: ByteOrder, Offsets: ElfHdrOffsets> {
 /// use elf_utils::ElfError;
 /// use elf_utils::ElfHdrData;
 /// use elf_utils::ElfHdrDataError;
+/// use elf_utils::ElfHdrDataRaw;
 /// use elf_utils::ElfKind;
 /// use elf_utils::ElfMux;
 /// use elf_utils::ElfTable;
@@ -829,8 +865,7 @@ pub struct ElfHdrMut<'a, B: ByteOrder, Offsets: ElfHdrOffsets> {
 ///     ElfMux::Elf32BE(_) => panic!("Expected 64-bit little-endian")
 /// };
 ///
-/// let hdr: ElfHdrData<LittleEndian, Elf64, ElfTable<Elf64>,
-///                     ElfTable<Elf64>, u16> =
+/// let hdr: ElfHdrDataRaw<LittleEndian, Elf64> =
 ///     elf.try_into().unwrap();
 ///
 /// assert_eq!(hdr, ElfHdrData { byteorder: PhantomData, abi: ElfABI::FreeBSD,
@@ -868,10 +903,14 @@ pub enum ElfError {
     BadClass(u8)
 }
 
+/// Errors that can occur when projecting an [Elf] into [ElfHdrData].
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum ElfHdrDataError<Class: ElfClass> {
+    /// Program header size was incorrect.
     BadProgHdrEntSize(Class::Half),
+    /// Section header size was incorrect.
     BadSectionHdrEntSize(Class::Half),
+    /// Elf type code was not recognized.
     BadKind(Class::Half)
 }
 
@@ -888,15 +927,16 @@ pub enum ElfHdrWithDataError<Class: ElfClass> {
 /// Errors that can occur when converting an `ElfHdrData` with raw
 /// slices to one with [ProgHdrs](crate::prog_hdr::ProgHdrs) and
 /// [SectionHdrs](crate::section_hdr::SectionHdrs).
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum ElfHdrTableError {
     /// Error instantiating program header table.
-    BadProgHdr(()),
+    BadProgHdr(ProgHdrsError),
     /// Error instantiating section header table.
-    BadSectionHdr(()),
+    BadSectionHdr(SectionHdrsError),
 }
 
 fn project<'a, B, Offsets>(data: &'a [u8], byteorder: PhantomData<B>,
-                           offsets: PhantomData<Offsets>) ->
+                           _offsets: PhantomData<Offsets>) ->
     Result<ElfHdrData<B, Offsets, ElfTable<Offsets>,
                       ElfTable<Offsets>, Offsets::Half>,
            ElfHdrDataError<Offsets>>
@@ -1075,8 +1115,8 @@ fn check<'a>(data: &'a [u8]) -> Result<(bool, bool), ElfError> {
     }
 }
 
-fn check_known<'a, B, Offsets>(data: &'a [u8], byteorder: PhantomData<B>,
-                               offsets: PhantomData<Offsets>) ->
+fn check_known<'a, B, Offsets>(data: &'a [u8], _byteorder: PhantomData<B>,
+                               _offsets: PhantomData<Offsets>) ->
     Option<ElfError>
     where Offsets: ElfHdrOffsets,
           B: ElfByteOrder {
@@ -1132,7 +1172,7 @@ fn check_known<'a, B, Offsets>(data: &'a [u8], byteorder: PhantomData<B>,
 fn create<'a, B, Offsets>(buf: &'a mut [u8],
                           hdr: ElfHdrData<B, Offsets, ElfTable<Offsets>,
                                           ElfTable<Offsets>, Offsets::Half>,
-                          offsets: PhantomData<Offsets>) ->
+                          _offsets: PhantomData<Offsets>) ->
     Result<(&'a mut [u8], &'a mut [u8]), ()>
     where Offsets: ElfHdrOffsets,
           B: ElfByteOrder {
@@ -1295,71 +1335,228 @@ impl<'a, B: ByteOrder> ElfHdrMut<'a, B, Elf64> {
     }
 }
 
-impl<'a, P, S, T> Display for ElfHdrData<LittleEndian, Elf32, P, S, T> {
+impl Display for ElfError {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
-        let ElfHdrData { abi, abi_version, kind,
-                         arch, entry, flags, .. } = self;
-
-        write!(f, concat!("ELF version: 1\n",
-                          "ELF class: 32-bit, little-endian\n",
-                          "ELF type: {}\n",
-                          "Architecture: {}\n",
-                          "ABI: {}\n",
-                          "ABI version: {}\n",
-                          "Flags: {:x}\n",
-                          "Entry: {:x}\n"),
-               kind, arch, abi, abi_version, flags, entry)
+        match self {
+            ElfError::TooShort => write!(f, "data too short"),
+            ElfError::BadMagic => write!(f, "bad magic value"),
+            ElfError::BadVersion(vers) => write!(f, "bad ELF version {}", vers),
+            ElfError::BadEndian(code) => write!(f, "bad endianness {}", code),
+            ElfError::BadClass(code) => write!(f, "bad class {}", code),
+        }
     }
 }
 
-impl<'a, P, S, T> Display for ElfHdrData<BigEndian, Elf32, P, S, T> {
+impl<Class: ElfClass> Display for ElfHdrDataError<Class> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
-        let ElfHdrData { abi, abi_version, kind,
-                         arch, entry, flags, .. } = self;
-
-        write!(f, concat!("ELF version: 1\n",
-                          "ELF class: 32-bit, big-endian\n",
-                          "ELF type: {}\n",
-                          "Architecture: {}\n",
-                          "ABI: {}\n",
-                          "ABI version: {}\n",
-                          "Flags: {:08x}\n",
-                          "Entry: {:x}\n"),
-               kind, arch, abi, abi_version, flags, entry)
+        match self {
+            ElfHdrDataError::BadProgHdrEntSize(size) =>
+                write!(f, "bad program header entry size ({})", size),
+            ElfHdrDataError::BadSectionHdrEntSize(size) =>
+                write!(f, "bad section header entry size ({})", size),
+            ElfHdrDataError::BadKind(kind) =>
+                write!(f, "bad ELF type ({})", kind),
+        }
     }
 }
 
-impl<'a, P, S, T> Display for ElfHdrData<BigEndian, Elf64, P, S, T> {
+impl<Class: ElfClass> Display for ElfHdrWithDataError<Class> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
-        let ElfHdrData { abi, abi_version, kind,
-                         arch, entry, flags, .. } = self;
-
-        write!(f, concat!("ELF version: 1\n",
-                          "ELF class: 64-bit, big-endian\n",
-                          "ELF type: {}\n",
-                          "Architecture: {}\n",
-                          "ABI: {}\n",
-                          "ABI version: {}\n",
-                          "Flags: {:x}\n",
-                          "Entry: {:x}\n"),
-               kind, arch, abi, abi_version, flags, entry)
+        match self {
+            ElfHdrWithDataError::ProgHdrOutOfBounds(offset) =>
+                write!(f, "program header table end {} is outside data",
+                       offset),
+            ElfHdrWithDataError::SectionHdrOutOfBounds(offset) =>
+                write!(f, "section header table end {} is outside data",
+                       offset)
+        }
     }
 }
 
-impl<'a, P, S, T> Display for ElfHdrData<LittleEndian, Elf64, P, S, T> {
+impl Display for ElfHdrTableError {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
-        let ElfHdrData { abi, abi_version, kind,
-                         arch, entry, flags, .. } = self;
+        match self {
+            ElfHdrTableError::BadProgHdr(err) =>
+                write!(f, "bad program header data ({})", err),
+            ElfHdrTableError::BadSectionHdr(err) =>
+                write!(f, "bad section header data ({})", err)
+        }
+    }
+}
 
-        write!(f, concat!("ELF version: 1\n",
-                          "ELF class: 64-bit, little-endian\n",
-                          "ELF type: {}\n",
-                          "Architecture: {}\n",
-                          "ABI: {}\n",
-                          "ABI version: {}\n",
-                          "Flags: {:x}\n",
-                          "Entry: {:x}\n"),
-               kind, arch, abi, abi_version, flags, entry)
+impl<Class: ElfClass> Display for ElfTable<Class> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
+        let ElfTable { offset, num_ents } = self;
+
+        write!(f, "offset = 0x{:x}, entries = {}", offset, num_ents)
+    }
+}
+
+impl<'a, P, S, T> Display for ElfHdrData<LittleEndian, Elf32, P, S, T>
+    where S: Display,
+          P: Display,
+          T: Display {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
+        match self {
+            ElfHdrData { abi, abi_version, kind, arch,
+                         entry, flags, section_hdr_strtab,
+                         section_hdrs, prog_hdrs: None, .. } =>
+                write!(f, concat!("ELF version: 1\n",
+                                  "ELF class: 32-bit, little-endian\n",
+                                  "ELF type: {}\n",
+                                  "Architecture: {}\n",
+                                  "ABI: {}\n",
+                                  "ABI version: {}\n",
+                                  "Flags: {:x}\n",
+                                  "Entry: {:x}\n",
+                                  "Program headers: none\n",
+                                  "Section headers: {}\n",
+                                  "Section header string table: {}"),
+                       kind, arch, abi, abi_version, flags, entry,
+                       section_hdrs, section_hdr_strtab),
+            ElfHdrData { abi, abi_version, kind, arch, entry, flags,
+                         section_hdr_strtab, section_hdrs,
+                         prog_hdrs: Some(prog_hdrs), .. } =>
+                write!(f, concat!("ELF version: 1\n",
+                                  "ELF class: 32-bit, little-endian\n",
+                                  "ELF type: {}\n",
+                                  "Architecture: {}\n",
+                                  "ABI: {}\n",
+                                  "ABI version: {}\n",
+                                  "Flags: {:x}\n",
+                                  "Entry: {:x}\n",
+                                  "Program headers: {}\n",
+                                  "Section headers: {}\n",
+                                  "Section header string table: {}"),
+                       kind, arch, abi, abi_version, flags, entry,
+                       prog_hdrs, section_hdrs, section_hdr_strtab)
+        }
+    }
+}
+
+impl<'a, P, S, T> Display for ElfHdrData<BigEndian, Elf32, P, S, T>
+    where S: Display,
+          P: Display,
+          T: Display {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
+        match self {
+            ElfHdrData { abi, abi_version, kind, arch,
+                         entry, flags, section_hdr_strtab,
+                         section_hdrs, prog_hdrs: None, .. } =>
+                write!(f, concat!("ELF version: 1\n",
+                                  "ELF class: 32-bit, little-endian\n",
+                                  "ELF type: {}\n",
+                                  "Architecture: {}\n",
+                                  "ABI: {}\n",
+                                  "ABI version: {}\n",
+                                  "Flags: {:x}\n",
+                                  "Entry: {:x}\n",
+                                  "Program headers: none\n",
+                                  "Section headers: {}\n",
+                                  "Section header string table: {}"),
+                       kind, arch, abi, abi_version, flags, entry,
+                       section_hdrs, section_hdr_strtab),
+            ElfHdrData { abi, abi_version, kind, arch, entry, flags,
+                         section_hdr_strtab, section_hdrs,
+                         prog_hdrs: Some(prog_hdrs), .. } =>
+                write!(f, concat!("ELF version: 1\n",
+                                  "ELF class: 32-bit, little-endian\n",
+                                  "ELF type: {}\n",
+                                  "Architecture: {}\n",
+                                  "ABI: {}\n",
+                                  "ABI version: {}\n",
+                                  "Flags: {:x}\n",
+                                  "Entry: {:x}\n",
+                                  "Program headers: {}\n",
+                                  "Section headers: {}\n",
+                                  "Section header string table: {}"),
+                       kind, arch, abi, abi_version, flags, entry,
+                       prog_hdrs, section_hdrs, section_hdr_strtab)
+        }
+    }
+}
+
+impl<'a, P, S, T> Display for ElfHdrData<BigEndian, Elf64, P, S, T>
+    where S: Display,
+          P: Display,
+          T: Display {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
+        match self {
+            ElfHdrData { abi, abi_version, kind, arch,
+                         entry, flags, section_hdr_strtab,
+                         section_hdrs, prog_hdrs: None, .. } =>
+                write!(f, concat!("ELF version: 1\n",
+                                  "ELF class: 32-bit, little-endian\n",
+                                  "ELF type: {}\n",
+                                  "Architecture: {}\n",
+                                  "ABI: {}\n",
+                                  "ABI version: {}\n",
+                                  "Flags: {:x}\n",
+                                  "Entry: {:x}\n",
+                                  "Program headers: none\n",
+                                  "Section headers: {}\n",
+                                  "Section header string table: {}"),
+                       kind, arch, abi, abi_version, flags, entry,
+                       section_hdrs, section_hdr_strtab),
+            ElfHdrData { abi, abi_version, kind, arch, entry, flags,
+                         section_hdr_strtab, section_hdrs,
+                         prog_hdrs: Some(prog_hdrs), .. } =>
+                write!(f, concat!("ELF version: 1\n",
+                                  "ELF class: 32-bit, little-endian\n",
+                                  "ELF type: {}\n",
+                                  "Architecture: {}\n",
+                                  "ABI: {}\n",
+                                  "ABI version: {}\n",
+                                  "Flags: {:x}\n",
+                                  "Entry: {:x}\n",
+                                  "Program headers: {}\n",
+                                  "Section headers: {}\n",
+                                  "Section header string table: {}"),
+                       kind, arch, abi, abi_version, flags, entry,
+                       prog_hdrs, section_hdrs, section_hdr_strtab)
+        }
+    }
+}
+
+impl<'a, P, S, T> Display for ElfHdrData<LittleEndian, Elf64, P, S, T>
+    where S: Display,
+          P: Display,
+          T: Display {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
+        match self {
+            ElfHdrData { abi, abi_version, kind, arch,
+                         entry, flags, section_hdr_strtab,
+                         section_hdrs, prog_hdrs: None, .. } =>
+                write!(f, concat!("ELF version: 1\n",
+                                  "ELF class: 32-bit, little-endian\n",
+                                  "ELF type: {}\n",
+                                  "Architecture: {}\n",
+                                  "ABI: {}\n",
+                                  "ABI version: {}\n",
+                                  "Flags: {:x}\n",
+                                  "Entry: {:x}\n",
+                                  "Program headers: none\n",
+                                  "Section headers: {}\n",
+                                  "Section header string table: {}"),
+                       kind, arch, abi, abi_version, flags, entry,
+                       section_hdrs, section_hdr_strtab),
+            ElfHdrData { abi, abi_version, kind, arch, entry, flags,
+                         section_hdr_strtab, section_hdrs,
+                         prog_hdrs: Some(prog_hdrs), .. } =>
+                write!(f, concat!("ELF version: 1\n",
+                                  "ELF class: 32-bit, little-endian\n",
+                                  "ELF type: {}\n",
+                                  "Architecture: {}\n",
+                                  "ABI: {}\n",
+                                  "ABI version: {}\n",
+                                  "Flags: {:x}\n",
+                                  "Entry: {:x}\n",
+                                  "Program headers: {}\n",
+                                  "Section headers: {}\n",
+                                  "Section header string table: {}"),
+                       kind, arch, abi, abi_version, flags, entry,
+                       prog_hdrs, section_hdrs, section_hdr_strtab)
+        }
     }
 }
 
@@ -1468,13 +1665,12 @@ impl<'a, B, Offsets> Elf<'a, B, Offsets>
     /// use elf_utils::ElfClass;
     /// use elf_utils::ElfHdrData;
     /// use elf_utils::ElfHdrDataError;
+    /// use elf_utils::ElfHdrDataRaw;
     /// use elf_utils::ElfKind;
     /// use elf_utils::ElfTable;
     ///
     ///
-    /// const ELF64_EXEC_HEADER_DATA: ElfHdrData<LittleEndian, Elf64,
-    ///                                          ElfTable<Elf64>,
-    ///                                          ElfTable<Elf64>, u16> =
+    /// const ELF64_EXEC_HEADER_DATA: ElfHdrDataRaw<LittleEndian, Elf64> =
     ///     ElfHdrData {
     ///         byteorder: PhantomData, abi: ElfABI::FreeBSD, abi_version: 0,
     ///         kind: ElfKind::Executable, arch: ElfArch::X86_64,
@@ -1491,16 +1687,13 @@ impl<'a, B, Offsets> Elf<'a, B, Offsets>
     ///
     /// let (elf, _) = res.unwrap();
     ///
-    /// let hdr: ElfHdrData<LittleEndian, Elf64, ElfTable<Elf64>,
-    ///                     ElfTable<Elf64>, u16> =
+    /// let hdr: ElfHdrDataRaw<LittleEndian, Elf64> =
     ///     elf.try_into().expect("expected success");
     ///
     /// assert_eq!(hdr, ELF64_EXEC_HEADER_DATA);
     /// ```
     #[inline]
-    pub fn create_split(buf: &'a mut [u8],
-                        hdr: ElfHdrData<B, Offsets, ElfTable<Offsets>,
-                                        ElfTable<Offsets>, Offsets::Half>) ->
+    pub fn create_split(buf: &'a mut [u8], hdr: ElfHdrDataRaw<B, Offsets>) ->
         Result<(Self, &'a mut [u8]), ()> {
         let byteorder: PhantomData<B> = PhantomData;
         let offsets: PhantomData<Offsets> = PhantomData;
@@ -1534,13 +1727,12 @@ impl<'a, B, Offsets> Elf<'a, B, Offsets>
     /// use elf_utils::ElfClass;
     /// use elf_utils::ElfHdrData;
     /// use elf_utils::ElfHdrDataError;
+    /// use elf_utils::ElfHdrDataRaw;
     /// use elf_utils::ElfKind;
     /// use elf_utils::ElfTable;
     ///
     ///
-    /// const ELF64_EXEC_HEADER_DATA: ElfHdrData<LittleEndian, Elf64,
-    ///                                          ElfTable<Elf64>,
-    ///                                          ElfTable<Elf64>, u16> =
+    /// const ELF64_EXEC_HEADER_DATA: ElfHdrDataRaw<LittleEndian, Elf64> =
     ///     ElfHdrData {
     ///         byteorder: PhantomData, abi: ElfABI::FreeBSD, abi_version: 0,
     ///         kind: ElfKind::Executable, arch: ElfArch::X86_64,
@@ -1552,16 +1744,13 @@ impl<'a, B, Offsets> Elf<'a, B, Offsets>
     /// let mut buf: [u8; 64] = [0; 64];
     ///
     /// let elf = Elf::create(&mut buf[0..], ELF64_EXEC_HEADER_DATA).unwrap();
-    /// let hdr: ElfHdrData<LittleEndian, Elf64, ElfTable<Elf64>,
-    ///                     ElfTable<Elf64>, u16> =
+    /// let hdr: ElfHdrDataRaw<LittleEndian, Elf64> =
     ///     elf.try_into().expect("expected success");
     ///
     /// assert_eq!(hdr, ELF64_EXEC_HEADER_DATA);
     /// ```
     #[inline]
-    pub fn create(buf: &'a mut [u8],
-                  hdr: ElfHdrData<B, Offsets, ElfTable<Offsets>,
-                                  ElfTable<Offsets>, Offsets::Half>) ->
+    pub fn create(buf: &'a mut [u8], hdr: ElfHdrDataRaw<B, Offsets>) ->
         Result<Self, ()>
         where Self: Sized {
         match Self::create_split(buf, hdr) {
@@ -1853,7 +2042,7 @@ impl Display for ElfArch {
             ElfArch::None => write!(f, "None"),
             ElfArch::We32100 => write!(f, "AT&T We 32100"),
             ElfArch::SPARC => write!(f, "SPARC"),
-            ElfArch::I386 => write!(f, "x86"),
+            ElfArch::I386 => write!(f, "i386"),
             ElfArch::M68K => write!(f, "Motorola 68000"),
             ElfArch::M88K => write!(f, "Motorola 88000"),
             ElfArch::IMCU => write!(f, "Intel MCU"),
@@ -2451,62 +2640,62 @@ impl ElfClass for Elf32 {
     const TYPE_CODE: u8 = 1;
 
     #[inline]
-    fn read_half<B: ByteOrder>(data: &[u8], byteorder: PhantomData<B>) ->
+    fn read_half<B: ByteOrder>(data: &[u8], _byteorder: PhantomData<B>) ->
         Self::Half {
         B::read_u16(data)
     }
 
     #[inline]
-    fn read_word<B: ByteOrder>(data: &[u8], byteorder: PhantomData<B>) ->
+    fn read_word<B: ByteOrder>(data: &[u8], _byteorder: PhantomData<B>) ->
         Self::Word {
         B::read_u32(data)
     }
 
     #[inline]
-    fn read_addr<B: ByteOrder>(data: &[u8], byteorder: PhantomData<B>) ->
+    fn read_addr<B: ByteOrder>(data: &[u8], _byteorder: PhantomData<B>) ->
         Self::Addr {
         B::read_u32(data)
     }
 
     #[inline]
-    fn read_offset<B: ByteOrder>(data: &[u8], byteorder: PhantomData<B>) ->
+    fn read_offset<B: ByteOrder>(data: &[u8], _byteorder: PhantomData<B>) ->
         Self::Offset {
         B::read_u32(data)
     }
 
     #[inline]
-    fn read_addend<B: ByteOrder>(data: &[u8], byteorder: PhantomData<B>) ->
+    fn read_addend<B: ByteOrder>(data: &[u8], _byteorder: PhantomData<B>) ->
         Self::Addend {
         B::read_i32(data)
     }
 
     #[inline]
     fn write_half<B: ByteOrder>(data: &mut [u8], val: Self::Half,
-                                byteorder: PhantomData<B>) {
+                                _byteorder: PhantomData<B>) {
         B::write_u16(data, val)
     }
 
     #[inline]
     fn write_word<B: ByteOrder>(data: &mut [u8], val: Self::Word,
-                                byteorder: PhantomData<B>) {
+                                _byteorder: PhantomData<B>) {
         B::write_u32(data, val)
     }
 
     #[inline]
     fn write_addr<B: ByteOrder>(data: &mut [u8], val: Self::Addr,
-                                byteorder: PhantomData<B>) {
+                                _byteorder: PhantomData<B>) {
         B::write_u32(data, val)
     }
 
     #[inline]
     fn write_offset<B: ByteOrder>(data: &mut [u8], val: Self::Offset,
-                                  byteorder: PhantomData<B>) {
+                                  _byteorder: PhantomData<B>) {
         B::write_u32(data, val)
     }
 
     #[inline]
     fn write_addend<B: ByteOrder>(data: &mut [u8], val: Self::Addend,
-                                  byteorder: PhantomData<B>) {
+                                  _byteorder: PhantomData<B>) {
         B::write_i32(data, val)
     }
 }
@@ -2530,62 +2719,62 @@ impl ElfClass for Elf64 {
     const TYPE_CODE: u8 = 2;
 
     #[inline]
-    fn read_half<B: ByteOrder>(data: &[u8], byteorder: PhantomData<B>) ->
+    fn read_half<B: ByteOrder>(data: &[u8], _byteorder: PhantomData<B>) ->
         Self::Half {
         B::read_u16(data)
     }
 
     #[inline]
-    fn read_word<B: ByteOrder>(data: &[u8], byteorder: PhantomData<B>) ->
+    fn read_word<B: ByteOrder>(data: &[u8], _byteorder: PhantomData<B>) ->
         Self::Word {
         B::read_u32(data)
     }
 
     #[inline]
-    fn read_addr<B: ByteOrder>(data: &[u8], byteorder: PhantomData<B>) ->
+    fn read_addr<B: ByteOrder>(data: &[u8], _byteorder: PhantomData<B>) ->
         Self::Addr {
         B::read_u64(data)
     }
 
     #[inline]
-    fn read_offset<B: ByteOrder>(data: &[u8], byteorder: PhantomData<B>) ->
+    fn read_offset<B: ByteOrder>(data: &[u8], _byteorder: PhantomData<B>) ->
         Self::Offset {
         B::read_u64(data)
     }
 
     #[inline]
-    fn read_addend<B: ByteOrder>(data: &[u8], byteorder: PhantomData<B>) ->
+    fn read_addend<B: ByteOrder>(data: &[u8], _byteorder: PhantomData<B>) ->
         Self::Addend {
         B::read_i64(data)
     }
 
     #[inline]
     fn write_half<B: ByteOrder>(data: &mut [u8], val: Self::Half,
-                                byteorder: PhantomData<B>) {
+                                _byteorder: PhantomData<B>) {
         B::write_u16(data, val)
     }
 
     #[inline]
     fn write_word<B: ByteOrder>(data: &mut [u8], val: Self::Word,
-                                byteorder: PhantomData<B>) {
+                                _byteorder: PhantomData<B>) {
         B::write_u32(data, val)
     }
 
     #[inline]
     fn write_addr<B: ByteOrder>(data: &mut [u8], val: Self::Addr,
-                                byteorder: PhantomData<B>) {
+                                _byteorder: PhantomData<B>) {
         B::write_u64(data, val)
     }
 
     #[inline]
     fn write_offset<B: ByteOrder>(data: &mut [u8], val: Self::Offset,
-                                  byteorder: PhantomData<B>) {
+                                  _byteorder: PhantomData<B>) {
         B::write_u64(data, val)
     }
 
     #[inline]
     fn write_addend<B: ByteOrder>(data: &mut [u8], val: Self::Addend,
-                                  byteorder: PhantomData<B>) {
+                                  _byteorder: PhantomData<B>) {
         B::write_i64(data, val)
     }
 }

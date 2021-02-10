@@ -5,6 +5,7 @@ use core::convert::TryInto;
 use elf_utils::Elf32;
 use elf_utils::dynamic::Dynamic;
 use elf_utils::dynamic::DynamicEntData;
+use elf_utils::dynamic::DynamicError;
 
 const ELF32_DYNAMIC_SIZE: usize = 136;
 
@@ -30,7 +31,7 @@ const ELF32_DYNAMIC: [u8; ELF32_DYNAMIC_SIZE] = [
 
 const ELF32_NUM_DYNAMIC_ENTS: usize = 17;
 
-const ELF32_DYNAMIC_ENTS: [DynamicEntData<usize, usize, Elf32>;
+const ELF32_DYNAMIC_ENTS: [DynamicEntData<u32, u32, Elf32>;
                            ELF32_NUM_DYNAMIC_ENTS] = [
     DynamicEntData::Flags { flags: 0x2 },
     DynamicEntData::Rel { tab: 0x7f4 },
@@ -53,7 +54,7 @@ const ELF32_DYNAMIC_ENTS: [DynamicEntData<usize, usize, Elf32>;
 
 #[test]
 fn test_Dynamic_from_bytes_just_right() {
-    let dynamic: Result<Dynamic<'_, LittleEndian, Elf32>, ()> =
+    let dynamic: Result<Dynamic<'_, LittleEndian, Elf32>, DynamicError> =
         Dynamic::try_from(&ELF32_DYNAMIC[0..]);
 
     assert!(dynamic.is_ok());
@@ -61,7 +62,7 @@ fn test_Dynamic_from_bytes_just_right() {
 
 #[test]
 fn test_Dynamic_from_bytes_too_small() {
-    let dynamic: Result<Dynamic<'_, LittleEndian, Elf32>, ()> =
+    let dynamic: Result<Dynamic<'_, LittleEndian, Elf32>, DynamicError> =
         Dynamic::try_from(&ELF32_DYNAMIC[0 .. ELF32_DYNAMIC.len() - 1]);
 
     assert!(dynamic.is_err());
@@ -87,7 +88,7 @@ fn test_Dynamic_from_bytes_iter_len() {
 #[test]
 fn test_Dynamic_from_bytes_just_right_mut() {
     let mut buf = ELF32_DYNAMIC.clone();
-    let dynamic: Result<Dynamic<'_, LittleEndian, Elf32>, ()> =
+    let dynamic: Result<Dynamic<'_, LittleEndian, Elf32>, DynamicError> =
         Dynamic::try_from(&mut buf[0..]);
 
     assert!(dynamic.is_ok());
@@ -96,7 +97,7 @@ fn test_Dynamic_from_bytes_just_right_mut() {
 #[test]
 fn test_Dynamic_from_bytes_too_small_mut() {
     let mut buf = ELF32_DYNAMIC.clone();
-    let dynamic: Result<Dynamic<'_, LittleEndian, Elf32>, ()> =
+    let dynamic: Result<Dynamic<'_, LittleEndian, Elf32>, DynamicError> =
         Dynamic::try_from(&mut buf[0 .. ELF32_DYNAMIC.len() - 1]);
 
     assert!(dynamic.is_err());

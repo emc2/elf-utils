@@ -2,6 +2,7 @@ use core::convert::TryFrom;
 use core::convert::TryInto;
 use elf_utils::strtab::Strtab;
 use elf_utils::strtab::StrtabError;
+use elf_utils::strtab::StrtabIdxError;
 
 const ELF_SPEC_STRTAB: [u8; 25] = [
     0,
@@ -31,7 +32,7 @@ fn test_Strtab_required_bytes() {
 
 #[test]
 fn test_Strtab_from_u8() {
-    let strtab: Result<Strtab<'_>, ()> =
+    let strtab: Result<Strtab<'_>, StrtabError> =
         Strtab::try_from(&ELF_SPEC_STRTAB[0..]);
 
     assert!(strtab.is_ok())
@@ -39,7 +40,7 @@ fn test_Strtab_from_u8() {
 
 #[test]
 fn test_Strtab_from_u8_bad_start() {
-    let strtab: Result<Strtab<'_>, ()> =
+    let strtab: Result<Strtab<'_>, StrtabError> =
         Strtab::try_from(&ELF_SPEC_STRTAB[1..]);
 
     assert!(strtab.is_err())
@@ -47,7 +48,7 @@ fn test_Strtab_from_u8_bad_start() {
 
 #[test]
 fn test_Strtab_from_u8_bad_end() {
-    let strtab: Result<Strtab<'_>, ()> =
+    let strtab: Result<Strtab<'_>, StrtabError> =
         Strtab::try_from(&ELF_SPEC_STRTAB[0 .. ELF_SPEC_STRTAB.len() - 1]);
 
     assert!(strtab.is_err())
@@ -114,7 +115,7 @@ fn test_Strtab_from_u8_idx_out_of_bounds() {
     let strtab: Strtab<'_> =
         Strtab::try_from(&ELF_SPEC_STRTAB[0..])
         .expect("Expected success");
-    assert_eq!(strtab.idx(25), Err(StrtabError::OutOfBounds));
+    assert_eq!(strtab.idx(25), Err(StrtabIdxError::OutOfBounds(25)));
 }
 
 #[test]
@@ -182,7 +183,7 @@ fn test_Strtab_create_iter() {
     for (s, i) in strtab.iter() {
         match (s, strtab.idx(i)) {
             (Ok(actual), Ok(expect)) => assert_eq!(actual, expect),
-            (Err(actual), Err(StrtabError::UTF8Decode(expect))) =>
+            (Err(actual), Err(StrtabIdxError::UTF8Decode(expect))) =>
                 assert_eq!(actual, expect),
             (actual, expect) => panic!("Expected: {:?}\nActual: {:?}",
                                        expect, actual)

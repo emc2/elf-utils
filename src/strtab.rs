@@ -14,6 +14,7 @@
 //!
 //! use core::convert::TryFrom;
 //! use elf_utils::strtab::Strtab;
+//! use elf_utils::strtab::StrtabError;
 //!
 //! const STRTAB_DATA: [u8; 25] = [
 //!     0,
@@ -25,7 +26,7 @@
 //!     'x' as u8, 'x' as u8, 0
 //! ];
 //!
-//! let strtab: Result<Strtab<'_>, ()> =
+//! let strtab: Result<Strtab<'_>, StrtabError> =
 //!     Strtab::try_from(&STRTAB_DATA[0..]);
 //!
 //! assert!(strtab.is_ok())
@@ -154,6 +155,8 @@
 //! ```
 use core::convert::TryFrom;
 use core::convert::TryInto;
+use core::fmt::Display;
+use core::fmt::Formatter;
 use core::iter::FusedIterator;
 use core::iter::Iterator;
 use core::str::from_utf8;
@@ -168,7 +171,7 @@ use core::str::from_utf8;
 pub trait WithStrtab<'a> {
     /// Result of conversion.
     type Result;
-    /// Errors that can occur (typically derived from a `StrtabError`).
+    /// Errors that can occur (typically derived from a `StrtabIdxError`).
     type Error;
 
     /// Consume the caller to convert it using `strtab`.
@@ -204,7 +207,7 @@ pub trait WithStrtab<'a> {
 ///
 /// use core::convert::TryFrom;
 /// use elf_utils::strtab::Strtab;
-/// use elf_utils::strtab::StrtabError;
+/// use elf_utils::strtab::StrtabIdxError;
 ///
 /// const STRTAB_DATA: [u8; 25] = [
 ///     0,
@@ -226,7 +229,7 @@ pub trait WithStrtab<'a> {
 /// assert_eq!(strtab.idx(16), Ok("able"));
 /// assert_eq!(strtab.idx(22), Ok("xx"));
 /// assert_eq!(strtab.idx(24), Ok(""));
-/// assert_eq!(strtab.idx(25), Err(StrtabError::OutOfBounds));
+/// assert_eq!(strtab.idx(25), Err(StrtabIdxError::OutOfBounds(25)));
 /// ```
 
 #[derive(Copy, Clone)]
@@ -279,13 +282,22 @@ pub struct StrtabIter<'a> {
     idx: usize
 }
 
-/// Errors that can occur looking up a string in a `Strtab`.
+/// Errors that can occur looking up a string in a [Strtab].
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub enum StrtabError<'a> {
+pub enum StrtabIdxError<'a, Idx> {
     /// Index out of bounds.
-    OutOfBounds,
+    OutOfBounds(Idx),
     /// Error occurred while UTF-8 decoding.
     UTF8Decode(&'a [u8])
+}
+
+/// Errors that can occur creating a [Strtab] from raw data.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum StrtabError {
+    /// First character is not a null character.
+    BadFirst,
+    /// Last character is not a null character.
+    BadLast
 }
 
 impl<'a> Strtab<'a> {
@@ -481,16 +493,16 @@ impl<'a> Strtab<'a> {
     ///
     /// Errors can occur if `idx` is out of bounds, or if a UTF8
     /// decode error occurs.
-    pub fn idx<Idx>(&self, idx: Idx) -> Result<&'a str, StrtabError<'a>>
-        where Idx: TryInto<usize> {
-        match idx.try_into() {
-            Ok(idx) => {
+    pub fn idx<Idx>(&self, idx: Idx) -> Result<&'a str, StrtabIdxError<'a, Idx>>
+        where Idx: Clone + TryInto<usize> {
+        match idx.clone().try_into() {
+            Ok(i) => {
                 let len = self.data.len();
 
-                if idx < len {
-                    let mut end = idx;
+                if i < len {
+                    let mut end = i;
 
-                    for i in idx .. len {
+                    for _ in i .. len {
                         if self.data[end] == 0 {
                             break;
                         }
@@ -498,17 +510,17 @@ impl<'a> Strtab<'a> {
                         end += 1;
                     }
 
-                    let outbuf = &self.data[idx .. end];
+                    let outbuf = &self.data[i .. end];
 
                     match from_utf8(outbuf) {
                         Ok(out) => Ok(out),
-                        Err(_) => Err(StrtabError::UTF8Decode(outbuf))
+                        Err(_) => Err(StrtabIdxError::UTF8Decode(outbuf))
                     }
                 } else {
-                    Err(StrtabError::OutOfBounds)
+                    Err(StrtabIdxError::OutOfBounds(idx))
                 }
             },
-            Err(_) => Err(StrtabError::OutOfBounds)
+            Err(_) => Err(StrtabIdxError::OutOfBounds(idx))
         }
     }
 }
@@ -530,7 +542,7 @@ impl<'a> Iterator for StrtabIter<'a> {
                 Err(_) => panic!("Integer conversion should not fail")
             };
 
-            for i in idx .. len {
+            for _ in idx .. len {
                 if self.data[end] == 0 {
                     break;
                 }
@@ -558,15 +570,38 @@ impl<'a> Iterator for StrtabIter<'a> {
 impl<'a> FusedIterator for StrtabIter<'a> {}
 
 impl<'a> TryFrom<&'a [u8]> for Strtab<'a> {
-    type Error = ();
+    type Error = StrtabError;
 
     /// Check that the first and last bytes are 0, as per the ELF
     /// standard.
-    fn try_from(data: &'a [u8]) -> Result<Strtab<'a>, ()> {
-        if data[0] == 0 && data[data.len() - 1] == 0 {
-            Ok(Strtab { data: data })
+    fn try_from(data: &'a [u8]) -> Result<Strtab<'a>, Self::Error> {
+        if data[0] != 0 {
+            Err(StrtabError::BadFirst)
+        } else if data[data.len() - 1] != 0 {
+            Err(StrtabError::BadLast)
         } else {
-            Err(())
+            Ok(Strtab { data: data })
+        }
+    }
+}
+
+impl Display for StrtabError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
+        match self {
+            StrtabError::BadFirst => write!(f, "first character not null"),
+            StrtabError::BadLast => write!(f, "last character not null"),
+        }
+    }
+}
+
+impl<'a, Idx> Display for StrtabIdxError<'a, Idx>
+    where Idx: Display {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
+        match self {
+            StrtabIdxError::OutOfBounds(idx) =>
+                write!(f, "index {} out of bounds", idx),
+            StrtabIdxError::UTF8Decode(_) =>
+                write!(f, "UTF-8 decode error"),
         }
     }
 }

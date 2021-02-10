@@ -14,6 +14,7 @@
 //! use byteorder::LittleEndian;
 //! use core::convert::TryFrom;
 //! use elf_utils::note::Notes;
+//! use elf_utils::note::NotesError;
 //!
 //! const ELF_NOTES: [u8; 72] = [
 //!     0x08, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00,
@@ -27,7 +28,7 @@
 //!     0x42, 0x53, 0x44, 0x00, 0x00, 0x00, 0x00, 0x00
 //! ];
 //!
-//! let notes: Result<Notes<'_, LittleEndian>, ()> =
+//! let notes: Result<Notes<'_, LittleEndian>, NotesError> =
 //!     Notes::try_from(&ELF_NOTES[0..]);
 //!
 //! assert!(notes.is_ok());
@@ -216,6 +217,8 @@
 
 use byteorder::ByteOrder;
 use core::convert::TryFrom;
+use core::fmt::Display;
+use core::fmt::Formatter;
 use core::iter::FusedIterator;
 use core::iter::Iterator;
 use core::marker::PhantomData;
@@ -235,14 +238,6 @@ const ELF_NOTE_DESC_SIZE_END: usize = ELF_NOTE_DESC_SIZE_START +
 const ELF_NOTE_TYPE_START: usize = ELF_NOTE_DESC_SIZE_END;
 const ELF_NOTE_TYPE_SIZE: usize = ELF_NOTE_WORD_SIZE;
 const ELF_NOTE_TYPE_END: usize = ELF_NOTE_TYPE_START + ELF_NOTE_TYPE_SIZE;
-
-const ELF_NOTE_NAME_START: usize = ELF_NOTE_TYPE_END;
-const ELF_NOTE_NAME_SIZE: usize = ELF_NOTE_WORD_SIZE;
-const ELF_NOTE_NAME_END: usize = ELF_NOTE_NAME_START + ELF_NOTE_NAME_SIZE;
-
-const ELF_NOTE_DESC_START: usize = ELF_NOTE_NAME_END;
-const ELF_NOTE_DESC_SIZE: usize = ELF_NOTE_WORD_SIZE;
-const ELF_NOTE_DESC_END: usize = ELF_NOTE_DESC_START + ELF_NOTE_DESC_SIZE;
 
 /// In-place read-only ELF notes section.
 ///
@@ -269,6 +264,7 @@ const ELF_NOTE_DESC_END: usize = ELF_NOTE_DESC_START + ELF_NOTE_DESC_SIZE;
 /// use byteorder::LittleEndian;
 /// use core::convert::TryFrom;
 /// use elf_utils::note::Notes;
+/// use elf_utils::note::NotesError;
 ///
 /// const ELF_NOTES: [u8; 72] = [
 ///     0x08, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00,
@@ -282,7 +278,7 @@ const ELF_NOTE_DESC_END: usize = ELF_NOTE_DESC_START + ELF_NOTE_DESC_SIZE;
 ///     0x42, 0x53, 0x44, 0x00, 0x00, 0x00, 0x00, 0x00
 /// ];
 ///
-/// let notes: Result<Notes<'_, LittleEndian>, ()> =
+/// let notes: Result<Notes<'_, LittleEndian>, NotesError> =
 ///     Notes::try_from(&ELF_NOTES[0..]);
 ///
 /// assert!(notes.is_ok());
@@ -381,9 +377,18 @@ pub struct NoteData<'a> {
     pub desc: &'a [u8]
 }
 
+/// Errors that can occur creating a [Notes].
+///
+/// The only error that can occur is if the data is not a multiple of
+/// the size of a symbol.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum NotesError {
+    TooShort
+}
+
 /// Calculate the size of a single ELF note.
 #[inline]
-fn get_size<'a, B>(data: &'a [u8], byteorder: PhantomData<B>) -> Option<usize>
+fn get_size<'a, B>(data: &'a [u8], _byteorder: PhantomData<B>) -> Option<usize>
     where B: ByteOrder {
     if data.len() >= ELF_NOTE_WORD_SIZE * 2 {
         let namesize = B::read_u32(&data[ELF_NOTE_NAME_SIZE_START ..
@@ -421,7 +426,7 @@ fn check<'a, B>(data: &'a [u8], byteorder: PhantomData<B>) -> bool
 }
 
 #[inline]
-fn project<'a, B>(data: &'a [u8], byteorder: PhantomData<B>) -> NoteData<'a>
+fn project<'a, B>(data: &'a [u8], _byteorder: PhantomData<B>) -> NoteData<'a>
     where B: ByteOrder {
     let name_size = B::read_u32(&data[ELF_NOTE_NAME_SIZE_START ..
                                       ELF_NOTE_NAME_SIZE_END]) as usize;
@@ -439,7 +444,7 @@ fn project<'a, B>(data: &'a [u8], byteorder: PhantomData<B>) -> NoteData<'a>
 }
 
 fn create_split_raw<'a, B, I>(buf: &'a mut [u8], notes: I,
-                              byteorder: PhantomData<B>) ->
+                              _byteorder: PhantomData<B>) ->
     Result<(&'a mut [u8], &'a mut [u8]), ()>
     where I: Iterator<Item = NoteData<'a>>,
           B: ByteOrder {
@@ -640,10 +645,8 @@ impl<'a, B> Notes<'a, B>
     pub fn create<I>(buf: &'a mut [u8], notes: I) -> Result<Notes<'a, B>, ()>
         where I: Iterator<Item = NoteData<'a>>,
               B: ByteOrder {
-        let byteorder: PhantomData<B> = PhantomData;
-
         match Self::create_split(buf, notes) {
-            Ok((notes, rest)) => Ok(notes),
+            Ok((notes, _)) => Ok(notes),
             Err(err) => Err(err)
         }
     }
@@ -686,10 +689,8 @@ impl<'a, B> NotesMut<'a, B>
         Result<NotesMut<'a, B>, ()>
         where I: Iterator<Item = NoteData<'a>>,
               B: ByteOrder {
-        let byteorder: PhantomData<B> = PhantomData;
-
         match Self::create_split(buf, notes) {
-            Ok((notes, rest)) => Ok(notes),
+            Ok((notes, _)) => Ok(notes),
             Err(err) => Err(err)
         }
     }
@@ -703,7 +704,7 @@ impl<'a, B> NotesMut<'a, B>
 
 impl<'a, B> TryFrom<&'a [u8]> for Notes<'a, B>
     where B: ByteOrder {
-    type Error = ();
+    type Error = NotesError;
 
     #[inline]
     fn try_from(data: &'a [u8]) -> Result<Notes<'a, B>, Self::Error> {
@@ -712,14 +713,14 @@ impl<'a, B> TryFrom<&'a [u8]> for Notes<'a, B>
         if check(data, byteorder) {
             Ok(Notes { byteorder: byteorder, data: data })
         } else {
-            Err(())
+            Err(NotesError::TooShort)
         }
     }
 }
 
 impl<'a, B> TryFrom<&'a mut [u8]> for Notes<'a, B>
     where B: ByteOrder {
-    type Error = ();
+    type Error = NotesError;
 
     #[inline]
     fn try_from(data: &'a mut [u8]) -> Result<Notes<'a, B>, Self::Error> {
@@ -728,14 +729,14 @@ impl<'a, B> TryFrom<&'a mut [u8]> for Notes<'a, B>
         if check(data, byteorder) {
             Ok(Notes { byteorder: byteorder, data: data })
         } else {
-            Err(())
+            Err(NotesError::TooShort)
         }
     }
 }
 
 impl<'a, B> TryFrom<&'a mut [u8]> for NotesMut<'a, B>
     where B: ByteOrder {
-    type Error = ();
+    type Error = NotesError;
 
     #[inline]
     fn try_from(data: &'a mut [u8]) -> Result<NotesMut<'a, B>, Self::Error> {
@@ -744,7 +745,7 @@ impl<'a, B> TryFrom<&'a mut [u8]> for NotesMut<'a, B>
         if check(data, byteorder) {
             Ok(NotesMut { byteorder: byteorder, data: data })
         } else {
-            Err(())
+            Err(NotesError::TooShort)
         }
     }
 }
@@ -754,7 +755,6 @@ impl<'a, B> Iterator for NotesIter<'a, B>
     type Item = NoteData<'a>;
 
     fn next(&mut self) -> Option<NoteData<'a>> {
-        let len = self.data.len();
         let start = self.idx;
 
         match get_size(&self.data[start..], self.byteorder) {
@@ -771,3 +771,42 @@ impl<'a, B> Iterator for NotesIter<'a, B>
 }
 
 impl<'a, B> FusedIterator for NotesIter<'a, B> where B: ByteOrder {}
+
+impl<'a> Display for NoteData<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
+        let NoteData { kind, name, desc } = self;
+
+        write!(f, concat!("  Note 0x{:x}\n",
+                          "    Name: ["),
+               kind)?;
+
+        for i in 0 .. name.len() {
+            write!(f, " {:x}", name[i])?;
+
+            if i % 8 == 7 && i != name.len() - 1 {
+                write!(f, "           ")?;
+            }
+        }
+
+        write!(f, " ]\n    Desc: [")?;
+
+        for i in 0 .. desc.len() {
+            write!(f, " {:x}", desc[i])?;
+
+            if i % 8 == 7 && i != name.len() - 1 {
+                write!(f, "           ")?;
+            }
+        }
+
+        write!(f, " ]")
+    }
+}
+
+impl Display for NotesError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
+        match self {
+            NotesError::TooShort =>
+                write!(f, "buffer too short for notes data")
+        }
+    }
+}

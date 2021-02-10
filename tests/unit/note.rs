@@ -4,6 +4,7 @@ use core::convert::TryFrom;
 use elf_utils::note::required_bytes;
 use elf_utils::note::NoteData;
 use elf_utils::note::Notes;
+use elf_utils::note::NotesError;
 use elf_utils::note::NotesMut;
 
 const ELF_NOTES_SIZE: usize = 72;
@@ -63,7 +64,7 @@ const ELF_NOTES_CONTENTS: [NoteData<'static>; ELF_NOTES_COUNT] = [
 
 #[test]
 fn test_Note_from_slice_ok() {
-    let notes: Result<Notes<'_, LittleEndian>, ()> =
+    let notes: Result<Notes<'_, LittleEndian>, NotesError> =
         Notes::try_from(&ELF_NOTES[0..]);
 
     assert!(notes.is_ok());
@@ -71,7 +72,7 @@ fn test_Note_from_slice_ok() {
 
 #[test]
 fn test_Note_from_slice_too_small() {
-    let notes: Result<Notes<'_, LittleEndian>, ()> =
+    let notes: Result<Notes<'_, LittleEndian>, NotesError> =
         Notes::try_from(&ELF_NOTES[0 .. ELF_NOTES.len() - 1]);
 
     assert!(notes.is_err());
@@ -165,7 +166,7 @@ fn test_required_bytes() {
 #[test]
 fn test_NoteMut_from_slice_ok() {
     let mut buf = ELF_NOTES.clone();
-    let notes: Result<Notes<'_, LittleEndian>, ()> =
+    let notes: Result<Notes<'_, LittleEndian>, NotesError> =
         Notes::try_from(&mut buf[0..]);
 
     assert!(notes.is_ok());
@@ -174,7 +175,7 @@ fn test_NoteMut_from_slice_ok() {
 #[test]
 fn test_NoteMut_from_slice_too_small() {
     let mut buf = ELF_NOTES.clone();
-    let notes: Result<Notes<'_, LittleEndian>, ()> =
+    let notes: Result<Notes<'_, LittleEndian>, NotesError> =
         Notes::try_from(&mut buf[0 .. ELF_NOTES.len() - 1]);
 
     assert!(notes.is_err());

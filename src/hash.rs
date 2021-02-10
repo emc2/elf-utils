@@ -185,10 +185,8 @@
 //! assert!(hash.is_ok());
 //! ```
 use byteorder::ByteOrder;
-use core::convert::TryFrom;
 use core::convert::TryInto;
 use core::marker::PhantomData;
-use crate::elf::ElfClass;
 use crate::strtab::Strtab;
 use crate::strtab::WithStrtab;
 use crate::symtab::Sym;
@@ -354,7 +352,7 @@ pub enum HashtabError {
 /// Create an empty hash table from the sizes of the two tables.
 #[inline]
 fn create_split_empty<'a, B>(buf: &'a mut [u8], nhashes: usize,
-                             nchains: usize, byteorder: PhantomData<B>) ->
+                             nchains: usize, _byteorder: PhantomData<B>) ->
     Result<(&'a mut [u8], &'a mut [u8], &'a mut [u8]), HashtabError>
     where B: ByteOrder {
     let size = ELF_HASH_WORD_SIZE * (nhashes + nchains + 2);
@@ -396,7 +394,7 @@ fn create_split_filled<'a, B, Offsets>(buf: &'a mut [u8], strtab: Strtab<'a>,
     for i in 0 .. nsyms {
         match symtab.idx(i) {
             Some(sym) => match sym.try_into() {
-                Ok(symdata) => match sym.with_strtab(strtab) {
+                Ok(_) => match sym.with_strtab(strtab) {
                     Ok(SymData { name: Some(name), .. }) => {
                         let hashidx = (name.hash_name() as usize) % nhashes;
                         let oldsym = B::read_u32(&hashes[hashidx * 4 ..
