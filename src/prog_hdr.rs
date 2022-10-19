@@ -682,41 +682,35 @@ pub struct Segment<Word> {
 }
 
 #[inline]
-fn project<'a, B, Offsets>(ent: &'a [u8], byteorder: PhantomData<B>,
-                           _offsets: PhantomData<Offsets>) ->
-    Result<ProgHdrDataRaw<Offsets>,
-           ProgHdrError<Offsets>>
+fn project<'a, B, Offsets>(ent: &'a [u8]) -> Result<ProgHdrDataRaw<Offsets>,
+                                                    ProgHdrError<Offsets>>
     where Offsets: ProgHdrOffsets,
           B: ByteOrder {
-    let kind = Offsets::read_word(&ent[Offsets::P_KIND_START ..
-                                       Offsets::P_KIND_END],
-                                  byteorder);
+    let kind = Offsets::read_word::<B>(&ent[Offsets::P_KIND_START ..
+                                            Offsets::P_KIND_END]);
 
     match kind.into() {
         0 => Ok(ProgHdrData::Null),
         1 => {
-            let offset = Offsets::read_offset(&ent[Offsets::P_OFFSET_START ..
-                                                   Offsets::P_OFFSET_END],
-                                              byteorder);
-            let size = Offsets::read_offset(&ent[Offsets::P_FILE_SIZE_START ..
-                                                 Offsets::P_FILE_SIZE_END],
-                                            byteorder);
-            let virt_addr = Offsets::read_addr(&ent[Offsets::P_VADDR_START ..
-                                                    Offsets::P_VADDR_END],
-                                               byteorder);
-            let phys_addr = Offsets::read_addr(&ent[Offsets::P_PADDR_START ..
-                                                    Offsets::P_PADDR_END],
-                                               byteorder);
-            let mem_size = Offsets::read_offset(
-                &ent[Offsets::P_MEM_SIZE_START .. Offsets::P_MEM_SIZE_END],
-                byteorder
+            let offset = Offsets::read_offset::<B>(
+                &ent[Offsets::P_OFFSET_START .. Offsets::P_OFFSET_END]
             );
-            let align = Offsets::read_offset(&ent[Offsets::P_ALIGN_START ..
-                                                  Offsets::P_ALIGN_END],
-                                             byteorder);
-            let flags = Offsets::read_word(&ent[Offsets::P_FLAGS_START ..
-                                                Offsets::P_FLAGS_END],
-                                           byteorder);
+            let size = Offsets::read_offset::<B>(
+                &ent[Offsets::P_FILE_SIZE_START .. Offsets::P_FILE_SIZE_END]
+            );
+            let virt_addr = Offsets::read_addr::<B>(
+                &ent[Offsets::P_VADDR_START .. Offsets::P_VADDR_END]
+            );
+            let phys_addr = Offsets::read_addr::<B>(
+                &ent[Offsets::P_PADDR_START .. Offsets::P_PADDR_END]
+            );
+            let mem_size = Offsets::read_offset::<B>(
+                &ent[Offsets::P_MEM_SIZE_START .. Offsets::P_MEM_SIZE_END]
+            );
+            let align = Offsets::read_offset::<B>(&ent[Offsets::P_ALIGN_START ..
+                                                       Offsets::P_ALIGN_END]);
+            let flags = Offsets::read_word::<B>(&ent[Offsets::P_FLAGS_START ..
+                                                     Offsets::P_FLAGS_END]);
             let pos = Segment { offset: offset, size: size };
 
             Ok(ProgHdrData::Load {
@@ -728,18 +722,18 @@ fn project<'a, B, Offsets>(ent: &'a [u8], byteorder: PhantomData<B>,
             })
         },
         2 => {
-            let offset = Offsets::read_offset(&ent[Offsets::P_OFFSET_START ..
-                                                   Offsets::P_OFFSET_END],
-                                              byteorder);
-            let size = Offsets::read_offset(&ent[Offsets::P_FILE_SIZE_START ..
-                                                 Offsets::P_FILE_SIZE_END],
-                                            byteorder);
-            let virt_addr = Offsets::read_addr(&ent[Offsets::P_VADDR_START ..
-                                                    Offsets::P_VADDR_END],
-                                               byteorder);
-            let phys_addr = Offsets::read_addr(&ent[Offsets::P_PADDR_START ..
-                                                    Offsets::P_PADDR_END],
-                                               byteorder);
+            let offset = Offsets::read_offset::<B>(
+                &ent[Offsets::P_OFFSET_START .. Offsets::P_OFFSET_END]
+            );
+            let size = Offsets::read_offset::<B>(
+                &ent[Offsets::P_FILE_SIZE_START .. Offsets::P_FILE_SIZE_END]
+            );
+            let virt_addr = Offsets::read_addr::<B>(
+                &ent[Offsets::P_VADDR_START .. Offsets::P_VADDR_END]
+            );
+            let phys_addr = Offsets::read_addr::<B>(
+                &ent[Offsets::P_PADDR_START .. Offsets::P_PADDR_END]
+            );
             let pos = Segment { offset: offset, size: size };
 
             Ok(ProgHdrData::Dynamic { virt_addr: virt_addr,
@@ -747,54 +741,54 @@ fn project<'a, B, Offsets>(ent: &'a [u8], byteorder: PhantomData<B>,
                                       content: pos })
         },
         3 => {
-            let offset = Offsets::read_offset(&ent[Offsets::P_OFFSET_START ..
-                                                   Offsets::P_OFFSET_END],
-                                              byteorder);
-            let size = Offsets::read_offset(&ent[Offsets::P_FILE_SIZE_START ..
-                                                 Offsets::P_FILE_SIZE_END],
-                                            byteorder);
-            let virt_addr = Offsets::read_addr(&ent[Offsets::P_VADDR_START ..
-                                                    Offsets::P_VADDR_END],
-                                               byteorder);
-            let phys_addr = Offsets::read_addr(&ent[Offsets::P_PADDR_START ..
-                                                    Offsets::P_PADDR_END],
-                                               byteorder);
+            let offset = Offsets::read_offset::<B>(
+                &ent[Offsets::P_OFFSET_START .. Offsets::P_OFFSET_END]
+            );
+            let size = Offsets::read_offset::<B>(
+                &ent[Offsets::P_FILE_SIZE_START .. Offsets::P_FILE_SIZE_END]
+            );
+            let virt_addr = Offsets::read_addr::<B>(
+                &ent[Offsets::P_VADDR_START .. Offsets::P_VADDR_END]
+            );
+            let phys_addr = Offsets::read_addr::<B>(
+                &ent[Offsets::P_PADDR_START .. Offsets::P_PADDR_END]
+            );
             let pos = Segment { offset: offset, size: size };
 
             Ok(ProgHdrData::Interp { virt_addr: virt_addr, phys_addr: phys_addr,
                                      str: pos })
         },
         4 => {
-            let offset = Offsets::read_offset(&ent[Offsets::P_OFFSET_START ..
-                                                 Offsets::P_OFFSET_END],
-                                              byteorder);
-            let size = Offsets::read_offset(&ent[Offsets::P_FILE_SIZE_START ..
-                                               Offsets::P_FILE_SIZE_END],
-                                            byteorder);
-            let virt_addr = Offsets::read_addr(&ent[Offsets::P_VADDR_START ..
-                                                    Offsets::P_VADDR_END],
-                                               byteorder);
-            let phys_addr = Offsets::read_addr(&ent[Offsets::P_PADDR_START ..
-                                                    Offsets::P_PADDR_END],
-                                               byteorder);
+            let offset = Offsets::read_offset::<B>(
+                &ent[Offsets::P_OFFSET_START .. Offsets::P_OFFSET_END]
+            );
+            let size = Offsets::read_offset::<B>(
+                &ent[Offsets::P_FILE_SIZE_START .. Offsets::P_FILE_SIZE_END]
+            );
+            let virt_addr = Offsets::read_addr::<B>(
+                &ent[Offsets::P_VADDR_START .. Offsets::P_VADDR_END]
+            );
+            let phys_addr = Offsets::read_addr::<B>(
+                &ent[Offsets::P_PADDR_START .. Offsets::P_PADDR_END]
+            );
             let pos = Segment { offset: offset, size: size };
 
             Ok(ProgHdrData::Note { virt_addr: virt_addr, phys_addr: phys_addr,
                                    content: pos })
         },
         6 => {
-            let offset = Offsets::read_offset(&ent[Offsets::P_OFFSET_START ..
-                                                 Offsets::P_OFFSET_END],
-                                              byteorder);
-            let size = Offsets::read_offset(&ent[Offsets::P_FILE_SIZE_START ..
-                                               Offsets::P_FILE_SIZE_END],
-                                            byteorder);
-            let virt_addr = Offsets::read_addr(&ent[Offsets::P_VADDR_START ..
-                                                    Offsets::P_VADDR_END],
-                                               byteorder);
-            let phys_addr = Offsets::read_addr(&ent[Offsets::P_PADDR_START ..
-                                                    Offsets::P_PADDR_END],
-                                               byteorder);
+            let offset = Offsets::read_offset::<B>(
+                &ent[Offsets::P_OFFSET_START .. Offsets::P_OFFSET_END]
+            );
+            let size = Offsets::read_offset::<B>(
+                &ent[Offsets::P_FILE_SIZE_START .. Offsets::P_FILE_SIZE_END]
+            );
+            let virt_addr = Offsets::read_addr::<B>(
+                &ent[Offsets::P_VADDR_START .. Offsets::P_VADDR_END]
+            );
+            let phys_addr = Offsets::read_addr::<B>(
+                &ent[Offsets::P_PADDR_START .. Offsets::P_PADDR_END]
+            );
             let pos = Segment { offset: offset, size: size };
 
             Ok(ProgHdrData::ProgHdr { virt_addr: virt_addr,
@@ -802,28 +796,25 @@ fn project<'a, B, Offsets>(ent: &'a [u8], byteorder: PhantomData<B>,
                                       content: pos })
         },
         _ => {
-            let offset = Offsets::read_offset(&ent[Offsets::P_OFFSET_START ..
-                                                 Offsets::P_OFFSET_END],
-                                              byteorder);
-            let size = Offsets::read_offset(&ent[Offsets::P_FILE_SIZE_START ..
-                                               Offsets::P_FILE_SIZE_END],
-                                            byteorder);
-            let virt_addr = Offsets::read_addr(&ent[Offsets::P_VADDR_START ..
-                                                    Offsets::P_VADDR_END],
-                                               byteorder);
-            let phys_addr = Offsets::read_addr(&ent[Offsets::P_PADDR_START ..
-                                                    Offsets::P_PADDR_END],
-                                               byteorder);
-            let mem_size = Offsets::read_offset(
-               &ent[Offsets::P_MEM_SIZE_START .. Offsets::P_MEM_SIZE_END],
-                byteorder
+            let offset = Offsets::read_offset::<B>(
+                &ent[Offsets::P_OFFSET_START .. Offsets::P_OFFSET_END]
             );
-            let align = Offsets::read_offset(&ent[Offsets::P_ALIGN_START ..
-                                                  Offsets::P_ALIGN_END],
-                                             byteorder);
-            let flags = Offsets::read_word(&ent[Offsets::P_FLAGS_START ..
-                                                Offsets::P_FLAGS_END],
-                                           byteorder);
+            let size = Offsets::read_offset::<B>(
+                &ent[Offsets::P_FILE_SIZE_START .. Offsets::P_FILE_SIZE_END]
+            );
+            let virt_addr = Offsets::read_addr::<B>(
+                &ent[Offsets::P_VADDR_START .. Offsets::P_VADDR_END]
+            );
+            let phys_addr = Offsets::read_addr::<B>(
+                &ent[Offsets::P_PADDR_START .. Offsets::P_PADDR_END]
+            );
+            let mem_size = Offsets::read_offset::<B>(
+               &ent[Offsets::P_MEM_SIZE_START .. Offsets::P_MEM_SIZE_END]
+            );
+            let align = Offsets::read_offset::<B>(&ent[Offsets::P_ALIGN_START ..
+                                                       Offsets::P_ALIGN_END]);
+            let flags = Offsets::read_word::<B>(&ent[Offsets::P_FLAGS_START ..
+                                                     Offsets::P_FLAGS_END]);
 
             Ok(ProgHdrData::Unknown {
                 tag: kind, flags: flags, offset: offset, align: align,
@@ -834,9 +825,7 @@ fn project<'a, B, Offsets>(ent: &'a [u8], byteorder: PhantomData<B>,
     }
 }
 
-fn create<'a, B, I, Offsets>(buf: &'a mut [u8], ents: I,
-                             byteorder: PhantomData<B>,
-                             _offsets: PhantomData<Offsets>) ->
+fn create<'a, B, I, Offsets>(buf: &'a mut [u8], ents: I) ->
     Result<(&'a mut [u8], &'a mut [u8]), ()>
     where I: Iterator<Item = ProgHdrDataRaw<Offsets>>,
           Offsets: ProgHdrOffsets,
@@ -850,32 +839,38 @@ fn create<'a, B, I, Offsets>(buf: &'a mut [u8], ents: I,
 
             match ent {
                 ProgHdrData::Null => {
-                    Offsets::write_word(&mut data[Offsets::P_KIND_START ..
-                                                  Offsets::P_KIND_END],
-                                        (0 as u8).into(), byteorder);
-                    Offsets::write_word(&mut data[Offsets::P_FLAGS_START ..
-                                                  Offsets::P_FLAGS_END],
-                                        (0 as u8).into(), byteorder);
-                    Offsets::write_offset(&mut data[Offsets::P_OFFSET_START ..
-                                                    Offsets::P_OFFSET_END],
-                                          (0 as u8).into(), byteorder);
-                    Offsets::write_addr(&mut data[Offsets::P_VADDR_START ..
-                                                  Offsets::P_VADDR_END],
-                                        (0 as u8).into(), byteorder);
-                    Offsets::write_addr(&mut data[Offsets::P_PADDR_START ..
-                                                  Offsets::P_PADDR_END],
-                                        (0 as u8).into(), byteorder);
-                    Offsets::write_offset(
+                    Offsets::write_word::<B>(&mut data[Offsets::P_KIND_START ..
+                                                       Offsets::P_KIND_END],
+                                             (0 as u8).into());
+                    Offsets::write_word::<B>(&mut data[Offsets::P_FLAGS_START ..
+                                                       Offsets::P_FLAGS_END],
+                                             (0 as u8).into());
+                    Offsets::write_offset::<B>(
+                        &mut data[Offsets::P_OFFSET_START ..
+                                  Offsets::P_OFFSET_END],
+                        (0 as u8).into()
+                    );
+                    Offsets::write_addr::<B>(&mut data[Offsets::P_VADDR_START ..
+                                                       Offsets::P_VADDR_END],
+                                             (0 as u8).into());
+                    Offsets::write_addr::<B>(&mut data[Offsets::P_PADDR_START ..
+                                                       Offsets::P_PADDR_END],
+                                             (0 as u8).into());
+                    Offsets::write_offset::<B>(
                         &mut data[Offsets::P_FILE_SIZE_START ..
                                   Offsets::P_FILE_SIZE_END],
-                        (0 as u8).into(), byteorder
+                        (0 as u8).into()
                     );
-                    Offsets::write_offset(&mut data[Offsets::P_MEM_SIZE_START ..
-                                                    Offsets::P_MEM_SIZE_END],
-                                          (0 as u8).into(), byteorder);
-                    Offsets::write_offset(&mut data[Offsets::P_ALIGN_START ..
-                                                    Offsets::P_ALIGN_END],
-                                          (0 as u8).into(), byteorder);
+                    Offsets::write_offset::<B>(
+                        &mut data[Offsets::P_MEM_SIZE_START ..
+                                  Offsets::P_MEM_SIZE_END],
+                        (0 as u8).into()
+                    );
+                    Offsets::write_offset::<B>(
+                        &mut data[Offsets::P_ALIGN_START ..
+                                  Offsets::P_ALIGN_END],
+                        (0 as u8).into()
+                    );
                 },
                 ProgHdrData::Load { virt_addr, phys_addr, mem_size,
                                     align, read, write, exec, content } => {
@@ -883,209 +878,251 @@ fn create<'a, B, I, Offsets>(buf: &'a mut [u8], ents: I,
                                     if write { 0x2 } else { 0 } |
                                     if exec { 0x1 } else { 0 };
 
-                    Offsets::write_word(&mut data[Offsets::P_KIND_START ..
-                                                  Offsets::P_KIND_END],
-                                        (1 as u8).into(), byteorder);
-                    Offsets::write_word(&mut data[Offsets::P_FLAGS_START ..
-                                                  Offsets::P_FLAGS_END],
-                                        flags.into(), byteorder);
-                    Offsets::write_offset(&mut data[Offsets::P_OFFSET_START ..
-                                                    Offsets::P_OFFSET_END],
-                                          content.offset, byteorder);
-                    Offsets::write_addr(&mut data[Offsets::P_VADDR_START ..
-                                                  Offsets::P_VADDR_END],
-                                        virt_addr, byteorder);
-                    Offsets::write_addr(&mut data[Offsets::P_PADDR_START ..
-                                                  Offsets::P_PADDR_END],
-                                        phys_addr, byteorder);
-                    Offsets::write_offset(
+                    Offsets::write_word::<B>(&mut data[Offsets::P_KIND_START ..
+                                                       Offsets::P_KIND_END],
+                                             (1 as u8).into());
+                    Offsets::write_word::<B>(&mut data[Offsets::P_FLAGS_START ..
+                                                       Offsets::P_FLAGS_END],
+                                             flags.into());
+                    Offsets::write_offset::<B>(
+                        &mut data[Offsets::P_OFFSET_START ..
+                                  Offsets::P_OFFSET_END],
+                        content.offset
+                    );
+                    Offsets::write_addr::<B>(&mut data[Offsets::P_VADDR_START ..
+                                                       Offsets::P_VADDR_END],
+                                             virt_addr);
+                    Offsets::write_addr::<B>(&mut data[Offsets::P_PADDR_START ..
+                                                       Offsets::P_PADDR_END],
+                                             phys_addr);
+                    Offsets::write_offset::<B>(
                         &mut data[Offsets::P_FILE_SIZE_START ..
                                   Offsets::P_FILE_SIZE_END],
-                        content.size, byteorder
+                        content.size
                     );
-                    Offsets::write_offset(&mut data[Offsets::P_MEM_SIZE_START ..
-                                                    Offsets::P_MEM_SIZE_END],
-                                          mem_size, byteorder);
-                    Offsets::write_offset(&mut data[Offsets::P_ALIGN_START ..
-                                                    Offsets::P_ALIGN_END],
-                                          align, byteorder);
+                    Offsets::write_offset::<B>(
+                        &mut data[Offsets::P_MEM_SIZE_START ..
+                                  Offsets::P_MEM_SIZE_END],
+                        mem_size
+                    );
+                    Offsets::write_offset::<B>(
+                        &mut data[Offsets::P_ALIGN_START ..
+                                  Offsets::P_ALIGN_END],
+                        align
+                    );
                 },
                 ProgHdrData::Dynamic { virt_addr, phys_addr, content } => {
                     let flags: u8 = 0x6;
 
-                    Offsets::write_word(&mut data[Offsets::P_KIND_START ..
-                                                  Offsets::P_KIND_END],
-                                        (2 as u8).into(), byteorder);
-                    Offsets::write_word(&mut data[Offsets::P_FLAGS_START ..
-                                                  Offsets::P_FLAGS_END],
-                                        flags.into(), byteorder);
-                    Offsets::write_offset(&mut data[Offsets::P_OFFSET_START ..
-                                                    Offsets::P_OFFSET_END],
-                                          content.offset, byteorder);
-                    Offsets::write_addr(&mut data[Offsets::P_VADDR_START ..
-                                                  Offsets::P_VADDR_END],
-                                        virt_addr, byteorder);
-                    Offsets::write_addr(&mut data[Offsets::P_PADDR_START ..
-                                                  Offsets::P_PADDR_END],
-                                        phys_addr, byteorder);
-                    Offsets::write_offset(
+                    Offsets::write_word::<B>(&mut data[Offsets::P_KIND_START ..
+                                                       Offsets::P_KIND_END],
+                                             (2 as u8).into());
+                    Offsets::write_word::<B>(&mut data[Offsets::P_FLAGS_START ..
+                                                       Offsets::P_FLAGS_END],
+                                             flags.into());
+                    Offsets::write_offset::<B>(
+                        &mut data[Offsets::P_OFFSET_START ..
+                                  Offsets::P_OFFSET_END],
+                        content.offset
+                    );
+                    Offsets::write_addr::<B>(&mut data[Offsets::P_VADDR_START ..
+                                                       Offsets::P_VADDR_END],
+                                             virt_addr);
+                    Offsets::write_addr::<B>(&mut data[Offsets::P_PADDR_START ..
+                                                       Offsets::P_PADDR_END],
+                                             phys_addr);
+                    Offsets::write_offset::<B>(
                         &mut data[Offsets::P_FILE_SIZE_START ..
                                   Offsets::P_FILE_SIZE_END],
-                        content.size, byteorder
+                        content.size
                     );
-                    Offsets::write_offset(&mut data[Offsets::P_MEM_SIZE_START ..
-                                                    Offsets::P_MEM_SIZE_END],
-                                          content.size, byteorder);
-                    Offsets::write_offset(&mut data[Offsets::P_ALIGN_START ..
-                                                    Offsets::P_ALIGN_END],
-                                          Offsets::OFFSET_ALIGN, byteorder);
+                    Offsets::write_offset::<B>(
+                        &mut data[Offsets::P_MEM_SIZE_START ..
+                                  Offsets::P_MEM_SIZE_END],
+                        content.size
+                    );
+                    Offsets::write_offset::<B>(
+                        &mut data[Offsets::P_ALIGN_START ..
+                                  Offsets::P_ALIGN_END],
+                        Offsets::OFFSET_ALIGN
+                    );
                 },
                 ProgHdrData::Interp { virt_addr, phys_addr, str } => {
                     let flags: u8 = 0x4;
 
-                    Offsets::write_word(&mut data[Offsets::P_KIND_START ..
-                                                  Offsets::P_KIND_END],
-                                        (3 as u8).into(), byteorder);
-                    Offsets::write_word(&mut data[Offsets::P_FLAGS_START ..
-                                                  Offsets::P_FLAGS_END],
-                                        flags.into(), byteorder);
-                    Offsets::write_offset(&mut data[Offsets::P_OFFSET_START ..
-                                                    Offsets::P_OFFSET_END],
-                                          str.offset, byteorder);
-                    Offsets::write_addr(&mut data[Offsets::P_VADDR_START ..
-                                                  Offsets::P_VADDR_END],
-                                        virt_addr, byteorder);
-                    Offsets::write_addr(&mut data[Offsets::P_PADDR_START ..
-                                                  Offsets::P_PADDR_END],
-                                        phys_addr, byteorder);
-                    Offsets::write_offset(
+                    Offsets::write_word::<B>(&mut data[Offsets::P_KIND_START ..
+                                                       Offsets::P_KIND_END],
+                                             (3 as u8).into());
+                    Offsets::write_word::<B>(&mut data[Offsets::P_FLAGS_START ..
+                                                       Offsets::P_FLAGS_END],
+                                             flags.into());
+                    Offsets::write_offset::<B>(
+                        &mut data[Offsets::P_OFFSET_START ..
+                                  Offsets::P_OFFSET_END],
+                        str.offset
+                    );
+                    Offsets::write_addr::<B>(&mut data[Offsets::P_VADDR_START ..
+                                                       Offsets::P_VADDR_END],
+                                             virt_addr);
+                    Offsets::write_addr::<B>(&mut data[Offsets::P_PADDR_START ..
+                                                       Offsets::P_PADDR_END],
+                                             phys_addr);
+                    Offsets::write_offset::<B>(
                         &mut data[Offsets::P_FILE_SIZE_START ..
                                   Offsets::P_FILE_SIZE_END],
-                        str.size, byteorder
+                        str.size
                     );
-                    Offsets::write_offset(&mut data[Offsets::P_MEM_SIZE_START ..
-                                                    Offsets::P_MEM_SIZE_END],
-                                          str.size, byteorder);
-                    Offsets::write_offset(&mut data[Offsets::P_ALIGN_START ..
-                                                    Offsets::P_ALIGN_END],
-                                          (1 as u8).into(), byteorder);
+                    Offsets::write_offset::<B>(
+                        &mut data[Offsets::P_MEM_SIZE_START ..
+                                  Offsets::P_MEM_SIZE_END],
+                        str.size
+                    );
+                    Offsets::write_offset::<B>(
+                        &mut data[Offsets::P_ALIGN_START ..
+                                  Offsets::P_ALIGN_END],
+                        (1 as u8).into()
+                    );
                 },
                 ProgHdrData::Note { virt_addr, phys_addr, content } => {
                     let flags: u8 = 0x4;
 
-                    Offsets::write_word(&mut data[Offsets::P_KIND_START ..
-                                                  Offsets::P_KIND_END],
-                                        (4 as u8).into(), byteorder);
-                    Offsets::write_word(&mut data[Offsets::P_FLAGS_START ..
-                                                  Offsets::P_FLAGS_END],
-                                        flags.into(), byteorder);
-                    Offsets::write_offset(&mut data[Offsets::P_OFFSET_START ..
-                                                    Offsets::P_OFFSET_END],
-                                          content.offset, byteorder);
-                    Offsets::write_addr(&mut data[Offsets::P_VADDR_START ..
-                                                  Offsets::P_VADDR_END],
-                                        virt_addr, byteorder);
-                    Offsets::write_addr(&mut data[Offsets::P_PADDR_START ..
-                                                  Offsets::P_PADDR_END],
-                                        phys_addr, byteorder);
-                    Offsets::write_offset(
+                    Offsets::write_word::<B>(&mut data[Offsets::P_KIND_START ..
+                                                       Offsets::P_KIND_END],
+                                             (4 as u8).into());
+                    Offsets::write_word::<B>(&mut data[Offsets::P_FLAGS_START ..
+                                                       Offsets::P_FLAGS_END],
+                                             flags.into());
+                    Offsets::write_offset::<B>(
+                        &mut data[Offsets::P_OFFSET_START ..
+                                  Offsets::P_OFFSET_END],
+                        content.offset
+                    );
+                    Offsets::write_addr::<B>(&mut data[Offsets::P_VADDR_START ..
+                                                       Offsets::P_VADDR_END],
+                                             virt_addr);
+                    Offsets::write_addr::<B>(&mut data[Offsets::P_PADDR_START ..
+                                                       Offsets::P_PADDR_END],
+                                             phys_addr);
+                    Offsets::write_offset::<B>(
                         &mut data[Offsets::P_FILE_SIZE_START ..
                                   Offsets::P_FILE_SIZE_END],
-                        content.size, byteorder
+                        content.size
                     );
-                    Offsets::write_offset(&mut data[Offsets::P_MEM_SIZE_START ..
-                                                    Offsets::P_MEM_SIZE_END],
-                                          content.size, byteorder);
-                    Offsets::write_offset(&mut data[Offsets::P_ALIGN_START ..
-                                                    Offsets::P_ALIGN_END],
-                                          Offsets::WORD_ALIGN, byteorder);
+                    Offsets::write_offset::<B>(
+                        &mut data[Offsets::P_MEM_SIZE_START ..
+                                  Offsets::P_MEM_SIZE_END],
+                        content.size
+                    );
+                    Offsets::write_offset::<B>(
+                        &mut data[Offsets::P_ALIGN_START ..
+                                  Offsets::P_ALIGN_END],
+                        Offsets::WORD_ALIGN
+                    );
                 },
                 ProgHdrData::Shlib => {
-                    Offsets::write_word(&mut data[Offsets::P_KIND_START ..
-                                                  Offsets::P_KIND_END],
-                                        (5 as u8).into(), byteorder);
-                    Offsets::write_word(&mut data[Offsets::P_FLAGS_START ..
-                                                  Offsets::P_FLAGS_END],
-                                        (0 as u8).into(), byteorder);
-                    Offsets::write_offset(&mut data[Offsets::P_OFFSET_START ..
-                                                    Offsets::P_OFFSET_END],
-                                          (0 as u8).into(), byteorder);
-                    Offsets::write_addr(&mut data[Offsets::P_VADDR_START ..
-                                                  Offsets::P_VADDR_END],
-                                        (0 as u8).into(), byteorder);
-                    Offsets::write_addr(&mut data[Offsets::P_PADDR_START ..
-                                                  Offsets::P_PADDR_END],
-                                        (0 as u8).into(), byteorder);
-                    Offsets::write_offset(
+                    Offsets::write_word::<B>(&mut data[Offsets::P_KIND_START ..
+                                                       Offsets::P_KIND_END],
+                                             (5 as u8).into());
+                    Offsets::write_word::<B>(&mut data[Offsets::P_FLAGS_START ..
+                                                       Offsets::P_FLAGS_END],
+                                             (0 as u8).into());
+                    Offsets::write_offset::<B>(
+                        &mut data[Offsets::P_OFFSET_START ..
+                                  Offsets::P_OFFSET_END],
+                        (0 as u8).into()
+                    );
+                    Offsets::write_addr::<B>(&mut data[Offsets::P_VADDR_START ..
+                                                       Offsets::P_VADDR_END],
+                                             (0 as u8).into());
+                    Offsets::write_addr::<B>(&mut data[Offsets::P_PADDR_START ..
+                                                       Offsets::P_PADDR_END],
+                                             (0 as u8).into());
+                    Offsets::write_offset::<B>(
                         &mut data[Offsets::P_FILE_SIZE_START ..
                                   Offsets::P_FILE_SIZE_END],
-                        (0 as u8).into(), byteorder
+                        (0 as u8).into()
                     );
-                    Offsets::write_offset(&mut data[Offsets::P_MEM_SIZE_START ..
-                                                    Offsets::P_MEM_SIZE_END],
-                                          (0 as u8).into(), byteorder);
-                    Offsets::write_offset(&mut data[Offsets::P_ALIGN_START ..
-                                                    Offsets::P_ALIGN_END],
-                                          (0 as u8).into(), byteorder);
+                    Offsets::write_offset::<B>(
+                        &mut data[Offsets::P_MEM_SIZE_START ..
+                                  Offsets::P_MEM_SIZE_END],
+                        (0 as u8).into()
+                    );
+                    Offsets::write_offset::<B>(
+                        &mut data[Offsets::P_ALIGN_START ..
+                                  Offsets::P_ALIGN_END],
+                        (0 as u8).into()
+                    );
                 },
                 ProgHdrData::ProgHdr { virt_addr, phys_addr, content } => {
                     let flags: u8 = 0x4;
 
-                    Offsets::write_word(&mut data[Offsets::P_KIND_START ..
-                                                  Offsets::P_KIND_END],
-                                        (6 as u8).into(), byteorder);
-                    Offsets::write_word(&mut data[Offsets::P_FLAGS_START ..
-                                                  Offsets::P_FLAGS_END],
-                                        flags.into(), byteorder);
-                    Offsets::write_offset(&mut data[Offsets::P_OFFSET_START ..
-                                                    Offsets::P_OFFSET_END],
-                                          content.offset, byteorder);
-                    Offsets::write_addr(&mut data[Offsets::P_VADDR_START ..
-                                                  Offsets::P_VADDR_END],
-                                        virt_addr, byteorder);
-                    Offsets::write_addr(&mut data[Offsets::P_PADDR_START ..
-                                                  Offsets::P_PADDR_END],
-                                        phys_addr, byteorder);
-                    Offsets::write_offset(
+                    Offsets::write_word::<B>(&mut data[Offsets::P_KIND_START ..
+                                                       Offsets::P_KIND_END],
+                                             (6 as u8).into());
+                    Offsets::write_word::<B>(&mut data[Offsets::P_FLAGS_START ..
+                                                       Offsets::P_FLAGS_END],
+                                             flags.into());
+                    Offsets::write_offset::<B>(
+                        &mut data[Offsets::P_OFFSET_START ..
+                                  Offsets::P_OFFSET_END],
+                        content.offset
+                    );
+                    Offsets::write_addr::<B>(&mut data[Offsets::P_VADDR_START ..
+                                                       Offsets::P_VADDR_END],
+                                             virt_addr);
+                    Offsets::write_addr::<B>(&mut data[Offsets::P_PADDR_START ..
+                                                       Offsets::P_PADDR_END],
+                                             phys_addr);
+                    Offsets::write_offset::<B>(
                         &mut data[Offsets::P_FILE_SIZE_START ..
                                   Offsets::P_FILE_SIZE_END],
-                        content.size, byteorder
+                        content.size
                     );
-                    Offsets::write_offset(&mut data[Offsets::P_MEM_SIZE_START ..
-                                                    Offsets::P_MEM_SIZE_END],
-                                          content.size, byteorder);
-                    Offsets::write_offset(&mut data[Offsets::P_ALIGN_START ..
-                                                    Offsets::P_ALIGN_END],
-                                          Offsets::OFFSET_ALIGN, byteorder);
+                    Offsets::write_offset::<B>(
+                        &mut data[Offsets::P_MEM_SIZE_START ..
+                                  Offsets::P_MEM_SIZE_END],
+                        content.size
+                    );
+                    Offsets::write_offset::<B>(
+                        &mut data[Offsets::P_ALIGN_START ..
+                                  Offsets::P_ALIGN_END],
+                        Offsets::OFFSET_ALIGN
+                    );
                 },
                 ProgHdrData::Unknown { tag, flags, offset, file_size, mem_size,
                                        phys_addr, virt_addr, align } => {
-                    Offsets::write_word(&mut data[Offsets::P_KIND_START ..
-                                                  Offsets::P_KIND_END],
-                                        tag, byteorder);
-                    Offsets::write_word(&mut data[Offsets::P_FLAGS_START ..
-                                                  Offsets::P_FLAGS_END],
-                                        flags, byteorder);
-                    Offsets::write_offset(&mut data[Offsets::P_OFFSET_START ..
-                                                    Offsets::P_OFFSET_END],
-                                          offset, byteorder);
-                    Offsets::write_addr(&mut data[Offsets::P_VADDR_START ..
-                                                  Offsets::P_VADDR_END],
-                                        virt_addr, byteorder);
-                    Offsets::write_addr(&mut data[Offsets::P_PADDR_START ..
-                                                  Offsets::P_PADDR_END],
-                                        phys_addr, byteorder);
-                    Offsets::write_offset(
+                    Offsets::write_word::<B>(&mut data[Offsets::P_KIND_START ..
+                                                       Offsets::P_KIND_END],
+                                             tag);
+                    Offsets::write_word::<B>(&mut data[Offsets::P_FLAGS_START ..
+                                                       Offsets::P_FLAGS_END],
+                                             flags);
+                    Offsets::write_offset::<B>(
+                        &mut data[Offsets::P_OFFSET_START ..
+                                  Offsets::P_OFFSET_END],
+                        offset
+                    );
+                    Offsets::write_addr::<B>(&mut data[Offsets::P_VADDR_START ..
+                                                       Offsets::P_VADDR_END],
+                                             virt_addr);
+                    Offsets::write_addr::<B>(&mut data[Offsets::P_PADDR_START ..
+                                                       Offsets::P_PADDR_END],
+                                             phys_addr);
+                    Offsets::write_offset::<B>(
                         &mut data[Offsets::P_FILE_SIZE_START ..
                                   Offsets::P_FILE_SIZE_END],
-                        file_size, byteorder
+                        file_size
                     );
-                    Offsets::write_offset(&mut data[Offsets::P_MEM_SIZE_START ..
-                                                    Offsets::P_MEM_SIZE_END],
-                                          mem_size, byteorder);
-                    Offsets::write_offset(&mut data[Offsets::P_ALIGN_START ..
-                                                    Offsets::P_ALIGN_END],
-                                          align, byteorder);
+                    Offsets::write_offset::<B>(
+                        &mut data[Offsets::P_MEM_SIZE_START ..
+                                  Offsets::P_MEM_SIZE_END],
+                        mem_size
+                    );
+                    Offsets::write_offset::<B>(
+                        &mut data[Offsets::P_ALIGN_START ..
+                                  Offsets::P_ALIGN_END],
+                        align
+                    );
                 }
             }
 
@@ -1257,7 +1294,7 @@ impl<'a, B, Offsets: ProgHdrOffsets> ProgHdrs<'a, B, Offsets>
         where I: Iterator<Item = ProgHdrDataRaw<Offsets>> {
         let byteorder: PhantomData<B> = PhantomData;
         let offsets: PhantomData<Offsets> = PhantomData;
-        let (hdrs, out) = create(buf, hdrs, byteorder, offsets)?;
+        let (hdrs, out) = create::<B, I, Offsets>(buf, hdrs)?;
 
         Ok((ProgHdrs { byteorder: byteorder, offsets: offsets, hdrs: hdrs },
             out))
@@ -1512,7 +1549,7 @@ impl<'a, B, Offsets> TryFrom<ProgHdr<'a, B, Offsets>>
     fn try_from(ent: ProgHdr<'a, B, Offsets>) ->
         Result<ProgHdrDataRaw<Offsets>,
                Self::Error> {
-        project(ent.ent, ent.byteorder, ent.offsets)
+        project::<B, Offsets>(ent.ent)
     }
 }
 
@@ -1526,7 +1563,7 @@ impl<'a, B, Offsets> TryFrom<ProgHdrMut<'a, B, Offsets>>
     fn try_from(ent: ProgHdrMut<'a, B, Offsets>) ->
         Result<ProgHdrDataRaw<Offsets>,
                Self::Error> {
-        project(ent.ent, ent.byteorder, ent.offsets)
+        project::<B, Offsets>(ent.ent)
     }
 }
 
@@ -1655,7 +1692,7 @@ impl<'a, B, Offsets: ProgHdrOffsets> ExactSizeIterator
     where B: ByteOrder {
     #[inline]
     fn len(&self) -> usize {
-        self.hdrs.len() / Offsets::PROG_HDR_SIZE
+        (self.hdrs.len() / Offsets::PROG_HDR_SIZE) - self.idx
     }
 }
 

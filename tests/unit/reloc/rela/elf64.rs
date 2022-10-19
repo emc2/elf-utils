@@ -143,9 +143,14 @@ fn test_Relas_from_bytes_num_syms() {
 fn test_Relas_from_bytes_iter_len() {
     let relas: Relas<'_, LittleEndian, Elf64> =
         Relas::try_from(&ELF64_RELAS[0..]).expect("Expected success");
-    let iter = relas.iter();
+    let mut iter = relas.iter();
 
-    assert_eq!(iter.len(), ELF64_NUM_RELAS);
+    for i in 0 .. ELF64_NUM_RELAS {
+        assert_eq!(iter.len(), ELF64_NUM_RELAS - i);
+        assert!(iter.next().is_some());
+    }
+
+    assert!(iter.next().is_none());
 }
 
 #[test]

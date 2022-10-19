@@ -153,6 +153,7 @@
 //!
 //! assert_eq!(buf.len(), 5);
 //! ```
+use core::convert::Infallible;
 use core::convert::TryFrom;
 use core::convert::TryInto;
 use core::fmt::Display;
@@ -160,6 +161,7 @@ use core::fmt::Formatter;
 use core::iter::FusedIterator;
 use core::iter::Iterator;
 use core::str::from_utf8;
+use crate::elf::ElfClass;
 
 /// Trait for things that can be converted from one type to another
 /// with the use of a [Strtab].

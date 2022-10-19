@@ -186,7 +186,6 @@
 //! ```
 use byteorder::ByteOrder;
 use core::convert::TryInto;
-use core::marker::PhantomData;
 use crate::strtab::Strtab;
 use crate::strtab::WithStrtab;
 use crate::symtab::Sym;
@@ -352,7 +351,7 @@ pub enum HashtabError {
 /// Create an empty hash table from the sizes of the two tables.
 #[inline]
 fn create_split_empty<'a, B>(buf: &'a mut [u8], nhashes: usize,
-                             nchains: usize, _byteorder: PhantomData<B>) ->
+                             nchains: usize) ->
     Result<(&'a mut [u8], &'a mut [u8], &'a mut [u8]), HashtabError>
     where B: ByteOrder {
     let size = ELF_HASH_WORD_SIZE * (nhashes + nchains + 2);
@@ -377,8 +376,7 @@ fn create_split_empty<'a, B>(buf: &'a mut [u8], nhashes: usize,
 
 fn create_split_filled<'a, B, Offsets>(buf: &'a mut [u8], strtab: Strtab<'a>,
                                        symtab: Symtab<'a, B, Offsets>,
-                                       nhashes: usize,
-                                       byteorder: PhantomData<B>) ->
+                                       nhashes: usize) ->
     Result<(&'a mut [u8], &'a mut [u8], &'a mut [u8]), ()>
     where Sym<'a, B, Offsets>: TryInto<SymData<Offsets::Word, Offsets::Half,
                                                Offsets>>,
@@ -386,7 +384,7 @@ fn create_split_filled<'a, B, Offsets>(buf: &'a mut [u8], strtab: Strtab<'a>,
           Offsets: 'a + SymOffsets {
     let nsyms = symtab.num_syms();
     let (hashes, chains, rest) =
-        match create_split_empty(buf, nhashes, nsyms, byteorder) {
+        match create_split_empty::<B>(buf, nhashes, nsyms) {
             Ok(trio) => trio,
             Err(_) => return Err(())
         };
@@ -678,7 +676,7 @@ impl<'a, B, Offsets> Hashtab<'a, B, Offsets>
     pub fn create_split(buf: &'a mut [u8], strtab: Strtab<'a>,
                         symtab: Symtab<'a, B, Offsets>, nhashes: usize) ->
         Result<(Hashtab<'a, B, Offsets>, &'a mut [u8]), ()> {
-        match create_split_filled(buf, strtab, symtab, nhashes, PhantomData) {
+        match create_split_filled(buf, strtab, symtab, nhashes) {
             Ok((hashes, chains, rest)) => {
                 Ok((Hashtab { symtab: symtab, strtab: strtab,
                               hashes: hashes, chains: chains }, rest))
@@ -836,7 +834,7 @@ impl<'a, B, Offsets> HashtabMut<'a, B, Offsets>
     pub fn create_split(buf: &'a mut [u8], strtab: Strtab<'a>,
                         symtab: Symtab<'a, B, Offsets>, nhashes: usize) ->
         Result<(HashtabMut<'a, B, Offsets>, &'a mut [u8]), ()> {
-        match create_split_filled(buf, strtab, symtab, nhashes, PhantomData) {
+        match create_split_filled(buf, strtab, symtab, nhashes) {
             Ok((hashes, chains, rest)) => {
                 Ok((HashtabMut { symtab: symtab, strtab: strtab,
                                  hashes: hashes, chains: chains }, rest))

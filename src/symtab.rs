@@ -175,6 +175,7 @@
 //! ```
 
 use byteorder::ByteOrder;
+use core::borrow::Borrow;
 use core::convert::TryFrom;
 use core::convert::TryInto;
 use core::fmt::Display;
@@ -759,24 +760,19 @@ fn name_lookup<'a, Name, Section, Class>(sym: SymData<Name, Section, Class>,
 }
 
 #[inline]
-fn project<'a, B, Offsets>(data: &'a [u8], byteorder: PhantomData<B>,
-                           _offsets: PhantomData<Offsets>) ->
-    Result<SymDataRaw<Offsets>, SymError>
+fn project<'a, B, Offsets>(data: &'a [u8]) -> Result<SymDataRaw<Offsets>,
+                                                     SymError>
     where Offsets: SymOffsets,
           B: ByteOrder {
-    let name = Offsets::read_word(&data[Offsets::ST_NAME_START ..
-                                        Offsets::ST_NAME_END],
-                                  byteorder).into();
-    let value = Offsets::read_addr(&data[Offsets::ST_VALUE_START ..
-                                         Offsets::ST_VALUE_END],
-                                   byteorder);
-    let size = Offsets::read_offset(&data[Offsets::ST_SIZE_START ..
-                                          Offsets::ST_SIZE_END],
-                                    byteorder);
+    let name = Offsets::read_word::<B>(&data[Offsets::ST_NAME_START ..
+                                             Offsets::ST_NAME_END]).into();
+    let value = Offsets::read_addr::<B>(&data[Offsets::ST_VALUE_START ..
+                                              Offsets::ST_VALUE_END]);
+    let size = Offsets::read_offset::<B>(&data[Offsets::ST_SIZE_START ..
+                                               Offsets::ST_SIZE_END]);
     let info = data[Offsets::ST_INFO_START];
-    let section = Offsets::read_half(&data[Offsets::ST_SHIDX_START ..
-                                           Offsets::ST_SHIDX_END],
-                                     byteorder);
+    let section = Offsets::read_half::<B>(&data[Offsets::ST_SHIDX_START ..
+                                                Offsets::ST_SHIDX_END]);
     let bind = info >> 4;
     let kind = info & 0xf;
 
@@ -796,49 +792,49 @@ fn project<'a, B, Offsets>(data: &'a [u8], byteorder: PhantomData<B>,
     }
 }
 
-fn create<'a, 'b, B, I, Offsets>(buf: &'a mut [u8], syms: I,
-                                 byteorder: PhantomData<B>,
-                                 _offsets: PhantomData<Offsets>) ->
+fn create<'a, 'b, B, I, Offsets>(buf: &'a mut [u8], syms: I) ->
     Result<(&'a mut [u8], &'a mut [u8]), ()>
-    where I: Iterator<Item = &'b SymDataRaw<Offsets>>,
+    where I: Iterator,
+          I::Item: Borrow<SymDataRaw<Offsets>>,
           Offsets: 'b + SymOffsets,
           B: ByteOrder {
     let len = buf.len();
     let mut idx = 0;
 
-    for SymData { name, value, size, bind, kind, section } in syms {
+    for sym in syms {
+        let sym = sym.borrow();
         if idx + Offsets::ST_ENT_SIZE <= len {
             let symbuf = &mut buf[idx .. idx + Offsets::ST_ENT_SIZE];
-            let bind: u8 = bind.into();
-            let kind: u8 = kind.into();
+            let bind: u8 = sym.bind.into();
+            let kind: u8 = sym.kind.into();
             let info = (bind << 4) | kind;
 
-            match name {
+            match sym.name {
                 Some(name) => {
-                    Offsets::write_word(
+                    Offsets::write_word::<B>(
                         &mut symbuf[Offsets::ST_NAME_START ..
-                                    Offsets::ST_NAME_END], *name, byteorder
+                                    Offsets::ST_NAME_END], name
                     )
                 }
                 None => {
-                    Offsets::write_word(
+                    Offsets::write_word::<B>(
                         &mut symbuf[Offsets::ST_NAME_START ..
                                     Offsets::ST_NAME_END],
-                        (0 as u8).into(), byteorder
+                        (0 as u8).into()
                     )
                 }
             }
 
-            Offsets::write_addr(&mut symbuf[Offsets::ST_VALUE_START ..
-                                            Offsets::ST_VALUE_END],
-                                *value, byteorder);
-            Offsets::write_offset(&mut symbuf[Offsets::ST_SIZE_START ..
-                                              Offsets::ST_SIZE_END],
-                                  *size, byteorder);
+            Offsets::write_addr::<B>(&mut symbuf[Offsets::ST_VALUE_START ..
+                                                 Offsets::ST_VALUE_END],
+                                     sym.value);
+            Offsets::write_offset::<B>(&mut symbuf[Offsets::ST_SIZE_START ..
+                                                   Offsets::ST_SIZE_END],
+                                       sym.size);
             symbuf[Offsets::ST_INFO_START] = info;
-            Offsets::write_half(&mut symbuf[Offsets::ST_SHIDX_START ..
-                                            Offsets::ST_SHIDX_END],
-                                section.encode(), byteorder);
+            Offsets::write_half::<B>(&mut symbuf[Offsets::ST_SHIDX_START ..
+                                                 Offsets::ST_SHIDX_END],
+                                     sym.section.encode());
             idx += Offsets::ST_ENT_SIZE;
         } else {
             return Err(())
@@ -911,7 +907,7 @@ pub fn required_bytes<'b, I, Offsets>(syms: I) -> usize
 impl<'a, B, Offsets> Symtab<'a, B, Offsets>
     where Offsets: SymOffsets,
           B: ByteOrder {
-    /// Attempt to create a `Symtab` in `buf` containing the strings
+    /// Attempt to create a `Symtab` in `buf` containing the symbols
     /// in `syms`.
     ///
     /// This will write the symbol table data into the buffer in the
@@ -974,17 +970,18 @@ impl<'a, B, Offsets> Symtab<'a, B, Offsets>
     #[inline]
     pub fn create_split<'b, I>(buf: &'a mut [u8], syms: I) ->
         Result<(Self, &'a mut [u8]), ()>
-        where I: Iterator<Item = &'b SymDataRaw<Offsets>>,
+        where I: Iterator,
+              I::Item: Borrow<SymDataRaw<Offsets>>,
               Offsets: 'b {
         let byteorder: PhantomData<B> = PhantomData;
         let offsets: PhantomData<Offsets> = PhantomData;
-        let (data, out) = create(buf, syms, byteorder, offsets)?;
+        let (data, out) = create::<B, I, Offsets>(buf, syms)?;
 
         Ok((Symtab { byteorder: byteorder, offsets: offsets, symtab: data },
             out))
     }
 
-    /// Attempt to create a `Symtab` in `buf` containing the strings
+    /// Attempt to create a `Symtab` in `buf` containing the symbols
     /// in `syms`.
     ///
     /// This will write the symbol table data into the buffer in the
@@ -1040,7 +1037,8 @@ impl<'a, B, Offsets> Symtab<'a, B, Offsets>
     /// ```
     #[inline]
     pub fn create<'b, I>(buf: &'a mut [u8], syms: I) -> Result<Self, ()>
-        where I: Iterator<Item = &'b SymDataRaw<Offsets>>,
+        where I: Iterator,
+              I::Item: Borrow<SymDataRaw<Offsets>>,
               Self: Sized,
               Offsets: 'b {
         match Self::create_split(buf, syms) {
@@ -1194,7 +1192,7 @@ impl<'a, B, Offsets> SymtabCreate<'a, B, Offsets> for SymtabMut<'a, B, Offsets>
               Offsets: 'b {
         let byteorder: PhantomData<B> = PhantomData;
         let offsets: PhantomData<Offsets> = PhantomData;
-        let (data, out) = create(buf, syms, byteorder, offsets)?;
+        let (data, out) = create::<B, I, Offsets>(buf, syms)?;
 
         Ok((SymtabMut { byteorder: byteorder, offsets: offsets, symtab: data },
             out))
@@ -1440,7 +1438,7 @@ impl<'a, B, Offsets> WithStrtab<'a> for Sym<'a, B, Offsets>
     #[inline]
     fn with_strtab(self, strtab: Strtab<'a>) ->
         Result<Self::Result, Self::Error> {
-        match project(self.sym, self.byteorder, self.offsets) {
+        match project::<B, Offsets>(self.sym) {
             Ok(data) => match name_lookup(data, strtab) {
                 Ok(out) => Ok(out),
                 Err(_) => Err(StrSymError::BadName),
@@ -1480,7 +1478,7 @@ impl<'a, B, Offsets> TryFrom<Sym<'a, B, Offsets>> for SymDataRaw<Offsets>
     #[inline]
     fn try_from(sym: Sym<'a, B, Offsets>) ->
         Result<SymDataRaw<Offsets>, Self::Error> {
-        project(sym.sym, sym.byteorder, sym.offsets)
+        project::<B, Offsets>(sym.sym)
     }
 }
 
@@ -1568,7 +1566,7 @@ impl<'a, B, Offsets> ExactSizeIterator for SymtabIter<'a, B, Offsets>
           B: ByteOrder {
     #[inline]
     fn len(&self) -> usize {
-        self.symtab.len() / Offsets::ST_ENT_SIZE
+        (self.symtab.len() / Offsets::ST_ENT_SIZE) - self.idx
     }
 }
 

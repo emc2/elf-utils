@@ -1078,36 +1078,31 @@ pub struct SymsStrs<Syms, Strs> {
     pub strs: Strs
 }
 
-fn project<'a, B, Offsets>(ent: &'a [u8], byteorder: PhantomData<B>,
-                           _offsets: PhantomData<Offsets>) ->
-    Result<SectionHdrDataRaw<Offsets>, SectionHdrError<Offsets>>
+fn project<'a, B, Offsets>(ent: &'a [u8]) -> Result<SectionHdrDataRaw<Offsets>,
+                                                    SectionHdrError<Offsets>>
     where Offsets: SectionHdrOffsets,
           B: ByteOrder {
-    let kind = Offsets::read_word(&ent[Offsets::SH_KIND_START ..
-                                       Offsets::SH_KIND_END],
-                                  byteorder);
+    let kind = Offsets::read_word::<B>(&ent[Offsets::SH_KIND_START ..
+                                            Offsets::SH_KIND_END]);
 
     match kind.into() {
         0 => Ok(SectionHdrData::Null),
         1 => {
-            let offset = Offsets::read_offset(&ent[Offsets::SH_OFFSET_START ..
-                                                   Offsets::SH_OFFSET_END],
-                                              byteorder);
-            let size = Offsets::read_offset(&ent[Offsets::SH_SIZE_START ..
-                                                 Offsets::SH_SIZE_END],
-                                            byteorder);
-            let name = Offsets::read_word(&ent[Offsets::SH_NAME_START ..
-                                               Offsets::SH_NAME_END],
-                                          byteorder);
-            let addr = Offsets::read_addr(&ent[Offsets::SH_ADDR_START ..
-                                               Offsets::SH_ADDR_END],
-                                          byteorder);
-            let align = Offsets::read_offset(&ent[Offsets::SH_ALIGN_START ..
-                                                  Offsets::SH_ALIGN_END],
-                                             byteorder);
-            let flags = Offsets::read_offset(&ent[Offsets::SH_FLAGS_START ..
-                                                  Offsets::SH_FLAGS_END],
-                                             byteorder);
+            let offset = Offsets::read_offset::<B>(
+                &ent[Offsets::SH_OFFSET_START .. Offsets::SH_OFFSET_END],
+            );
+            let size = Offsets::read_offset::<B>(&ent[Offsets::SH_SIZE_START ..
+                                                      Offsets::SH_SIZE_END]);
+            let name = Offsets::read_word::<B>(&ent[Offsets::SH_NAME_START ..
+                                                    Offsets::SH_NAME_END]);
+            let addr = Offsets::read_addr::<B>(&ent[Offsets::SH_ADDR_START ..
+                                               Offsets::SH_ADDR_END]);
+            let align = Offsets::read_offset::<B>(
+                &ent[Offsets::SH_ALIGN_START .. Offsets::SH_ALIGN_END],
+            );
+            let flags = Offsets::read_offset::<B>(
+                &ent[Offsets::SH_FLAGS_START .. Offsets::SH_FLAGS_END],
+            );
             let pos = SectionPos { offset: offset, size: size };
             let exec = flags & (0x4 as u8).into() != (0 as u8).into();
             let alloc = flags & (0x2 as u8).into() != (0 as u8).into();
@@ -1118,38 +1113,35 @@ fn project<'a, B, Offsets>(ent: &'a [u8], byteorder: PhantomData<B>,
                                           exec: exec })
         },
         2 => {
-            let offset = Offsets::read_offset(&ent[Offsets::SH_OFFSET_START ..
-                                                   Offsets::SH_OFFSET_END],
-                                              byteorder);
-            let size = Offsets::read_offset(&ent[Offsets::SH_SIZE_START ..
-                                                 Offsets::SH_SIZE_END],
-                                            byteorder);
-            let ent_size = Offsets::read_word(&ent[Offsets::SH_ENT_SIZE_START ..
-                                                   Offsets::SH_ENT_SIZE_END],
-                                              byteorder);
-            let strtab = Offsets::read_word(&ent[Offsets::SH_LINK_START ..
-                                                 Offsets::SH_LINK_END],
-                                            byteorder);
+            let offset = Offsets::read_offset::<B>(
+                &ent[Offsets::SH_OFFSET_START .. Offsets::SH_OFFSET_END],
+            );
+            let size = Offsets::read_offset::<B>(&ent[Offsets::SH_SIZE_START ..
+                                                      Offsets::SH_SIZE_END],
+            );
+            let ent_size = Offsets::read_word::<B>(
+                &ent[Offsets::SH_ENT_SIZE_START .. Offsets::SH_ENT_SIZE_END],
+            );
+            let strtab = Offsets::read_word::<B>(&ent[Offsets::SH_LINK_START ..
+                                                      Offsets::SH_LINK_END]);
 
             match ent_size.try_into() {
                 Ok(ent_size) if ent_size == Offsets::ST_ENT_SIZE => {
-                    let name = Offsets::read_word(&ent[Offsets::SH_NAME_START ..
-                                                       Offsets::SH_NAME_END],
-                                                  byteorder);
-                    let addr = Offsets::read_addr(&ent[Offsets::SH_ADDR_START ..
-                                                       Offsets::SH_ADDR_END],
-                                                  byteorder);
-                    let align = Offsets::read_offset(
-                        &ent[Offsets::SH_ALIGN_START .. Offsets::SH_ALIGN_END],
-                        byteorder
+                    let name = Offsets::read_word::<B>(
+                        &ent[Offsets::SH_NAME_START .. Offsets::SH_NAME_END],
                     );
-                    let flags = Offsets::read_offset(
-                        &ent[Offsets::SH_FLAGS_START .. Offsets::SH_FLAGS_END],
-                        byteorder
+                    let addr = Offsets::read_addr::<B>(
+                        &ent[Offsets::SH_ADDR_START .. Offsets::SH_ADDR_END],
                     );
-                    let info = Offsets::read_word(&ent[Offsets::SH_INFO_START ..
-                                                       Offsets::SH_INFO_END],
-                                                  byteorder);
+                    let align = Offsets::read_offset::<B>(
+                        &ent[Offsets::SH_ALIGN_START .. Offsets::SH_ALIGN_END]
+                    );
+                    let flags = Offsets::read_offset::<B>(
+                        &ent[Offsets::SH_FLAGS_START .. Offsets::SH_FLAGS_END]
+                    );
+                    let info = Offsets::read_word::<B>(
+                        &ent[Offsets::SH_INFO_START .. Offsets::SH_INFO_END],
+                    );
                     let pos = SectionPos { offset: offset, size: size };
                     let exec = flags & (0x4 as u8).into() != (0 as u8).into();
                     let alloc = flags & (0x2 as u8).into() != (0 as u8).into();
@@ -1167,58 +1159,50 @@ fn project<'a, B, Offsets>(ent: &'a [u8], byteorder: PhantomData<B>,
             }
         },
         3 => {
-            let offset = Offsets::read_offset(&ent[Offsets::SH_OFFSET_START ..
-                                                   Offsets::SH_OFFSET_END],
-                                              byteorder);
-            let size = Offsets::read_offset(&ent[Offsets::SH_SIZE_START ..
-                                                 Offsets::SH_SIZE_END],
-                                            byteorder);
-            let name = Offsets::read_word(&ent[Offsets::SH_NAME_START ..
-                                               Offsets::SH_NAME_END],
-                                          byteorder);
-            let addr = Offsets::read_addr(&ent[Offsets::SH_ADDR_START ..
-                                               Offsets::SH_ADDR_END],
-                                          byteorder);
-            let align = Offsets::read_offset(&ent[Offsets::SH_ALIGN_START ..
-                                                  Offsets::SH_ALIGN_END],
-                                             byteorder);
+            let offset = Offsets::read_offset::<B>(
+                &ent[Offsets::SH_OFFSET_START .. Offsets::SH_OFFSET_END],
+            );
+            let size = Offsets::read_offset::<B>(&ent[Offsets::SH_SIZE_START ..
+                                                      Offsets::SH_SIZE_END]);
+            let name = Offsets::read_word::<B>(&ent[Offsets::SH_NAME_START ..
+                                                    Offsets::SH_NAME_END]);
+            let addr = Offsets::read_addr::<B>(&ent[Offsets::SH_ADDR_START ..
+                                                    Offsets::SH_ADDR_END]);
+            let align = Offsets::read_offset::<B>(
+                &ent[Offsets::SH_ALIGN_START .. Offsets::SH_ALIGN_END],
+            );
             let pos = SectionPos { offset: offset, size: size };
 
             Ok(SectionHdrData::Strtab { name: name, addr: addr,
                                         align: align, strs: pos })
         },
         4 => {
-            let offset = Offsets::read_offset(&ent[Offsets::SH_OFFSET_START ..
-                                                   Offsets::SH_OFFSET_END],
-                                              byteorder);
-            let size = Offsets::read_offset(&ent[Offsets::SH_SIZE_START ..
-                                                 Offsets::SH_SIZE_END],
-                                            byteorder);
-            let ent_size = Offsets::read_word(&ent[Offsets::SH_ENT_SIZE_START ..
-                                                   Offsets::SH_ENT_SIZE_END],
-                                              byteorder);
-            let symtab = Offsets::read_word(&ent[Offsets::SH_LINK_START ..
-                                                 Offsets::SH_LINK_END],
-                                            byteorder);
-            let target = Offsets::read_word(&ent[Offsets::SH_INFO_START ..
-                                                 Offsets::SH_INFO_END],
-                                            byteorder);
+            let offset = Offsets::read_offset::<B>(
+                &ent[Offsets::SH_OFFSET_START .. Offsets::SH_OFFSET_END],
+            );
+            let size = Offsets::read_offset::<B>(&ent[Offsets::SH_SIZE_START ..
+                                                      Offsets::SH_SIZE_END]);
+            let ent_size = Offsets::read_word::<B>(
+                &ent[Offsets::SH_ENT_SIZE_START .. Offsets::SH_ENT_SIZE_END],
+            );
+            let symtab = Offsets::read_word::<B>(&ent[Offsets::SH_LINK_START ..
+                                                      Offsets::SH_LINK_END]);
+            let target = Offsets::read_word::<B>(&ent[Offsets::SH_INFO_START ..
+                                                      Offsets::SH_INFO_END]);
 
             match ent_size.try_into() {
                 Ok(ent_size) if ent_size == Offsets::RELA_SIZE => {
-                    let name = Offsets::read_word(&ent[Offsets::SH_NAME_START ..
-                                                       Offsets::SH_NAME_END],
-                                                  byteorder);
-                    let addr = Offsets::read_addr(&ent[Offsets::SH_ADDR_START ..
-                                                       Offsets::SH_ADDR_END],
-                                                  byteorder);
-                    let align = Offsets::read_offset(
-                        &ent[Offsets::SH_ALIGN_START .. Offsets::SH_ALIGN_END],
-                        byteorder
+                    let name = Offsets::read_word::<B>(
+                        &ent[Offsets::SH_NAME_START .. Offsets::SH_NAME_END],
                     );
-                    let flags = Offsets::read_offset(
-                        &ent[Offsets::SH_FLAGS_START .. Offsets::SH_FLAGS_END],
-                        byteorder
+                    let addr = Offsets::read_addr::<B>(
+                        &ent[Offsets::SH_ADDR_START .. Offsets::SH_ADDR_END],
+                    );
+                    let align = Offsets::read_offset::<B>(
+                        &ent[Offsets::SH_ALIGN_START .. Offsets::SH_ALIGN_END]
+                     );
+                    let flags = Offsets::read_offset::<B>(
+                        &ent[Offsets::SH_FLAGS_START .. Offsets::SH_FLAGS_END]
                     );
                     let pos = SectionPos { offset: offset, size: size };
                     let exec = flags & (0x4 as u8).into() != (0 as u8).into();
@@ -1237,27 +1221,23 @@ fn project<'a, B, Offsets>(ent: &'a [u8], byteorder: PhantomData<B>,
             }
         },
         5 => {
-            let offset = Offsets::read_offset(&ent[Offsets::SH_OFFSET_START ..
-                                                   Offsets::SH_OFFSET_END],
-                                              byteorder);
-            let size = Offsets::read_offset(&ent[Offsets::SH_SIZE_START ..
-                                                 Offsets::SH_SIZE_END],
-                                            byteorder);
-            let symtab = Offsets::read_word(&ent[Offsets::SH_LINK_START ..
-                                                 Offsets::SH_LINK_END],
-                                            byteorder);
-            let name = Offsets::read_word(&ent[Offsets::SH_NAME_START ..
-                                               Offsets::SH_NAME_END],
-                                          byteorder);
-            let addr = Offsets::read_addr(&ent[Offsets::SH_ADDR_START ..
-                                               Offsets::SH_ADDR_END],
-                                          byteorder);
-            let align = Offsets::read_offset(&ent[Offsets::SH_ALIGN_START ..
-                                                  Offsets::SH_ALIGN_END],
-                                             byteorder);
-            let flags = Offsets::read_offset(&ent[Offsets::SH_FLAGS_START ..
-                                                  Offsets::SH_FLAGS_END],
-                                             byteorder);
+            let offset = Offsets::read_offset::<B>(
+                &ent[Offsets::SH_OFFSET_START .. Offsets::SH_OFFSET_END],
+            );
+            let size = Offsets::read_offset::<B>(&ent[Offsets::SH_SIZE_START ..
+                                                      Offsets::SH_SIZE_END]);
+            let symtab = Offsets::read_word::<B>(&ent[Offsets::SH_LINK_START ..
+                                                      Offsets::SH_LINK_END]);
+            let name = Offsets::read_word::<B>(&ent[Offsets::SH_NAME_START ..
+                                                    Offsets::SH_NAME_END]);
+            let addr = Offsets::read_addr::<B>(&ent[Offsets::SH_ADDR_START ..
+                                                    Offsets::SH_ADDR_END]);
+            let align = Offsets::read_offset::<B>(
+                &ent[Offsets::SH_ALIGN_START .. Offsets::SH_ALIGN_END],
+            );
+            let flags = Offsets::read_offset::<B>(
+                &ent[Offsets::SH_FLAGS_START .. Offsets::SH_FLAGS_END],
+            );
             let pos = SectionPos { offset: offset, size: size };
             let exec = flags & (0x4 as u8).into() != (0 as u8).into();
             let alloc = flags & (0x2 as u8).into() != (0 as u8).into();
@@ -1268,34 +1248,30 @@ fn project<'a, B, Offsets>(ent: &'a [u8], byteorder: PhantomData<B>,
                                       alloc: alloc, exec: exec })
         },
         6 => {
-            let offset = Offsets::read_offset(&ent[Offsets::SH_OFFSET_START ..
-                                                   Offsets::SH_OFFSET_END],
-                                              byteorder);
-            let size = Offsets::read_offset(&ent[Offsets::SH_SIZE_START ..
-                                                 Offsets::SH_SIZE_END],
-                                            byteorder);
-            let ent_size = Offsets::read_word(&ent[Offsets::SH_ENT_SIZE_START ..
-                                                   Offsets::SH_ENT_SIZE_END],
-                                              byteorder);
-            let strtab = Offsets::read_word(&ent[Offsets::SH_LINK_START ..
-                                                 Offsets::SH_LINK_END],
-                                            byteorder);
+            let offset = Offsets::read_offset::<B>(
+                &ent[Offsets::SH_OFFSET_START .. Offsets::SH_OFFSET_END],
+            );
+            let size = Offsets::read_offset::<B>(&ent[Offsets::SH_SIZE_START ..
+                                                 Offsets::SH_SIZE_END]);
+            let ent_size = Offsets::read_word::<B>(
+                &ent[Offsets::SH_ENT_SIZE_START .. Offsets::SH_ENT_SIZE_END],
+            );
+            let strtab = Offsets::read_word::<B>(&ent[Offsets::SH_LINK_START ..
+                                                 Offsets::SH_LINK_END]);
 
             match ent_size.try_into() {
                 Ok(ent_size) if ent_size == Offsets::DYNAMIC_SIZE  => {
-                    let name = Offsets::read_word(&ent[Offsets::SH_NAME_START ..
-                                                       Offsets::SH_NAME_END],
-                                                  byteorder);
-                    let addr = Offsets::read_addr(&ent[Offsets::SH_ADDR_START ..
-                                                       Offsets::SH_ADDR_END],
-                                                  byteorder);
-                    let align = Offsets::read_offset(
-                        &ent[Offsets::SH_ALIGN_START .. Offsets::SH_ALIGN_END],
-                        byteorder
+                    let name = Offsets::read_word::<B>(
+                        &ent[Offsets::SH_NAME_START .. Offsets::SH_NAME_END],
                     );
-                    let flags = Offsets::read_offset(
-                        &ent[Offsets::SH_FLAGS_START .. Offsets::SH_FLAGS_END],
-                        byteorder
+                    let addr = Offsets::read_addr::<B>(
+                        &ent[Offsets::SH_ADDR_START .. Offsets::SH_ADDR_END],
+                    );
+                    let align = Offsets::read_offset::<B>(
+                        &ent[Offsets::SH_ALIGN_START .. Offsets::SH_ALIGN_END]
+                    );
+                    let flags = Offsets::read_offset::<B>(
+                        &ent[Offsets::SH_FLAGS_START .. Offsets::SH_FLAGS_END]
                     );
                     let pos = SectionPos { offset: offset, size: size };
                     let exec = flags & (0x4 as u8).into() != (0 as u8).into();
@@ -1313,24 +1289,21 @@ fn project<'a, B, Offsets>(ent: &'a [u8], byteorder: PhantomData<B>,
             }
         },
         7 => {
-            let offset = Offsets::read_offset(&ent[Offsets::SH_OFFSET_START ..
-                                                   Offsets::SH_OFFSET_END],
-                                              byteorder);
-            let size = Offsets::read_offset(&ent[Offsets::SH_SIZE_START ..
-                                                 Offsets::SH_SIZE_END],
-                                            byteorder);
-            let name = Offsets::read_word(&ent[Offsets::SH_NAME_START ..
-                                               Offsets::SH_NAME_END],
-                                          byteorder);
-            let addr = Offsets::read_addr(&ent[Offsets::SH_ADDR_START ..
-                                               Offsets::SH_ADDR_END],
-                                          byteorder);
-            let align = Offsets::read_offset(&ent[Offsets::SH_ALIGN_START ..
-                                                  Offsets::SH_ALIGN_END],
-                                             byteorder);
-            let flags = Offsets::read_offset(&ent[Offsets::SH_FLAGS_START ..
-                                                  Offsets::SH_FLAGS_END],
-                                             byteorder);
+            let offset = Offsets::read_offset::<B>(
+                &ent[Offsets::SH_OFFSET_START .. Offsets::SH_OFFSET_END],
+            );
+            let size = Offsets::read_offset::<B>(&ent[Offsets::SH_SIZE_START ..
+                                                      Offsets::SH_SIZE_END]);
+            let name = Offsets::read_word::<B>(&ent[Offsets::SH_NAME_START ..
+                                                    Offsets::SH_NAME_END]);
+            let addr = Offsets::read_addr::<B>(&ent[Offsets::SH_ADDR_START ..
+                                                    Offsets::SH_ADDR_END]);
+            let align = Offsets::read_offset::<B>(
+                &ent[Offsets::SH_ALIGN_START .. Offsets::SH_ALIGN_END],
+            );
+            let flags = Offsets::read_offset::<B>(
+                &ent[Offsets::SH_FLAGS_START .. Offsets::SH_FLAGS_END],
+            );
             let pos = SectionPos { offset: offset, size: size };
             let exec = flags & (0x4 as u8).into() != (0 as u8).into();
             let alloc = flags & (0x2 as u8).into() != (0 as u8).into();
@@ -1341,24 +1314,21 @@ fn project<'a, B, Offsets>(ent: &'a [u8], byteorder: PhantomData<B>,
                                       exec: exec })
         },
         8 => {
-            let name = Offsets::read_word(&ent[Offsets::SH_NAME_START ..
-                                               Offsets::SH_NAME_END],
-                                          byteorder);
-            let addr = Offsets::read_addr(&ent[Offsets::SH_ADDR_START ..
-                                               Offsets::SH_ADDR_END],
-                                          byteorder);
-            let align = Offsets::read_offset(&ent[Offsets::SH_ALIGN_START ..
-                                                  Offsets::SH_ALIGN_END],
-                                             byteorder);
-            let flags = Offsets::read_offset(&ent[Offsets::SH_FLAGS_START ..
-                                                  Offsets::SH_FLAGS_END],
-                                             byteorder);
-            let offset = Offsets::read_offset(&ent[Offsets::SH_OFFSET_START ..
-                                                   Offsets::SH_OFFSET_END],
-                                              byteorder);
-            let size = Offsets::read_offset(&ent[Offsets::SH_SIZE_START ..
-                                                 Offsets::SH_SIZE_END],
-                                            byteorder);
+            let name = Offsets::read_word::<B>(&ent[Offsets::SH_NAME_START ..
+                                               Offsets::SH_NAME_END]);
+            let addr = Offsets::read_addr::<B>(&ent[Offsets::SH_ADDR_START ..
+                                               Offsets::SH_ADDR_END]);
+            let align = Offsets::read_offset::<B>(
+                &ent[Offsets::SH_ALIGN_START .. Offsets::SH_ALIGN_END],
+            );
+            let flags = Offsets::read_offset::<B>(
+                &ent[Offsets::SH_FLAGS_START .. Offsets::SH_FLAGS_END],
+            );
+            let offset = Offsets::read_offset::<B>(
+                &ent[Offsets::SH_OFFSET_START .. Offsets::SH_OFFSET_END],
+            );
+            let size = Offsets::read_offset::<B>(&ent[Offsets::SH_SIZE_START ..
+                                                 Offsets::SH_SIZE_END]);
             let exec = flags & (0x4 as u8).into() != (0 as u8).into();
             let alloc = flags & (0x2 as u8).into() != (0 as u8).into();
             let write = flags & (0x1 as u8).into() != (0 as u8).into();
@@ -1368,38 +1338,32 @@ fn project<'a, B, Offsets>(ent: &'a [u8], byteorder: PhantomData<B>,
                                         write: write, alloc: alloc })
         },
         9 => {
-            let offset = Offsets::read_offset(&ent[Offsets::SH_OFFSET_START ..
-                                                   Offsets::SH_OFFSET_END],
-                                              byteorder);
-            let size = Offsets::read_offset(&ent[Offsets::SH_SIZE_START ..
-                                                 Offsets::SH_SIZE_END],
-                                            byteorder);
-            let ent_size = Offsets::read_word(
-                &ent[Offsets::SH_ENT_SIZE_START .. Offsets::SH_ENT_SIZE_END],
-                byteorder
+            let offset = Offsets::read_offset::<B>(
+                &ent[Offsets::SH_OFFSET_START .. Offsets::SH_OFFSET_END],
             );
-            let symtab = Offsets::read_word(&ent[Offsets::SH_LINK_START ..
-                                                 Offsets::SH_LINK_END],
-                                            byteorder);
-            let target = Offsets::read_word(&ent[Offsets::SH_INFO_START ..
-                                                 Offsets::SH_INFO_END],
-                                            byteorder);
+            let size = Offsets::read_offset::<B>(&ent[Offsets::SH_SIZE_START ..
+                                                      Offsets::SH_SIZE_END]);
+            let ent_size = Offsets::read_word::<B>(
+                &ent[Offsets::SH_ENT_SIZE_START .. Offsets::SH_ENT_SIZE_END]
+            );
+            let symtab = Offsets::read_word::<B>(&ent[Offsets::SH_LINK_START ..
+                                                 Offsets::SH_LINK_END]);
+            let target = Offsets::read_word::<B>(&ent[Offsets::SH_INFO_START ..
+                                                 Offsets::SH_INFO_END]);
 
             match ent_size.try_into() {
                 Ok(ent_size) if ent_size == Offsets::REL_SIZE => {
-                    let name = Offsets::read_word(&ent[Offsets::SH_NAME_START ..
-                                                       Offsets::SH_NAME_END],
-                                                  byteorder);
-                    let addr = Offsets::read_addr(&ent[Offsets::SH_ADDR_START ..
-                                                       Offsets::SH_ADDR_END],
-                                                  byteorder);
-                    let align = Offsets::read_offset(
-                        &ent[Offsets::SH_ALIGN_START .. Offsets::SH_ALIGN_END],
-                        byteorder
+                    let name = Offsets::read_word::<B>(
+                        &ent[Offsets::SH_NAME_START .. Offsets::SH_NAME_END],
                     );
-                    let flags = Offsets::read_offset(
-                        &ent[Offsets::SH_FLAGS_START .. Offsets::SH_FLAGS_END],
-                        byteorder
+                    let addr = Offsets::read_addr::<B>(
+                        &ent[Offsets::SH_ADDR_START .. Offsets::SH_ADDR_END],
+                    );
+                    let align = Offsets::read_offset::<B>(
+                        &ent[Offsets::SH_ALIGN_START .. Offsets::SH_ALIGN_END]
+                    );
+                    let flags = Offsets::read_offset::<B>(
+                        &ent[Offsets::SH_FLAGS_START .. Offsets::SH_FLAGS_END]
                     );
                     let pos = SectionPos { offset: offset, size: size };
                     let exec = flags & (0x4 as u8).into() != (0 as u8).into();
@@ -1418,38 +1382,34 @@ fn project<'a, B, Offsets>(ent: &'a [u8], byteorder: PhantomData<B>,
             }
         },
         11 => {
-            let offset = Offsets::read_offset(&ent[Offsets::SH_OFFSET_START ..
-                                                   Offsets::SH_OFFSET_END],
-                                              byteorder);
-            let size = Offsets::read_offset(&ent[Offsets::SH_SIZE_START ..
-                                                 Offsets::SH_SIZE_END],
-                                            byteorder);
-            let ent_size = Offsets::read_word(&ent[Offsets::SH_ENT_SIZE_START ..
-                                                   Offsets::SH_ENT_SIZE_END],
-                                              byteorder);
-            let strtab = Offsets::read_word(&ent[Offsets::SH_LINK_START ..
-                                                 Offsets::SH_LINK_END],
-                                            byteorder);
+            let offset = Offsets::read_offset::<B>(
+                &ent[Offsets::SH_OFFSET_START .. Offsets::SH_OFFSET_END],
+            );
+            let size = Offsets::read_offset::<B>(&ent[Offsets::SH_SIZE_START ..
+                                                      Offsets::SH_SIZE_END]);
+            let ent_size = Offsets::read_word::<B>(
+                &ent[Offsets::SH_ENT_SIZE_START .. Offsets::SH_ENT_SIZE_END]
+            );
+            let strtab = Offsets::read_word::<B>(&ent[Offsets::SH_LINK_START ..
+                                                      Offsets::SH_LINK_END]);
 
             match ent_size.try_into() {
                 Ok(ent_size) if ent_size == Offsets::ST_ENT_SIZE => {
-                    let name = Offsets::read_word(&ent[Offsets::SH_NAME_START ..
-                                                       Offsets::SH_NAME_END],
-                                                  byteorder);
-                    let addr = Offsets::read_addr(&ent[Offsets::SH_ADDR_START ..
-                                                       Offsets::SH_ADDR_END],
-                                                  byteorder);
-                    let align = Offsets::read_offset(
-                        &ent[Offsets::SH_ALIGN_START .. Offsets::SH_ALIGN_END],
-                        byteorder
+                    let name = Offsets::read_word::<B>(
+                        &ent[Offsets::SH_NAME_START .. Offsets::SH_NAME_END],
                     );
-                    let flags = Offsets::read_offset(
-                        &ent[Offsets::SH_FLAGS_START .. Offsets::SH_FLAGS_END],
-                        byteorder
+                    let addr = Offsets::read_addr::<B>(
+                        &ent[Offsets::SH_ADDR_START .. Offsets::SH_ADDR_END],
                     );
-                    let info = Offsets::read_word(&ent[Offsets::SH_INFO_START ..
-                                                       Offsets::SH_INFO_END],
-                                                  byteorder);
+                    let align = Offsets::read_offset::<B>(
+                        &ent[Offsets::SH_ALIGN_START .. Offsets::SH_ALIGN_END]
+                    );
+                    let flags = Offsets::read_offset::<B>(
+                        &ent[Offsets::SH_FLAGS_START .. Offsets::SH_FLAGS_END]
+                    );
+                    let info = Offsets::read_word::<B>(
+                        &ent[Offsets::SH_INFO_START .. Offsets::SH_INFO_END],
+                    );
                     let pos = SectionPos { offset: offset, size: size };
                     let exec = flags & (0x4 as u8).into() != (0 as u8).into();
                     let alloc = flags & (0x2 as u8).into() != (0 as u8).into();
@@ -1467,33 +1427,28 @@ fn project<'a, B, Offsets>(ent: &'a [u8], byteorder: PhantomData<B>,
             }
         },
         _ => {
-            let name = Offsets::read_word(&ent[Offsets::SH_NAME_START ..
-                                               Offsets::SH_NAME_END],
-                                          byteorder);
-            let addr = Offsets::read_addr(&ent[Offsets::SH_ADDR_START ..
-                                               Offsets::SH_ADDR_END],
-                                          byteorder);
-            let align = Offsets::read_offset(&ent[Offsets::SH_ALIGN_START ..
-                                                  Offsets::SH_ALIGN_END],
-                                             byteorder);
-            let flags = Offsets::read_offset(&ent[Offsets::SH_FLAGS_START ..
-                                                  Offsets::SH_FLAGS_END],
-                                             byteorder);
-            let link = Offsets::read_word(&ent[Offsets::SH_LINK_START ..
-                                               Offsets::SH_LINK_END],
-                                          byteorder);
-            let info = Offsets::read_word(&ent[Offsets::SH_INFO_START ..
-                                               Offsets::SH_INFO_END],
-                                          byteorder);
-            let offset = Offsets::read_offset(&ent[Offsets::SH_OFFSET_START ..
-                                                   Offsets::SH_OFFSET_END],
-                                              byteorder);
-            let size = Offsets::read_offset(&ent[Offsets::SH_SIZE_START ..
-                                                 Offsets::SH_SIZE_END],
-                                            byteorder);
-            let ent_size = Offsets::read_word(&ent[Offsets::SH_ENT_SIZE_START ..
-                                                   Offsets::SH_ENT_SIZE_END],
-                                              byteorder);
+            let name = Offsets::read_word::<B>(&ent[Offsets::SH_NAME_START ..
+                                                    Offsets::SH_NAME_END]);
+            let addr = Offsets::read_addr::<B>(&ent[Offsets::SH_ADDR_START ..
+                                               Offsets::SH_ADDR_END]);
+            let align = Offsets::read_offset::<B>(
+                &ent[Offsets::SH_ALIGN_START .. Offsets::SH_ALIGN_END],
+            );
+            let flags = Offsets::read_offset::<B>(
+                &ent[Offsets::SH_FLAGS_START .. Offsets::SH_FLAGS_END]
+            );
+            let link = Offsets::read_word::<B>(&ent[Offsets::SH_LINK_START ..
+                                                    Offsets::SH_LINK_END]);
+            let info = Offsets::read_word::<B>(&ent[Offsets::SH_INFO_START ..
+                                                    Offsets::SH_INFO_END]);
+            let offset = Offsets::read_offset::<B>(
+                &ent[Offsets::SH_OFFSET_START .. Offsets::SH_OFFSET_END]
+            );
+            let size = Offsets::read_offset::<B>(&ent[Offsets::SH_SIZE_START ..
+                                                      Offsets::SH_SIZE_END]);
+            let ent_size = Offsets::read_word::<B>(
+                &ent[Offsets::SH_ENT_SIZE_START .. Offsets::SH_ENT_SIZE_END]
+            );
 
             Ok(SectionHdrData::Unknown { name: name, tag: kind, addr: addr,
                                          align: align, offset: offset,
@@ -1503,9 +1458,7 @@ fn project<'a, B, Offsets>(ent: &'a [u8], byteorder: PhantomData<B>,
     }
 }
 
-fn create<'a, B, I, Offsets>(buf: &'a mut [u8], hdrs: I,
-                             byteorder: PhantomData<B>,
-                             _offsets: PhantomData<Offsets>) ->
+fn create<'a, B, I, Offsets>(buf: &'a mut [u8], hdrs: I) ->
     Result<(&'a mut [u8], &'a mut [u8]), ()>
     where I: Iterator<Item = SectionHdrDataRaw<Offsets>>,
           Offsets: SectionHdrOffsets,
@@ -1519,36 +1472,46 @@ fn create<'a, B, I, Offsets>(buf: &'a mut [u8], hdrs: I,
 
             match hdr {
                 SectionHdrData::Null => {
-                    Offsets::write_word(&mut ent[Offsets::SH_NAME_START ..
+                    Offsets::write_word::<B>(&mut ent[Offsets::SH_NAME_START ..
                                                  Offsets::SH_NAME_END],
-                                        (0 as u8).into(), byteorder);
-                    Offsets::write_word(&mut ent[Offsets::SH_KIND_START ..
+                                             (0 as u8).into());
+                    Offsets::write_word::<B>(&mut ent[Offsets::SH_KIND_START ..
                                                  Offsets::SH_KIND_END],
-                                        (0 as u8).into(), byteorder);
-                    Offsets::write_offset(&mut ent[Offsets::SH_FLAGS_START ..
-                                                   Offsets::SH_FLAGS_END],
-                                          (0 as u8).into(), byteorder);
-                    Offsets::write_addr(&mut ent[Offsets::SH_ADDR_START ..
+                                             (0 as u8).into());
+                    Offsets::write_offset::<B>(
+                        &mut ent[Offsets::SH_FLAGS_START ..
+                                 Offsets::SH_FLAGS_END],
+                        (0 as u8).into()
+                    );
+                    Offsets::write_addr::<B>(&mut ent[Offsets::SH_ADDR_START ..
                                                  Offsets::SH_ADDR_END],
-                                        (0 as u8).into(), byteorder);
-                    Offsets::write_offset(&mut ent[Offsets::SH_OFFSET_START ..
-                                                   Offsets::SH_OFFSET_END],
-                                          (0 as u8).into(), byteorder);
-                    Offsets::write_offset(&mut ent[Offsets::SH_SIZE_START ..
-                                                   Offsets::SH_SIZE_END],
-                                          (0 as u8).into(), byteorder);
-                    Offsets::write_word(&mut ent[Offsets::SH_LINK_START ..
-                                                 Offsets::SH_LINK_END],
-                                        (0 as u8).into(), byteorder);
-                    Offsets::write_word(&mut ent[Offsets::SH_INFO_START ..
-                                                 Offsets::SH_INFO_END],
-                                        (0 as u8).into(), byteorder);
-                    Offsets::write_offset(&mut ent[Offsets::SH_ALIGN_START ..
-                                                   Offsets::SH_ALIGN_END],
-                                          (0 as u8).into(), byteorder);
-                    Offsets::write_offset(&mut ent[Offsets::SH_ENT_SIZE_START ..
-                                                   Offsets::SH_ENT_SIZE_END],
-                                          (0 as u8).into(), byteorder);
+                                             (0 as u8).into());
+                    Offsets::write_offset::<B>(
+                        &mut ent[Offsets::SH_OFFSET_START ..
+                                 Offsets::SH_OFFSET_END],
+                        (0 as u8).into()
+                    );
+                    Offsets::write_offset::<B>(
+                        &mut ent[Offsets::SH_SIZE_START ..
+                                 Offsets::SH_SIZE_END],
+                        (0 as u8).into()
+                    );
+                    Offsets::write_word::<B>(&mut ent[Offsets::SH_LINK_START ..
+                                                      Offsets::SH_LINK_END],
+                                             (0 as u8).into());
+                    Offsets::write_word::<B>(&mut ent[Offsets::SH_INFO_START ..
+                                                      Offsets::SH_INFO_END],
+                                             (0 as u8).into());
+                    Offsets::write_offset::<B>(
+                        &mut ent[Offsets::SH_ALIGN_START ..
+                                 Offsets::SH_ALIGN_END],
+                        (0 as u8).into()
+                    );
+                    Offsets::write_offset::<B>(
+                        &mut ent[Offsets::SH_ENT_SIZE_START ..
+                                 Offsets::SH_ENT_SIZE_END],
+                        (0 as u8).into()
+                    );
                 },
                 SectionHdrData::ProgBits { name, addr, align, data, alloc,
                                            write, exec } => {
@@ -1556,36 +1519,46 @@ fn create<'a, B, I, Offsets>(buf: &'a mut [u8], hdrs: I,
                                     if alloc { 0x2 } else { 0 } |
                                     if write { 0x1 } else { 0 };
 
-                    Offsets::write_word(&mut ent[Offsets::SH_NAME_START ..
-                                                 Offsets::SH_NAME_END],
-                                        name, byteorder);
-                    Offsets::write_word(&mut ent[Offsets::SH_KIND_START ..
-                                                 Offsets::SH_KIND_END],
-                                        (1 as u8).into(), byteorder);
-                    Offsets::write_offset(&mut ent[Offsets::SH_FLAGS_START ..
-                                                   Offsets::SH_FLAGS_END],
-                                          flags.into(), byteorder);
-                    Offsets::write_addr(&mut ent[Offsets::SH_ADDR_START ..
-                                                 Offsets::SH_ADDR_END],
-                                        addr, byteorder);
-                    Offsets::write_offset(&mut ent[Offsets::SH_OFFSET_START ..
-                                                   Offsets::SH_OFFSET_END],
-                                          data.offset, byteorder);
-                    Offsets::write_offset(&mut ent[Offsets::SH_SIZE_START ..
-                                                   Offsets::SH_SIZE_END],
-                                         data.size, byteorder);
-                    Offsets::write_word(&mut ent[Offsets::SH_LINK_START ..
-                                                 Offsets::SH_LINK_END],
-                                        (0 as u8).into(), byteorder);
-                    Offsets::write_word(&mut ent[Offsets::SH_INFO_START ..
-                                                 Offsets::SH_INFO_END],
-                                        (0 as u8).into(), byteorder);
-                    Offsets::write_offset(&mut ent[Offsets::SH_ALIGN_START ..
-                                                   Offsets::SH_ALIGN_END],
-                                          align, byteorder);
-                    Offsets::write_offset(&mut ent[Offsets::SH_ENT_SIZE_START ..
-                                                   Offsets::SH_ENT_SIZE_END],
-                                          (0 as u8).into(), byteorder);
+                    Offsets::write_word::<B>(&mut ent[Offsets::SH_NAME_START ..
+                                                      Offsets::SH_NAME_END],
+                                             name);
+                    Offsets::write_word::<B>(&mut ent[Offsets::SH_KIND_START ..
+                                                      Offsets::SH_KIND_END],
+                                             (1 as u8).into());
+                    Offsets::write_offset::<B>(
+                        &mut ent[Offsets::SH_FLAGS_START ..
+                                 Offsets::SH_FLAGS_END],
+                        flags.into()
+                    );
+                    Offsets::write_addr::<B>(&mut ent[Offsets::SH_ADDR_START ..
+                                                      Offsets::SH_ADDR_END],
+                                             addr);
+                    Offsets::write_offset::<B>(
+                        &mut ent[Offsets::SH_OFFSET_START ..
+                                 Offsets::SH_OFFSET_END],
+                        data.offset
+                    );
+                    Offsets::write_offset::<B>(
+                        &mut ent[Offsets::SH_SIZE_START ..
+                                 Offsets::SH_SIZE_END],
+                        data.size
+                    );
+                    Offsets::write_word::<B>(&mut ent[Offsets::SH_LINK_START ..
+                                                      Offsets::SH_LINK_END],
+                                             (0 as u8).into());
+                    Offsets::write_word::<B>(&mut ent[Offsets::SH_INFO_START ..
+                                                      Offsets::SH_INFO_END],
+                                             (0 as u8).into());
+                    Offsets::write_offset::<B>(
+                        &mut ent[Offsets::SH_ALIGN_START ..
+                                 Offsets::SH_ALIGN_END],
+                        align
+                    );
+                    Offsets::write_offset::<B>(
+                        &mut ent[Offsets::SH_ENT_SIZE_START ..
+                                 Offsets::SH_ENT_SIZE_END],
+                        (0 as u8).into()
+                    );
                 },
                 SectionHdrData::Symtab { name, local_end, addr, strtab, align,
                                          syms, write, alloc, exec } => {
@@ -1593,69 +1566,88 @@ fn create<'a, B, I, Offsets>(buf: &'a mut [u8], hdrs: I,
                                     if alloc { 0x2 } else { 0 } |
                                     if write { 0x1 } else { 0 };
 
-                    Offsets::write_word(&mut ent[Offsets::SH_NAME_START ..
-                                                 Offsets::SH_NAME_END],
-                                        name, byteorder);
-                    Offsets::write_word(&mut ent[Offsets::SH_KIND_START ..
-                                                 Offsets::SH_KIND_END],
-                                        (2 as u8).into(), byteorder);
-                    Offsets::write_offset(&mut ent[Offsets::SH_FLAGS_START ..
-                                                   Offsets::SH_FLAGS_END],
-                                          flags.into(), byteorder);
-                    Offsets::write_addr(&mut ent[Offsets::SH_ADDR_START ..
-                                                 Offsets::SH_ADDR_END],
-                                        addr, byteorder);
-                    Offsets::write_offset(&mut ent[Offsets::SH_OFFSET_START ..
-                                                   Offsets::SH_OFFSET_END],
-                                          syms.offset, byteorder);
-                    Offsets::write_offset(&mut ent[Offsets::SH_SIZE_START ..
-                                                   Offsets::SH_SIZE_END],
-                                         syms.size, byteorder);
-                    Offsets::write_word(&mut ent[Offsets::SH_LINK_START ..
-                                                 Offsets::SH_LINK_END],
-                                        strtab, byteorder);
-                    Offsets::write_word(&mut ent[Offsets::SH_INFO_START ..
-                                                 Offsets::SH_INFO_END],
-                                        local_end, byteorder);
-                    Offsets::write_offset(&mut ent[Offsets::SH_ALIGN_START ..
-                                                   Offsets::SH_ALIGN_END],
-                                          align, byteorder);
-                    Offsets::write_offset(&mut ent[Offsets::SH_ENT_SIZE_START ..
-                                                   Offsets::SH_ENT_SIZE_END],
-                                          Offsets::ST_ENT_SIZE_OFFSET,
-                                          byteorder);
+                    Offsets::write_word::<B>(&mut ent[Offsets::SH_NAME_START ..
+                                                      Offsets::SH_NAME_END],
+                                             name);
+                    Offsets::write_word::<B>(&mut ent[Offsets::SH_KIND_START ..
+                                                      Offsets::SH_KIND_END],
+                                             (2 as u8).into());
+                    Offsets::write_offset::<B>(
+                        &mut ent[Offsets::SH_FLAGS_START ..
+                                 Offsets::SH_FLAGS_END],
+                        flags.into()
+                    );
+                    Offsets::write_addr::<B>(&mut ent[Offsets::SH_ADDR_START ..
+                                                      Offsets::SH_ADDR_END],
+                                             addr);
+                    Offsets::write_offset::<B>(
+                        &mut ent[Offsets::SH_OFFSET_START ..
+                                 Offsets::SH_OFFSET_END],
+                        syms.offset
+                    );
+                    Offsets::write_offset::<B>(
+                        &mut ent[Offsets::SH_SIZE_START ..
+                                 Offsets::SH_SIZE_END],
+                        syms.size
+                    );
+                    Offsets::write_word::<B>(&mut ent[Offsets::SH_LINK_START ..
+                                                      Offsets::SH_LINK_END],
+                                             strtab);
+                    Offsets::write_word::<B>(&mut ent[Offsets::SH_INFO_START ..
+                                                      Offsets::SH_INFO_END],
+                                             local_end);
+                    Offsets::write_offset::<B>(
+                        &mut ent[Offsets::SH_ALIGN_START ..
+                                 Offsets::SH_ALIGN_END],
+                        align
+                    );
+                    Offsets::write_offset::<B>(
+                        &mut ent[Offsets::SH_ENT_SIZE_START ..
+                                 Offsets::SH_ENT_SIZE_END],
+                        Offsets::ST_ENT_SIZE_OFFSET,
+                    );
                 },
                 SectionHdrData::Strtab { name, addr, align, strs } => {
-                    Offsets::write_word(&mut ent[Offsets::SH_NAME_START ..
-                                                 Offsets::SH_NAME_END],
-                                        name, byteorder);
-                    Offsets::write_word(&mut ent[Offsets::SH_KIND_START ..
-                                                 Offsets::SH_KIND_END],
-                                        (3 as u8).into(), byteorder);
-                    Offsets::write_offset(&mut ent[Offsets::SH_FLAGS_START ..
-                                                   Offsets::SH_FLAGS_END],
-                                          (0 as u8).into(), byteorder);
-                    Offsets::write_addr(&mut ent[Offsets::SH_ADDR_START ..
-                                                 Offsets::SH_ADDR_END],
-                                        addr, byteorder);
-                    Offsets::write_offset(&mut ent[Offsets::SH_OFFSET_START ..
-                                                   Offsets::SH_OFFSET_END],
-                                          strs.offset, byteorder);
-                    Offsets::write_offset(&mut ent[Offsets::SH_SIZE_START ..
-                                                   Offsets::SH_SIZE_END],
-                                         strs.size, byteorder);
-                    Offsets::write_word(&mut ent[Offsets::SH_LINK_START ..
-                                                 Offsets::SH_LINK_END],
-                                        (0 as u8).into(), byteorder);
-                    Offsets::write_word(&mut ent[Offsets::SH_INFO_START ..
-                                                 Offsets::SH_INFO_END],
-                                        (0 as u8).into(), byteorder);
-                    Offsets::write_offset(&mut ent[Offsets::SH_ALIGN_START ..
-                                                   Offsets::SH_ALIGN_END],
-                                          align, byteorder);
-                    Offsets::write_offset(&mut ent[Offsets::SH_ENT_SIZE_START ..
-                                                 Offsets::SH_ENT_SIZE_END],
-                                        (0 as u8).into(), byteorder);
+                    Offsets::write_word::<B>(&mut ent[Offsets::SH_NAME_START ..
+                                                      Offsets::SH_NAME_END],
+                                             name);
+                    Offsets::write_word::<B>(&mut ent[Offsets::SH_KIND_START ..
+                                                      Offsets::SH_KIND_END],
+                                             (3 as u8).into());
+                    Offsets::write_offset::<B>(
+                        &mut ent[Offsets::SH_FLAGS_START ..
+                                 Offsets::SH_FLAGS_END],
+                        (0 as u8).into()
+                    );
+                    Offsets::write_addr::<B>(&mut ent[Offsets::SH_ADDR_START ..
+                                                      Offsets::SH_ADDR_END],
+                                             addr);
+                    Offsets::write_offset::<B>(
+                        &mut ent[Offsets::SH_OFFSET_START ..
+                                 Offsets::SH_OFFSET_END],
+                        strs.offset
+                    );
+                    Offsets::write_offset::<B>(
+                        &mut ent[Offsets::SH_SIZE_START ..
+                                 Offsets::SH_SIZE_END],
+                        strs.size
+                    );
+                    Offsets::write_word::<B>(&mut ent[Offsets::SH_LINK_START ..
+                                                      Offsets::SH_LINK_END],
+                                             (0 as u8).into());
+                    Offsets::write_word::<B>(&mut ent[Offsets::SH_INFO_START ..
+                                                      Offsets::SH_INFO_END],
+                                             (0 as u8).into());
+                    Offsets::write_offset::<B>(
+                        &mut ent[Offsets::SH_ALIGN_START ..
+                                 Offsets::SH_ALIGN_END],
+                        align
+                    );
+                    Offsets::write_offset::<B>(
+                        &mut ent[Offsets::SH_ENT_SIZE_START ..
+                                 Offsets::SH_ENT_SIZE_END],
+                        (0 as u8).into()
+                    );
                 },
                 SectionHdrData::Rela { name, addr, align, target, symtab,
                                        relas, write, alloc, exec } => {
@@ -1663,36 +1655,46 @@ fn create<'a, B, I, Offsets>(buf: &'a mut [u8], hdrs: I,
                                     if alloc { 0x2 } else { 0 } |
                                     if write { 0x1 } else { 0 };
 
-                    Offsets::write_word(&mut ent[Offsets::SH_NAME_START ..
-                                                 Offsets::SH_NAME_END],
-                                        name, byteorder);
-                    Offsets::write_word(&mut ent[Offsets::SH_KIND_START ..
-                                                 Offsets::SH_KIND_END],
-                                        (4 as u8).into(), byteorder);
-                    Offsets::write_offset(&mut ent[Offsets::SH_FLAGS_START ..
-                                                   Offsets::SH_FLAGS_END],
-                                          flags.into(), byteorder);
-                    Offsets::write_addr(&mut ent[Offsets::SH_ADDR_START ..
-                                                 Offsets::SH_ADDR_END],
-                                        addr, byteorder);
-                    Offsets::write_offset(&mut ent[Offsets::SH_OFFSET_START ..
-                                                   Offsets::SH_OFFSET_END],
-                                          relas.offset, byteorder);
-                    Offsets::write_offset(&mut ent[Offsets::SH_SIZE_START ..
-                                                   Offsets::SH_SIZE_END],
-                                         relas.size, byteorder);
-                    Offsets::write_word(&mut ent[Offsets::SH_LINK_START ..
-                                                 Offsets::SH_LINK_END],
-                                        symtab, byteorder);
-                    Offsets::write_word(&mut ent[Offsets::SH_INFO_START ..
-                                                 Offsets::SH_INFO_END],
-                                        target, byteorder);
-                    Offsets::write_offset(&mut ent[Offsets::SH_ALIGN_START ..
-                                                   Offsets::SH_ALIGN_END],
-                                          align, byteorder);
-                    Offsets::write_offset(&mut ent[Offsets::SH_ENT_SIZE_START ..
-                                                   Offsets::SH_ENT_SIZE_END],
-                                          Offsets::RELA_SIZE_OFFSET, byteorder);
+                    Offsets::write_word::<B>(&mut ent[Offsets::SH_NAME_START ..
+                                                      Offsets::SH_NAME_END],
+                                             name);
+                    Offsets::write_word::<B>(&mut ent[Offsets::SH_KIND_START ..
+                                                      Offsets::SH_KIND_END],
+                                             (4 as u8).into());
+                    Offsets::write_offset::<B>(
+                        &mut ent[Offsets::SH_FLAGS_START ..
+                                 Offsets::SH_FLAGS_END],
+                        flags.into()
+                    );
+                    Offsets::write_addr::<B>(&mut ent[Offsets::SH_ADDR_START ..
+                                                      Offsets::SH_ADDR_END],
+                                             addr);
+                    Offsets::write_offset::<B>(
+                        &mut ent[Offsets::SH_OFFSET_START ..
+                                 Offsets::SH_OFFSET_END],
+                        relas.offset
+                    );
+                    Offsets::write_offset::<B>(
+                        &mut ent[Offsets::SH_SIZE_START ..
+                                 Offsets::SH_SIZE_END],
+                        relas.size
+                    );
+                    Offsets::write_word::<B>(&mut ent[Offsets::SH_LINK_START ..
+                                                      Offsets::SH_LINK_END],
+                                             symtab);
+                    Offsets::write_word::<B>(&mut ent[Offsets::SH_INFO_START ..
+                                                      Offsets::SH_INFO_END],
+                                             target);
+                    Offsets::write_offset::<B>(
+                        &mut ent[Offsets::SH_ALIGN_START ..
+                                 Offsets::SH_ALIGN_END],
+                        align
+                    );
+                    Offsets::write_offset::<B>(
+                        &mut ent[Offsets::SH_ENT_SIZE_START ..
+                                 Offsets::SH_ENT_SIZE_END],
+                        Offsets::RELA_SIZE_OFFSET
+                    );
                 },
                 SectionHdrData::Hash { name, addr, align, hash, symtab,
                                        write, alloc, exec } => {
@@ -1700,36 +1702,46 @@ fn create<'a, B, I, Offsets>(buf: &'a mut [u8], hdrs: I,
                                     if alloc { 0x2 } else { 0 } |
                                     if write { 0x1 } else { 0 };
 
-                    Offsets::write_word(&mut ent[Offsets::SH_NAME_START ..
-                                                 Offsets::SH_NAME_END],
-                                        name, byteorder);
-                    Offsets::write_word(&mut ent[Offsets::SH_KIND_START ..
-                                                 Offsets::SH_KIND_END],
-                                        (5 as u8).into(), byteorder);
-                    Offsets::write_offset(&mut ent[Offsets::SH_FLAGS_START ..
-                                                   Offsets::SH_FLAGS_END],
-                                          flags.into(), byteorder);
-                    Offsets::write_addr(&mut ent[Offsets::SH_ADDR_START ..
-                                                 Offsets::SH_ADDR_END],
-                                        addr, byteorder);
-                    Offsets::write_offset(&mut ent[Offsets::SH_OFFSET_START ..
-                                                   Offsets::SH_OFFSET_END],
-                                          hash.offset, byteorder);
-                    Offsets::write_offset(&mut ent[Offsets::SH_SIZE_START ..
-                                                   Offsets::SH_SIZE_END],
-                                         hash.size, byteorder);
-                    Offsets::write_word(&mut ent[Offsets::SH_LINK_START ..
-                                                 Offsets::SH_LINK_END],
-                                        symtab, byteorder);
-                    Offsets::write_word(&mut ent[Offsets::SH_INFO_START ..
-                                                 Offsets::SH_INFO_END],
-                                        (0 as u8).into(), byteorder);
-                    Offsets::write_offset(&mut ent[Offsets::SH_ALIGN_START ..
-                                                   Offsets::SH_ALIGN_END],
-                                          align, byteorder);
-                    Offsets::write_word(&mut ent[Offsets::SH_ENT_SIZE_START ..
-                                                 Offsets::SH_ENT_SIZE_END],
-                                        (0 as u8).into(), byteorder);
+                    Offsets::write_word::<B>(&mut ent[Offsets::SH_NAME_START ..
+                                                      Offsets::SH_NAME_END],
+                                             name);
+                    Offsets::write_word::<B>(&mut ent[Offsets::SH_KIND_START ..
+                                                      Offsets::SH_KIND_END],
+                                             (5 as u8).into());
+                    Offsets::write_offset::<B>(
+                        &mut ent[Offsets::SH_FLAGS_START ..
+                                 Offsets::SH_FLAGS_END],
+                        flags.into()
+                    );
+                    Offsets::write_addr::<B>(&mut ent[Offsets::SH_ADDR_START ..
+                                                      Offsets::SH_ADDR_END],
+                                             addr);
+                    Offsets::write_offset::<B>(
+                        &mut ent[Offsets::SH_OFFSET_START ..
+                                 Offsets::SH_OFFSET_END],
+                        hash.offset
+                    );
+                    Offsets::write_offset::<B>(
+                        &mut ent[Offsets::SH_SIZE_START ..
+                                 Offsets::SH_SIZE_END],
+                        hash.size
+                    );
+                    Offsets::write_word::<B>(&mut ent[Offsets::SH_LINK_START ..
+                                                      Offsets::SH_LINK_END],
+                                             symtab);
+                    Offsets::write_word::<B>(&mut ent[Offsets::SH_INFO_START ..
+                                                      Offsets::SH_INFO_END],
+                                             (0 as u8).into());
+                    Offsets::write_offset::<B>(
+                        &mut ent[Offsets::SH_ALIGN_START ..
+                                 Offsets::SH_ALIGN_END],
+                        align
+                    );
+                    Offsets::write_word::<B>(
+                        &mut ent[Offsets::SH_ENT_SIZE_START ..
+                                 Offsets::SH_ENT_SIZE_END],
+                        (0 as u8).into()
+                    );
                 },
                 SectionHdrData::Dynamic { name, align, addr, strtab, dynamic,
                                           write, alloc, exec } => {
@@ -1737,37 +1749,46 @@ fn create<'a, B, I, Offsets>(buf: &'a mut [u8], hdrs: I,
                                     if alloc { 0x2 } else { 0 } |
                                     if write { 0x1 } else { 0 };
 
-                    Offsets::write_word(&mut ent[Offsets::SH_NAME_START ..
-                                                 Offsets::SH_NAME_END],
-                                        name, byteorder);
-                    Offsets::write_word(&mut ent[Offsets::SH_KIND_START ..
-                                                 Offsets::SH_KIND_END],
-                                        (6 as u8).into(), byteorder);
-                    Offsets::write_offset(&mut ent[Offsets::SH_FLAGS_START ..
-                                                   Offsets::SH_FLAGS_END],
-                                          flags.into(), byteorder);
-                    Offsets::write_addr(&mut ent[Offsets::SH_ADDR_START ..
-                                                 Offsets::SH_ADDR_END],
-                                        addr, byteorder);
-                    Offsets::write_offset(&mut ent[Offsets::SH_OFFSET_START ..
-                                                   Offsets::SH_OFFSET_END],
-                                          dynamic.offset, byteorder);
-                    Offsets::write_offset(&mut ent[Offsets::SH_SIZE_START ..
-                                                   Offsets::SH_SIZE_END],
-                                         dynamic.size, byteorder);
-                    Offsets::write_word(&mut ent[Offsets::SH_LINK_START ..
-                                                 Offsets::SH_LINK_END],
-                                        strtab, byteorder);
-                    Offsets::write_word(&mut ent[Offsets::SH_INFO_START ..
-                                                 Offsets::SH_INFO_END],
-                                        (0 as u8).into(), byteorder);
-                    Offsets::write_offset(&mut ent[Offsets::SH_ALIGN_START ..
-                                                   Offsets::SH_ALIGN_END],
-                                          align, byteorder);
-                    Offsets::write_offset(&mut ent[Offsets::SH_ENT_SIZE_START ..
-                                                   Offsets::SH_ENT_SIZE_END],
-                                          Offsets::DYNAMIC_SIZE_OFFSET,
-                                          byteorder);
+                    Offsets::write_word::<B>(&mut ent[Offsets::SH_NAME_START ..
+                                                      Offsets::SH_NAME_END],
+                                             name);
+                    Offsets::write_word::<B>(&mut ent[Offsets::SH_KIND_START ..
+                                                      Offsets::SH_KIND_END],
+                                             (6 as u8).into());
+                    Offsets::write_offset::<B>(
+                        &mut ent[Offsets::SH_FLAGS_START ..
+                                 Offsets::SH_FLAGS_END],
+                        flags.into()
+                    );
+                    Offsets::write_addr::<B>(&mut ent[Offsets::SH_ADDR_START ..
+                                                      Offsets::SH_ADDR_END],
+                                             addr);
+                    Offsets::write_offset::<B>(
+                        &mut ent[Offsets::SH_OFFSET_START ..
+                                 Offsets::SH_OFFSET_END],
+                        dynamic.offset
+                    );
+                    Offsets::write_offset::<B>(
+                        &mut ent[Offsets::SH_SIZE_START ..
+                                 Offsets::SH_SIZE_END],
+                        dynamic.size
+                    );
+                    Offsets::write_word::<B>(&mut ent[Offsets::SH_LINK_START ..
+                                                      Offsets::SH_LINK_END],
+                                             strtab);
+                    Offsets::write_word::<B>(&mut ent[Offsets::SH_INFO_START ..
+                                                      Offsets::SH_INFO_END],
+                                             (0 as u8).into());
+                    Offsets::write_offset::<B>(
+                        &mut ent[Offsets::SH_ALIGN_START ..
+                                 Offsets::SH_ALIGN_END],
+                        align
+                    );
+                    Offsets::write_offset::<B>(
+                        &mut ent[Offsets::SH_ENT_SIZE_START ..
+                                 Offsets::SH_ENT_SIZE_END],
+                        Offsets::DYNAMIC_SIZE_OFFSET,
+                    );
                 },
                 SectionHdrData::Note { name, addr, align, note, write,
                                        alloc, exec } => {
@@ -1775,36 +1796,46 @@ fn create<'a, B, I, Offsets>(buf: &'a mut [u8], hdrs: I,
                                     if alloc { 0x2 } else { 0 } |
                                     if write { 0x1 } else { 0 };
 
-                    Offsets::write_word(&mut ent[Offsets::SH_NAME_START ..
-                                                 Offsets::SH_NAME_END],
-                                        name, byteorder);
-                    Offsets::write_word(&mut ent[Offsets::SH_KIND_START ..
-                                                 Offsets::SH_KIND_END],
-                                        (7 as u8).into(), byteorder);
-                    Offsets::write_offset(&mut ent[Offsets::SH_FLAGS_START ..
-                                                   Offsets::SH_FLAGS_END],
-                                          flags.into(), byteorder);
-                    Offsets::write_addr(&mut ent[Offsets::SH_ADDR_START ..
-                                                 Offsets::SH_ADDR_END],
-                                        addr, byteorder);
-                    Offsets::write_offset(&mut ent[Offsets::SH_OFFSET_START ..
-                                                   Offsets::SH_OFFSET_END],
-                                          note.offset, byteorder);
-                    Offsets::write_offset(&mut ent[Offsets::SH_SIZE_START ..
-                                                   Offsets::SH_SIZE_END],
-                                         note.size, byteorder);
-                    Offsets::write_word(&mut ent[Offsets::SH_LINK_START ..
-                                                 Offsets::SH_LINK_END],
-                                        (0 as u8).into(), byteorder);
-                    Offsets::write_word(&mut ent[Offsets::SH_INFO_START ..
-                                                 Offsets::SH_INFO_END],
-                                        (0 as u8).into(), byteorder);
-                    Offsets::write_offset(&mut ent[Offsets::SH_ALIGN_START ..
-                                                   Offsets::SH_ALIGN_END],
-                                          align, byteorder);
-                    Offsets::write_offset(&mut ent[Offsets::SH_ENT_SIZE_START ..
-                                                   Offsets::SH_ENT_SIZE_END],
-                                          (0 as u8).into(), byteorder);
+                    Offsets::write_word::<B>(&mut ent[Offsets::SH_NAME_START ..
+                                                      Offsets::SH_NAME_END],
+                                             name);
+                    Offsets::write_word::<B>(&mut ent[Offsets::SH_KIND_START ..
+                                                      Offsets::SH_KIND_END],
+                                             (7 as u8).into());
+                    Offsets::write_offset::<B>(
+                        &mut ent[Offsets::SH_FLAGS_START ..
+                                 Offsets::SH_FLAGS_END],
+                        flags.into()
+                    );
+                    Offsets::write_addr::<B>(&mut ent[Offsets::SH_ADDR_START ..
+                                                      Offsets::SH_ADDR_END],
+                                             addr);
+                    Offsets::write_offset::<B>(
+                        &mut ent[Offsets::SH_OFFSET_START ..
+                                 Offsets::SH_OFFSET_END],
+                        note.offset
+                    );
+                    Offsets::write_offset::<B>(
+                        &mut ent[Offsets::SH_SIZE_START ..
+                                 Offsets::SH_SIZE_END],
+                        note.size
+                    );
+                    Offsets::write_word::<B>(&mut ent[Offsets::SH_LINK_START ..
+                                                      Offsets::SH_LINK_END],
+                                             (0 as u8).into());
+                    Offsets::write_word::<B>(&mut ent[Offsets::SH_INFO_START ..
+                                                      Offsets::SH_INFO_END],
+                                             (0 as u8).into());
+                    Offsets::write_offset::<B>(
+                        &mut ent[Offsets::SH_ALIGN_START ..
+                                 Offsets::SH_ALIGN_END],
+                        align
+                    );
+                    Offsets::write_offset::<B>(
+                        &mut ent[Offsets::SH_ENT_SIZE_START ..
+                                 Offsets::SH_ENT_SIZE_END],
+                        (0 as u8).into()
+                    );
                 },
                 SectionHdrData::Nobits { name, addr, align, offset, size,
                                          write, alloc, exec } => {
@@ -1812,36 +1843,46 @@ fn create<'a, B, I, Offsets>(buf: &'a mut [u8], hdrs: I,
                                     if alloc { 0x2 } else { 0 } |
                                     if write { 0x1 } else { 0 };
 
-                    Offsets::write_word(&mut ent[Offsets::SH_NAME_START ..
-                                                 Offsets::SH_NAME_END],
-                                        name, byteorder);
-                    Offsets::write_word(&mut ent[Offsets::SH_KIND_START ..
-                                                 Offsets::SH_KIND_END],
-                                        (8 as u8).into(), byteorder);
-                    Offsets::write_offset(&mut ent[Offsets::SH_FLAGS_START ..
-                                                   Offsets::SH_FLAGS_END],
-                                          flags.into(), byteorder);
-                    Offsets::write_addr(&mut ent[Offsets::SH_ADDR_START ..
-                                                 Offsets::SH_ADDR_END],
-                                        addr, byteorder);
-                    Offsets::write_offset(&mut ent[Offsets::SH_OFFSET_START ..
-                                                   Offsets::SH_OFFSET_END],
-                                          offset, byteorder);
-                    Offsets::write_offset(&mut ent[Offsets::SH_SIZE_START ..
-                                                   Offsets::SH_SIZE_END],
-                                         size, byteorder);
-                    Offsets::write_word(&mut ent[Offsets::SH_LINK_START ..
-                                                 Offsets::SH_LINK_END],
-                                        (0 as u8).into(), byteorder);
-                    Offsets::write_word(&mut ent[Offsets::SH_INFO_START ..
-                                                 Offsets::SH_INFO_END],
-                                        (0 as u8).into(), byteorder);
-                    Offsets::write_offset(&mut ent[Offsets::SH_ALIGN_START ..
-                                                   Offsets::SH_ALIGN_END],
-                                          align, byteorder);
-                    Offsets::write_offset(&mut ent[Offsets::SH_ENT_SIZE_START ..
-                                                 Offsets::SH_ENT_SIZE_END],
-                                        (0 as u8).into(), byteorder);
+                    Offsets::write_word::<B>(&mut ent[Offsets::SH_NAME_START ..
+                                                      Offsets::SH_NAME_END],
+                                             name);
+                    Offsets::write_word::<B>(&mut ent[Offsets::SH_KIND_START ..
+                                                      Offsets::SH_KIND_END],
+                                             (8 as u8).into());
+                    Offsets::write_offset::<B>(
+                        &mut ent[Offsets::SH_FLAGS_START ..
+                                 Offsets::SH_FLAGS_END],
+                        flags.into()
+                    );
+                    Offsets::write_addr::<B>(&mut ent[Offsets::SH_ADDR_START ..
+                                                      Offsets::SH_ADDR_END],
+                                             addr);
+                    Offsets::write_offset::<B>(
+                        &mut ent[Offsets::SH_OFFSET_START ..
+                                 Offsets::SH_OFFSET_END],
+                        offset
+                    );
+                    Offsets::write_offset::<B>(
+                        &mut ent[Offsets::SH_SIZE_START ..
+                                 Offsets::SH_SIZE_END],
+                        size
+                    );
+                    Offsets::write_word::<B>(&mut ent[Offsets::SH_LINK_START ..
+                                                      Offsets::SH_LINK_END],
+                                             (0 as u8).into());
+                    Offsets::write_word::<B>(&mut ent[Offsets::SH_INFO_START ..
+                                                      Offsets::SH_INFO_END],
+                                             (0 as u8).into());
+                    Offsets::write_offset::<B>(
+                        &mut ent[Offsets::SH_ALIGN_START ..
+                                 Offsets::SH_ALIGN_END],
+                        align
+                    );
+                    Offsets::write_offset::<B>(
+                        &mut ent[Offsets::SH_ENT_SIZE_START ..
+                                 Offsets::SH_ENT_SIZE_END],
+                        (0 as u8).into()
+                    );
                 },
                 SectionHdrData::Rel { name, addr, align, target, symtab,
                                       rels, write, alloc, exec } => {
@@ -1849,36 +1890,46 @@ fn create<'a, B, I, Offsets>(buf: &'a mut [u8], hdrs: I,
                                     if alloc { 0x2 } else { 0 } |
                                     if write { 0x1 } else { 0 };
 
-                    Offsets::write_word(&mut ent[Offsets::SH_NAME_START ..
-                                                 Offsets::SH_NAME_END],
-                                        name, byteorder);
-                    Offsets::write_word(&mut ent[Offsets::SH_KIND_START ..
-                                                 Offsets::SH_KIND_END],
-                                        (9 as u8).into(), byteorder);
-                    Offsets::write_offset(&mut ent[Offsets::SH_FLAGS_START ..
-                                                   Offsets::SH_FLAGS_END],
-                                          flags.into(), byteorder);
-                    Offsets::write_addr(&mut ent[Offsets::SH_ADDR_START ..
-                                                 Offsets::SH_ADDR_END],
-                                        addr, byteorder);
-                    Offsets::write_offset(&mut ent[Offsets::SH_OFFSET_START ..
-                                                   Offsets::SH_OFFSET_END],
-                                          rels.offset, byteorder);
-                    Offsets::write_offset(&mut ent[Offsets::SH_SIZE_START ..
-                                                   Offsets::SH_SIZE_END],
-                                         rels.size, byteorder);
-                    Offsets::write_word(&mut ent[Offsets::SH_LINK_START ..
-                                                 Offsets::SH_LINK_END],
-                                        symtab, byteorder);
-                    Offsets::write_word(&mut ent[Offsets::SH_INFO_START ..
-                                                 Offsets::SH_INFO_END],
-                                        target, byteorder);
-                    Offsets::write_offset(&mut ent[Offsets::SH_ALIGN_START ..
-                                                   Offsets::SH_ALIGN_END],
-                                          align, byteorder);
-                    Offsets::write_offset(&mut ent[Offsets::SH_ENT_SIZE_START ..
-                                                   Offsets::SH_ENT_SIZE_END],
-                                          Offsets::REL_SIZE_OFFSET, byteorder);
+                    Offsets::write_word::<B>(&mut ent[Offsets::SH_NAME_START ..
+                                                      Offsets::SH_NAME_END],
+                                             name);
+                    Offsets::write_word::<B>(&mut ent[Offsets::SH_KIND_START ..
+                                                      Offsets::SH_KIND_END],
+                                             (9 as u8).into());
+                    Offsets::write_offset::<B>(
+                        &mut ent[Offsets::SH_FLAGS_START ..
+                                 Offsets::SH_FLAGS_END],
+                        flags.into()
+                    );
+                    Offsets::write_addr::<B>(&mut ent[Offsets::SH_ADDR_START ..
+                                                      Offsets::SH_ADDR_END],
+                                             addr);
+                    Offsets::write_offset::<B>(
+                        &mut ent[Offsets::SH_OFFSET_START ..
+                                 Offsets::SH_OFFSET_END],
+                        rels.offset
+                    );
+                    Offsets::write_offset::<B>(
+                        &mut ent[Offsets::SH_SIZE_START ..
+                                 Offsets::SH_SIZE_END],
+                        rels.size
+                    );
+                    Offsets::write_word::<B>(&mut ent[Offsets::SH_LINK_START ..
+                                                      Offsets::SH_LINK_END],
+                                             symtab);
+                    Offsets::write_word::<B>(&mut ent[Offsets::SH_INFO_START ..
+                                                      Offsets::SH_INFO_END],
+                                             target);
+                    Offsets::write_offset::<B>(
+                        &mut ent[Offsets::SH_ALIGN_START ..
+                                 Offsets::SH_ALIGN_END],
+                        align
+                    );
+                    Offsets::write_offset::<B>(
+                        &mut ent[Offsets::SH_ENT_SIZE_START ..
+                                 Offsets::SH_ENT_SIZE_END],
+                        Offsets::REL_SIZE_OFFSET
+                    );
                 },
                 SectionHdrData::Dynsym { name, local_end, addr, strtab, align,
                                          syms, write, alloc, exec } => {
@@ -1886,70 +1937,89 @@ fn create<'a, B, I, Offsets>(buf: &'a mut [u8], hdrs: I,
                                     if alloc { 0x2 } else { 0 } |
                                     if write { 0x1 } else { 0 };
 
-                    Offsets::write_word(&mut ent[Offsets::SH_NAME_START ..
-                                                 Offsets::SH_NAME_END],
-                                        name, byteorder);
-                    Offsets::write_word(&mut ent[Offsets::SH_KIND_START ..
-                                                 Offsets::SH_KIND_END],
-                                        (11 as u8).into(), byteorder);
-                    Offsets::write_offset(&mut ent[Offsets::SH_FLAGS_START ..
-                                                   Offsets::SH_FLAGS_END],
-                                          flags.into(), byteorder);
-                    Offsets::write_addr(&mut ent[Offsets::SH_ADDR_START ..
-                                                 Offsets::SH_ADDR_END],
-                                        addr, byteorder);
-                    Offsets::write_offset(&mut ent[Offsets::SH_OFFSET_START ..
-                                                   Offsets::SH_OFFSET_END],
-                                          syms.offset, byteorder);
-                    Offsets::write_offset(&mut ent[Offsets::SH_SIZE_START ..
-                                                   Offsets::SH_SIZE_END],
-                                         syms.size, byteorder);
-                    Offsets::write_word(&mut ent[Offsets::SH_LINK_START ..
-                                                 Offsets::SH_LINK_END],
-                                        strtab, byteorder);
-                    Offsets::write_word(&mut ent[Offsets::SH_INFO_START ..
-                                                 Offsets::SH_INFO_END],
-                                        local_end, byteorder);
-                    Offsets::write_offset(&mut ent[Offsets::SH_ALIGN_START ..
-                                                   Offsets::SH_ALIGN_END],
-                                          align, byteorder);
-                    Offsets::write_offset(&mut ent[Offsets::SH_ENT_SIZE_START ..
-                                                   Offsets::SH_ENT_SIZE_END],
-                                          Offsets::ST_ENT_SIZE_OFFSET,
-                                          byteorder);
+                    Offsets::write_word::<B>(&mut ent[Offsets::SH_NAME_START ..
+                                                      Offsets::SH_NAME_END],
+                                             name);
+                    Offsets::write_word::<B>(&mut ent[Offsets::SH_KIND_START ..
+                                                      Offsets::SH_KIND_END],
+                                             (11 as u8).into());
+                    Offsets::write_offset::<B>(
+                        &mut ent[Offsets::SH_FLAGS_START ..
+                                 Offsets::SH_FLAGS_END],
+                        flags.into()
+                    );
+                    Offsets::write_addr::<B>(&mut ent[Offsets::SH_ADDR_START ..
+                                                      Offsets::SH_ADDR_END],
+                                             addr);
+                    Offsets::write_offset::<B>(
+                        &mut ent[Offsets::SH_OFFSET_START ..
+                                 Offsets::SH_OFFSET_END],
+                        syms.offset
+                    );
+                    Offsets::write_offset::<B>(
+                        &mut ent[Offsets::SH_SIZE_START ..
+                                 Offsets::SH_SIZE_END],
+                        syms.size
+                    );
+                    Offsets::write_word::<B>(&mut ent[Offsets::SH_LINK_START ..
+                                                      Offsets::SH_LINK_END],
+                                             strtab);
+                    Offsets::write_word::<B>(&mut ent[Offsets::SH_INFO_START ..
+                                                      Offsets::SH_INFO_END],
+                                             local_end);
+                    Offsets::write_offset::<B>(
+                        &mut ent[Offsets::SH_ALIGN_START ..
+                                 Offsets::SH_ALIGN_END],
+                        align
+                    );
+                    Offsets::write_offset::<B>(
+                        &mut ent[Offsets::SH_ENT_SIZE_START ..
+                                 Offsets::SH_ENT_SIZE_END],
+                        Offsets::ST_ENT_SIZE_OFFSET,
+                    );
                 },
                 SectionHdrData::Unknown { name, tag, addr, align, offset, size,
                                           link, info, ent_size, flags } => {
-                    Offsets::write_word(&mut ent[Offsets::SH_NAME_START ..
-                                                 Offsets::SH_NAME_END],
-                                        name, byteorder);
-                    Offsets::write_word(&mut ent[Offsets::SH_KIND_START ..
-                                                 Offsets::SH_KIND_END],
-                                        tag, byteorder);
-                    Offsets::write_addr(&mut ent[Offsets::SH_ADDR_START ..
-                                                 Offsets::SH_ADDR_END],
-                                        addr, byteorder);
-                    Offsets::write_offset(&mut ent[Offsets::SH_ALIGN_START ..
-                                                   Offsets::SH_ALIGN_END],
-                                          align, byteorder);
-                    Offsets::write_offset(&mut ent[Offsets::SH_FLAGS_START ..
-                                                   Offsets::SH_FLAGS_END],
-                                          flags, byteorder);
-                    Offsets::write_word(&mut ent[Offsets::SH_LINK_START ..
-                                                 Offsets::SH_LINK_END],
-                                        link, byteorder);
-                    Offsets::write_word(&mut ent[Offsets::SH_INFO_START ..
-                                                 Offsets::SH_INFO_END],
-                                        info, byteorder);
-                    Offsets::write_offset(&mut ent[Offsets::SH_OFFSET_START ..
-                                                   Offsets::SH_OFFSET_END],
-                                          offset, byteorder);
-                    Offsets::write_offset(&mut ent[Offsets::SH_SIZE_START ..
-                                                   Offsets::SH_SIZE_END],
-                                         size, byteorder);
-                    Offsets::write_word(&mut ent[Offsets::SH_ENT_SIZE_START ..
-                                                 Offsets::SH_ENT_SIZE_END],
-                                        ent_size, byteorder);
+                    Offsets::write_word::<B>(&mut ent[Offsets::SH_NAME_START ..
+                                                      Offsets::SH_NAME_END],
+                                             name);
+                    Offsets::write_word::<B>(&mut ent[Offsets::SH_KIND_START ..
+                                                      Offsets::SH_KIND_END],
+                                             tag);
+                    Offsets::write_addr::<B>(&mut ent[Offsets::SH_ADDR_START ..
+                                                      Offsets::SH_ADDR_END],
+                                             addr);
+                    Offsets::write_offset::<B>(
+                        &mut ent[Offsets::SH_ALIGN_START ..
+                                 Offsets::SH_ALIGN_END],
+                        align
+                    );
+                    Offsets::write_offset::<B>(
+                        &mut ent[Offsets::SH_FLAGS_START ..
+                                 Offsets::SH_FLAGS_END],
+                        flags
+                    );
+                    Offsets::write_word::<B>(&mut ent[Offsets::SH_LINK_START ..
+                                                      Offsets::SH_LINK_END],
+                                             link);
+                    Offsets::write_word::<B>(&mut ent[Offsets::SH_INFO_START ..
+                                                      Offsets::SH_INFO_END],
+                                             info);
+                    Offsets::write_offset::<B>(
+                        &mut ent[Offsets::SH_OFFSET_START ..
+                                 Offsets::SH_OFFSET_END],
+                        offset
+                    );
+                    Offsets::write_offset::<B>(
+                        &mut ent[Offsets::SH_SIZE_START ..
+                                 Offsets::SH_SIZE_END],
+                        size
+                    );
+                    Offsets::write_word::<B>(
+                        &mut ent[Offsets::SH_ENT_SIZE_START ..
+                                 Offsets::SH_ENT_SIZE_END],
+                        ent_size
+                    );
                 }
             }
 
@@ -2332,7 +2402,7 @@ impl<'a, B, Offsets> SectionHdrs<'a, B, Offsets>
         where I: Iterator<Item = SectionHdrDataRaw<Offsets>> {
         let byteorder: PhantomData<B> = PhantomData;
         let offsets: PhantomData<Offsets> = PhantomData;
-        let (data, out) = create(buf, ents, byteorder, offsets)?;
+        let (data, out) = create::<B, I, Offsets>(buf, ents)?;
 
         Ok((SectionHdrs { byteorder: byteorder, offsets: offsets, hdrs: data },
             out))
@@ -3383,7 +3453,7 @@ impl<'a, B, Offsets> TryFrom<SectionHdr<'a, B, Offsets>>
     fn try_from(ent: SectionHdr<'a, B, Offsets>) ->
         Result<SectionHdrDataRaw<Offsets>,
                SectionHdrError<Offsets>> {
-        project(ent.ent, ent.byteorder, ent.offsets)
+        project::<B, Offsets>(ent.ent)
     }
 }
 
@@ -3397,7 +3467,7 @@ impl<'a, B, Offsets> TryFrom<SectionHdrMut<'a, B, Offsets>>
     fn try_from(ent: SectionHdrMut<'a, B, Offsets>) ->
         Result<SectionHdrDataRaw<Offsets>,
                SectionHdrError<Offsets>> {
-        project(ent.ent, ent.byteorder, ent.offsets)
+        project::<B, Offsets>(ent.ent)
     }
 }
 
@@ -3448,7 +3518,7 @@ impl<'a, B, Offsets: SectionHdrOffsets> ExactSizeIterator
     where B: ByteOrder {
     #[inline]
     fn len(&self) -> usize {
-        self.hdrs.len() / Offsets::SECTION_HDR_SIZE
+        (self.hdrs.len() / Offsets::SECTION_HDR_SIZE) - self.idx
     }
 }
 
@@ -3501,7 +3571,7 @@ impl<'a, B, Offsets: SectionHdrOffsets> ExactSizeIterator
     where B: ByteOrder {
     #[inline]
     fn len(&self) -> usize {
-        self.hdrs.len() / Offsets::SECTION_HDR_SIZE
+        (self.hdrs.len() / Offsets::SECTION_HDR_SIZE) - self.idx
     }
 }
 

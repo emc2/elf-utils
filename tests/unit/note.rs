@@ -101,8 +101,7 @@ fn test_Note_from_slice_iter() {
 fn test_Note_create_just_right() {
     let mut buf = [0; ELF_NOTES.len()];
     let notes: Result<(Notes<'_, LittleEndian>, &'_ mut [u8]), ()> =
-        Notes::create_split(&mut buf[0..],
-                            ELF_NOTES_CONTENTS.iter().map(|x| *x));
+        Notes::create_split(&mut buf[0..], ELF_NOTES_CONTENTS.iter());
 
     assert!(notes.is_ok());
 
@@ -115,8 +114,7 @@ fn test_Note_create_just_right() {
 fn test_Note_create_too_big() {
     let mut buf = [0; ELF_NOTES.len() + 1];
     let notes: Result<(Notes<'_, LittleEndian>, &'_ mut [u8]), ()> =
-        Notes::create_split(&mut buf[0..],
-                            ELF_NOTES_CONTENTS.iter().map(|x| *x));
+        Notes::create_split(&mut buf[0..], ELF_NOTES_CONTENTS.iter());
 
     assert!(notes.is_ok());
 
@@ -129,8 +127,7 @@ fn test_Note_create_too_big() {
 fn test_Note_create_too_small() {
     let mut buf = [0; ELF_NOTES.len() - 1];
     let notes: Result<(Notes<'_, LittleEndian>, &'_ mut [u8]), ()> =
-        Notes::create_split(&mut buf[0..],
-                            ELF_NOTES_CONTENTS.iter().map(|x| *x));
+        Notes::create_split(&mut buf[0..], ELF_NOTES_CONTENTS.iter());
 
     assert!(notes.is_err());
 }
@@ -139,8 +136,7 @@ fn test_Note_create_too_small() {
 fn test_Note_create_iter() {
     let mut buf = [0; ELF_NOTES.len()];
     let notes: Notes<'_, LittleEndian> =
-        Notes::create(&mut buf[0..],
-                      ELF_NOTES_CONTENTS.iter().map(|x| *x))
+        Notes::create(&mut buf[0..], ELF_NOTES_CONTENTS.iter())
         .expect("Expected success");
     let mut iter = notes.iter();
 
@@ -159,7 +155,7 @@ fn test_Note_create_iter() {
 
 #[test]
 fn test_required_bytes() {
-    assert_eq!(required_bytes(ELF_NOTES_CONTENTS.iter().map(|x| *x)),
+    assert_eq!(required_bytes(ELF_NOTES_CONTENTS.iter()),
                ELF_NOTES.len())
 }
 
@@ -205,8 +201,7 @@ fn test_NoteMut_from_slice_iter() {
 fn test_NoteMut_create_just_right() {
     let mut buf = [0; ELF_NOTES.len()];
     let notes: Result<(NotesMut<'_, LittleEndian>, &'_ mut [u8]), ()> =
-        NotesMut::create_split(&mut buf[0..],
-                               ELF_NOTES_CONTENTS.iter().map(|x| *x));
+        NotesMut::create_split(&mut buf[0..], ELF_NOTES_CONTENTS.iter());
 
     assert!(notes.is_ok());
 
@@ -219,8 +214,7 @@ fn test_NoteMut_create_just_right() {
 fn test_NoteMut_create_too_big() {
     let mut buf = [0; ELF_NOTES.len() + 1];
     let notes: Result<(NotesMut<'_, LittleEndian>, &'_ mut [u8]), ()> =
-        NotesMut::create_split(&mut buf[0..],
-                               ELF_NOTES_CONTENTS.iter().map(|x| *x));
+        NotesMut::create_split(&mut buf[0..], ELF_NOTES_CONTENTS.iter());
 
     assert!(notes.is_ok());
 
@@ -233,8 +227,7 @@ fn test_NoteMut_create_too_big() {
 fn test_NoteMut_create_too_small() {
     let mut buf = [0; ELF_NOTES.len() - 1];
     let notes: Result<(NotesMut<'_, LittleEndian>, &'_ mut [u8]), ()> =
-        NotesMut::create_split(&mut buf[0..],
-                               ELF_NOTES_CONTENTS.iter().map(|x| *x));
+        NotesMut::create_split(&mut buf[0..], ELF_NOTES_CONTENTS.iter());
 
     assert!(notes.is_err());
 }
@@ -243,7 +236,7 @@ fn test_NoteMut_create_too_small() {
 fn test_NoteMut_create_iter() {
     let mut buf = [0; ELF_NOTES.len()];
     let notes: NotesMut<'_, LittleEndian> =
-        NotesMut::create(&mut buf[0..], ELF_NOTES_CONTENTS.iter().map(|x| *x))
+        NotesMut::create(&mut buf[0..], ELF_NOTES_CONTENTS.iter())
         .expect("Expected success");
     let mut iter = notes.iter();
 

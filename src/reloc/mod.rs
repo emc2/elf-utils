@@ -108,6 +108,7 @@
 pub mod x86;
 pub mod x86_64;
 
+use core::borrow::Borrow;
 use byteorder::ByteOrder;
 use core::convert::TryFrom;
 use core::convert::TryInto;
@@ -135,12 +136,11 @@ pub trait RelClass: ElfClass {
     type RelKind: Copy + Display;
 
     /// Read the info value and split it into a kind tag and a symbol index.
-    fn read_info<B: ByteOrder>(data: &[u8], byteorder: PhantomData<B>) ->
-        (Self::RelKind, Self::Word);
+    fn read_info<B: ByteOrder>(data: &[u8]) -> (Self::RelKind, Self::Word);
 
     /// Combine a symbol index and kind tag into an info value and write it.
     fn write_info<B: ByteOrder>(data: &mut [u8], tag: Self::RelKind,
-                                sym: Self::Word, byteorder: PhantomData<B>);
+                                sym: Self::Word);
 }
 
 /// Offsets for ELF relocation table entries.
@@ -671,29 +671,29 @@ pub enum RelocSymtabError<Class: ElfClass> {
     SymError(SymError)
 }
 
-fn create_relas<'a, 'b, B, I, Offsets>(buf: &'a mut [u8], relas: I,
-                                       byteorder: PhantomData<B>,
-                                       _offsets: PhantomData<Offsets>) ->
+fn create_relas<'a, 'b, B, I, Offsets>(buf: &'a mut [u8], relas: I) ->
     Result<(&'a mut [u8], &'a mut [u8]), ()>
-    where I: Iterator<Item = &'b RelaDataRaw<Offsets>>,
+    where I: Iterator,
+          I::Item: Borrow<RelaDataRaw<Offsets>>,
           Offsets: 'b + RelaOffsets,
           B: ByteOrder {
     let len = buf.len();
     let mut idx = 0;
 
-    for RelaData { offset, addend, sym, kind } in relas {
+    for rela in relas {
+        let rela = rela.borrow();
         if idx + Offsets::RELA_SIZE <= len {
             let relabuf = &mut buf[idx .. idx + Offsets::RELA_SIZE];
 
-            Offsets::write_offset(&mut relabuf[Offsets::R_OFFSET_START ..
-                                               Offsets::R_OFFSET_END],
-                              *offset, byteorder);
-            Offsets::write_info(&mut relabuf[Offsets::R_INFO_START ..
-                                             Offsets::R_INFO_END],
-                                *kind, *sym, byteorder);
-            Offsets::write_addend(&mut relabuf[Offsets::R_ADDEND_START ..
-                                               Offsets::R_ADDEND_END],
-                                *addend, byteorder);
+            Offsets::write_offset::<B>(&mut relabuf[Offsets::R_OFFSET_START ..
+                                                    Offsets::R_OFFSET_END],
+                                       rela.offset);
+            Offsets::write_info::<B>(&mut relabuf[Offsets::R_INFO_START ..
+                                                  Offsets::R_INFO_END],
+                                     rela.kind, rela.sym);
+            Offsets::write_addend::<B>(&mut relabuf[Offsets::R_ADDEND_START ..
+                                                    Offsets::R_ADDEND_END],
+                                       rela.addend);
             idx += Offsets::RELA_SIZE;
         } else {
             return Err(())
@@ -703,26 +703,26 @@ fn create_relas<'a, 'b, B, I, Offsets>(buf: &'a mut [u8], relas: I,
     Ok(buf.split_at_mut(idx))
 }
 
-fn create_rels<'a, 'b, B, I, Offsets>(buf: &'a mut [u8], rels: I,
-                                      byteorder: PhantomData<B>,
-                                      _offsets: PhantomData<Offsets>) ->
+fn create_rels<'a, 'b, B, I, Offsets>(buf: &'a mut [u8], rels: I) ->
     Result<(&'a mut [u8], &'a mut [u8]), ()>
-    where I: Iterator<Item = &'b RelData<Offsets::Word, Offsets>>,
+    where I: Iterator,
+          I::Item: Borrow<RelDataRaw<Offsets>>,
           Offsets: 'b + RelOffsets,
           B: ByteOrder {
     let len = buf.len();
     let mut idx = 0;
 
-    for RelData { offset, sym, kind } in rels {
+    for rel in rels {
+        let rel = rel.borrow();
         if idx + Offsets::REL_SIZE <= len {
             let relbuf = &mut buf[idx .. idx + Offsets::REL_SIZE];
 
-            Offsets::write_offset(&mut relbuf[Offsets::R_OFFSET_START ..
-                                              Offsets::R_OFFSET_END],
-                              *offset, byteorder);
-            Offsets::write_info(&mut relbuf[Offsets::R_INFO_START ..
-                                            Offsets::R_INFO_END],
-                              *kind, *sym, byteorder);
+            Offsets::write_offset::<B>(&mut relbuf[Offsets::R_OFFSET_START ..
+                                                   Offsets::R_OFFSET_END],
+                                       rel.offset);
+            Offsets::write_info::<B>(&mut relbuf[Offsets::R_INFO_START ..
+                                                 Offsets::R_INFO_END],
+                                     rel.kind, rel.sym);
             idx += Offsets::REL_SIZE;
         } else {
             return Err(())
@@ -735,8 +735,7 @@ fn create_rels<'a, 'b, B, I, Offsets>(buf: &'a mut [u8], rels: I,
 impl RelClass for Elf32 {
     type RelKind = u8;
 
-    fn read_info<B: ByteOrder>(data: &[u8], _byteorder: PhantomData<B>) ->
-        (Self::RelKind, Self::Word) {
+    fn read_info<B: ByteOrder>(data: &[u8]) -> (Self::RelKind, Self::Word) {
         let info = B::read_u32(data);
         let kind = (info & 0xff) as u8;
         let sym = (info >> 8) as u32;
@@ -745,7 +744,7 @@ impl RelClass for Elf32 {
     }
 
     fn write_info<B: ByteOrder>(data: &mut [u8], kind: Self::RelKind,
-                                sym: Self::Word, _byteorder: PhantomData<B>) {
+                                sym: Self::Word) {
         let info = ((sym as u32) << 8) | (kind as u32);
 
         B::write_u32(data, info);
@@ -756,8 +755,7 @@ impl RelClass for Elf32 {
 impl RelClass for Elf64 {
     type RelKind = u32;
 
-    fn read_info<B: ByteOrder>(data: &[u8], _byteorder: PhantomData<B>) ->
-        (Self::RelKind, Self::Word) {
+    fn read_info<B: ByteOrder>(data: &[u8]) -> (Self::RelKind, Self::Word) {
         let info = B::read_u64(data);
         let kind = (info & 0xffffffff) as u32;
         let sym = (info >> 32) as u32;
@@ -766,7 +764,7 @@ impl RelClass for Elf64 {
     }
 
     fn write_info<B: ByteOrder>(data: &mut [u8], kind: Self::RelKind,
-                                sym: Self::Word, _byteorder: PhantomData<B>) {
+                                sym: Self::Word) {
         let info = ((sym as u64) << 32) | (kind as u64);
 
         B::write_u64(data, info);
@@ -907,11 +905,12 @@ impl<'a, B, Offsets> Relas<'a, B, Offsets>
     #[inline]
     pub fn create_split<'b, I>(buf: &'a mut [u8], relas: I) ->
         Result<(Self, &'a mut [u8]), ()>
-        where I: Iterator<Item = &'b RelaDataRaw<Offsets>>,
+        where I: Iterator,
+              I::Item: Borrow<RelaDataRaw<Offsets>>,
               Offsets: 'b {
         let byteorder: PhantomData<B> = PhantomData;
         let offsets: PhantomData<Offsets> = PhantomData;
-        let (data, out) = create_relas(buf, relas, byteorder, offsets)?;
+        let (data, out) = create_relas::<B, I, Offsets>(buf, relas)?;
 
         Ok((Relas { byteorder: byteorder, offsets: offsets, data: data }, out))
     }
@@ -962,7 +961,8 @@ impl<'a, B, Offsets> Relas<'a, B, Offsets>
     /// ```
     #[inline]
     pub fn create<'b, I>(buf: &'a mut [u8], relas: I) -> Result<Self, ()>
-        where I: Iterator<Item = &'b RelaDataRaw<Offsets>>,
+        where I: Iterator,
+              I::Item: Borrow<RelaDataRaw<Offsets>>,
               Self: Sized,
               Offsets: 'b {
         match Self::create_split(buf, relas) {
@@ -1060,11 +1060,12 @@ impl<'a, B, Offsets> Rels<'a, B, Offsets>
     /// ```
     pub fn create_split<'b, I>(buf: &'a mut [u8], rels: I) ->
         Result<(Self, &'a mut [u8]), ()>
-        where I: Iterator<Item = &'b RelData<Offsets::Word, Offsets>>,
+        where I: Iterator,
+              I::Item: Borrow<RelDataRaw<Offsets>>,
               Offsets: 'b {
         let byteorder: PhantomData<B> = PhantomData;
         let offsets: PhantomData<Offsets> = PhantomData;
-        let (data, out) = create_rels(buf, rels, byteorder, offsets)?;
+        let (data, out) = create_rels::<B, I, Offsets>(buf, rels)?;
 
         Ok((Rels { byteorder: byteorder, offsets: offsets, data: data }, out))
     }
@@ -1115,7 +1116,8 @@ impl<'a, B, Offsets> Rels<'a, B, Offsets>
     /// ```
     #[inline]
     pub fn create<'b, I>(buf: &'a mut [u8], rels: I) -> Result<Self, ()>
-        where I: Iterator<Item = &'b RelData<Offsets::Word, Offsets>>,
+        where I: Iterator,
+              I::Item: Borrow<RelDataRaw<Offsets>>,
               Self: Sized,
               Offsets: 'b {
         match Self::create_split(buf, rels) {
@@ -1244,12 +1246,12 @@ impl<'a, B, Offsets> From<Rel<'a, B, Offsets>>
           B: ByteOrder {
     #[inline]
     fn from(rel: Rel<'a, B, Offsets>) -> RelData<Offsets::Word, Offsets> {
-        let offset = Offsets::read_offset(&rel.data[Offsets::R_OFFSET_START ..
-                                                    Offsets::R_OFFSET_END],
-                                      rel.byteorder);
-        let (kind, sym) = Offsets::read_info(&rel.data[Offsets::R_INFO_START ..
-                                                       Offsets::R_INFO_END],
-                                       rel.byteorder);
+        let offset = Offsets::read_offset::<B>(
+            &rel.data[Offsets::R_OFFSET_START .. Offsets::R_OFFSET_END],
+        );
+        let (kind, sym) = Offsets::read_info::<B>(
+            &rel.data[Offsets::R_INFO_START .. Offsets::R_INFO_END],
+        );
 
         RelData { offset: offset, sym: sym, kind: kind }
     }
@@ -1480,15 +1482,15 @@ impl<'a, B, Offsets> From<Rela<'a, B, Offsets>>
           B: ByteOrder {
     #[inline]
     fn from(rel: Rela<'a, B, Offsets>) -> RelaDataRaw<Offsets> {
-        let offset = Offsets::read_offset(&rel.data[Offsets::R_OFFSET_START ..
-                                                    Offsets::R_OFFSET_END],
-                                        rel.byteorder);
-        let (kind, sym) = Offsets::read_info(&rel.data[Offsets::R_INFO_START ..
-                                                       Offsets::R_INFO_END],
-                                             rel.byteorder);
-        let addend = Offsets::read_addend(&rel.data[Offsets::R_ADDEND_START ..
-                                                    Offsets::R_ADDEND_END],
-                                          rel.byteorder);
+        let offset = Offsets::read_offset::<B>(
+            &rel.data[Offsets::R_OFFSET_START .. Offsets::R_OFFSET_END],
+        );
+        let (kind, sym) = Offsets::read_info::<B>(
+            &rel.data[Offsets::R_INFO_START .. Offsets::R_INFO_END],
+        );
+        let addend = Offsets::read_addend::<B>(
+            &rel.data[Offsets::R_ADDEND_START .. Offsets::R_ADDEND_END],
+        );
 
         RelaData { offset: offset, sym: sym, kind: kind, addend: addend }
     }
@@ -1549,7 +1551,7 @@ impl<'a, B, Offsets: RelOffsets> ExactSizeIterator for RelIter<'a, B, Offsets>
     where B: ByteOrder {
     #[inline]
     fn len(&self) -> usize {
-        self.data.len() / Offsets::REL_SIZE
+        (self.data.len() / Offsets::REL_SIZE) - self.idx
     }
 }
 
@@ -1598,7 +1600,7 @@ impl<'a, B, Offsets: RelaOffsets> ExactSizeIterator for RelaIter<'a, B, Offsets>
     where B: ByteOrder {
     #[inline]
     fn len(&self) -> usize {
-        self.data.len() / Offsets::RELA_SIZE
+        (self.data.len() / Offsets::RELA_SIZE) - self.idx
     }
 }
 

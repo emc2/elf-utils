@@ -368,9 +368,14 @@ fn test_SectionHdrs_from_bytes_iter_len() {
     let section_hdr: SectionHdrs<'_, LittleEndian, Elf32> =
         SectionHdrs::try_from(&ELF32_SECTION_HDR[0..])
         .expect("Expected success");
-    let iter = section_hdr.iter();
+    let mut iter = section_hdr.iter();
 
-    assert_eq!(iter.len(), ELF32_NUM_SECTION_HDRS);
+    for i in 0 .. ELF32_NUM_SECTION_HDRS {
+        assert_eq!(iter.len(), ELF32_NUM_SECTION_HDRS - i);
+        assert!(iter.next().is_some());
+    }
+
+    assert!(iter.next().is_none());
 }
 
 #[test]
