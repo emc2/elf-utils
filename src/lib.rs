@@ -25,6 +25,9 @@
 
 extern crate byteorder;
 
+#[cfg(feature = "alloc")]
+extern crate alloc;
+
 mod elf;
 
 pub mod dynamic;
