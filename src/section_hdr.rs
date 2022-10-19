@@ -1473,10 +1473,10 @@ fn create<'a, B, I, Offsets>(buf: &'a mut [u8], hdrs: I) ->
             match hdr {
                 SectionHdrData::Null => {
                     Offsets::write_word::<B>(&mut ent[Offsets::SH_NAME_START ..
-                                                 Offsets::SH_NAME_END],
+                                                      Offsets::SH_NAME_END],
                                              (0 as u8).into());
                     Offsets::write_word::<B>(&mut ent[Offsets::SH_KIND_START ..
-                                                 Offsets::SH_KIND_END],
+                                                      Offsets::SH_KIND_END],
                                              (0 as u8).into());
                     Offsets::write_offset::<B>(
                         &mut ent[Offsets::SH_FLAGS_START ..
@@ -1484,7 +1484,7 @@ fn create<'a, B, I, Offsets>(buf: &'a mut [u8], hdrs: I) ->
                         (0 as u8).into()
                     );
                     Offsets::write_addr::<B>(&mut ent[Offsets::SH_ADDR_START ..
-                                                 Offsets::SH_ADDR_END],
+                                                      Offsets::SH_ADDR_END],
                                              (0 as u8).into());
                     Offsets::write_offset::<B>(
                         &mut ent[Offsets::SH_OFFSET_START ..

@@ -12,18 +12,23 @@ use core::convert::TryFrom;
 use core::convert::TryInto;
 use core::fmt::Display;
 use core::fmt::Formatter;
+use crate::elf::ElfClass;
 use crate::elf::Elf32;
+use crate::reloc::Reloc;
 use crate::reloc::RelData;
 use crate::reloc::RelaData;
 use crate::reloc::RelocSymtabError;
 use crate::strtab::Strtab;
 use crate::strtab::WithStrtab;
 use crate::symtab::Symtab;
+use crate::symtab::SymBase;
 use crate::symtab::SymData;
 use crate::symtab::SymDataRaw;
 use crate::symtab::SymDataStr;
 use crate::symtab::SymDataStrData;
 use crate::symtab::WithSymtab;
+
+use core::marker::PhantomData;
 
 /// Relocation entries for 32-bit x86 architectures (aka. IA-32, i386).
 ///
@@ -345,6 +350,76 @@ impl Display for X86ToRelError {
         }
     }
 }
+
+pub enum X86RelocErr<Section> {
+    BadSymBase(SymBase<Section, u16>)
+}
+/*
+impl<Name, Section> Reloc<Elf32> for X86Reloc<SymData<Name, Section, Elf32>> {
+    type Error = X86RelocErr<Section>;
+
+    fn reloc(&self, mem: &mut [u8], base: u32) ->
+        Result<(), Self::Error> {
+        match self {
+            X86Reloc::None => Ok(()),
+            X86Reloc::Abs32 { sym: SymData { section: SymBase::Absolute,
+                                             value, .. },
+                              offset, addend } => {
+                let range = (*offset as usize) .. (*offset as usize) + 4;
+                let value = ((*value as i32) + addend) as u32;
+
+                Elf32::write_word::<LittleEndian>(&mut mem[range], value,
+                                                  PhantomData);
+
+                Ok(())
+            },
+            X86Reloc::Abs32 { sym: SymData { section, .. }, .. } =>
+                Err(X86RelocErr::BadSymBase(*section)),
+            X86Reloc::PC32 { offset, sym, addend } =>
+                write!(f, ".section[{}..{}] <- (&{} + {}) - (&.section + {})",
+                       offset, offset + 4, sym, addend, offset),
+            X86Reloc::Abs16 { offset, sym, addend } =>
+                write!(f, ".section[{}..{}] <- &{} + {}",
+                       offset, offset + 2, sym, addend),
+            X86Reloc::PC16 { offset, sym, addend } =>
+                write!(f, ".section[{}..{}] <- (&{} + {}) - (&.section + {})",
+                       offset, offset + 2, sym, addend, offset),
+            X86Reloc::Abs8 { offset, sym, addend } =>
+                write!(f, ".section[{}] <- &{} + {}",
+                       offset, sym, addend),
+            X86Reloc::PC8 { offset, sym, addend } =>
+                write!(f, ".section[{}] <- (&{} + {}) - (&.section + {})",
+                       offset, sym, addend, offset),
+            X86Reloc::GOT32 { offset, addend } =>
+                write!(f, ".section[{}..{}] <- &.got + {}",
+                       offset, offset + 4, addend),
+            X86Reloc::PLTRel { offset, addend, .. } =>
+                write!(f, ".section[{}..{}] <- (&.plt + {}) - (&.section + {})",
+                       offset, offset + 4, addend, offset),
+            X86Reloc::Copy { sym } => write!(f, "copy {}", sym),
+            X86Reloc::GlobalData { offset, sym } =>
+                write!(f, ".got[{}..{}] <- &{}", offset, offset + 4, sym),
+            X86Reloc::JumpSlot { offset, sym } =>
+                write!(f, ".plt[{}..{}] <- &{}", offset, offset + 4, sym),
+            X86Reloc::Relative { offset, addend } =>
+                write!(f, ".section[{}..{}] <- &base + {}",
+                       offset, offset + 4, addend),
+            X86Reloc::GOTRel { offset, sym, addend } =>
+                write!(f, ".section[{}..{}] <- (&{} + {}) - &.got",
+                       offset, offset + 4, sym, addend),
+            X86Reloc::GOTPC { offset, addend, .. } =>
+                write!(f, ".section[{}..{}] <- (&.got + {}) - (&.section + {})",
+                       offset, offset + 4, addend, offset),
+            X86Reloc::PLTAbs { offset, addend } =>
+                write!(f, ".section[{}..{}] <- &.plt + {}",
+                       offset, offset + 4, addend),
+            X86Reloc::Size { offset, sym, addend } =>
+                write!(f, ".section[{}..{}] <- sizeof({}) + {}",
+                       offset, offset + 4, sym, addend),
+        }
+    }
+}
+*/
 
 fn convert_to<Name>(offset: u32, sym: Name, kind: u8, addend: i32) ->
     Result<X86Reloc<Name>, X86RelocError> {

@@ -29,6 +29,7 @@ mod elf;
 
 pub mod dynamic;
 pub mod hash;
+pub mod load;
 pub mod note;
 pub mod prog_hdr;
 pub mod reloc;

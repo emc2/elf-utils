@@ -46,9 +46,9 @@ pub trait ElfClass: Copy + PartialEq + PartialOrd {
                From<u8> + From<u32> + Hash + Into<u32> + LowerHex +
                Ord + PartialEq + PartialOrd + TryFrom<usize> + TryInto<usize>;
     /// A memory address.
-    type Addr: Copy + Debug + Display + Eq + From<u8> + Hash +
-               LowerHex + PartialEq + PartialOrd + TryFrom<usize> +
-               TryInto<usize>;
+    type Addr: Add<Self::Offset, Output = Self::Addr> + Copy + Debug +
+               Display + Eq + From<u8> + Hash + LowerHex + Ord + PartialEq +
+               PartialOrd + TryFrom<usize> + TryInto<usize>;
     /// An offset (into the file or memory).
     type Offset: Add<Output = Self::Offset> + BitAnd<Output = Self::Offset> +
                  Copy + Debug + Display + Eq + From<u8> + Hash + LowerHex +
@@ -99,6 +99,12 @@ pub trait ElfClass: Copy + PartialEq + PartialOrd {
     fn write_offset<B: ByteOrder>(data: &mut [u8], val: Self::Offset);
     /// Write an addend value.
     fn write_addend<B: ByteOrder>(data: &mut [u8], val: Self::Addend);
+
+    /// Convert a raw pointer into an address value.
+    fn from_ptr<U>(ptr: *const U) -> Self::Addr;
+
+    /// Get the difference of `addr` and `base`.
+    fn addr_diff(base: Self::Addr, addr: Self::Addr) -> Self::Addend;
 }
 
 /// Trait for ELF header offsets for `Class`.  This defines the
@@ -2668,6 +2674,16 @@ impl ElfClass for Elf32 {
     fn write_addend<B: ByteOrder>(data: &mut [u8], val: Self::Addend) {
         B::write_i32(data, val)
     }
+
+    #[inline]
+    fn from_ptr<U>(ptr: *const U) -> Self::Addr {
+        ptr as u32
+    }
+
+    #[inline]
+    fn addr_diff(base: Self::Addr, addr: Self::Addr) -> Self::Addend {
+        (addr as i32) - (base as i32)
+    }
 }
 
 impl ElfClass for Elf64 {
@@ -2736,6 +2752,16 @@ impl ElfClass for Elf64 {
     #[inline]
     fn write_addend<B: ByteOrder>(data: &mut [u8], val: Self::Addend) {
         B::write_i64(data, val)
+    }
+
+    #[inline]
+    fn from_ptr<U>(ptr: *const U) -> Self::Addr {
+        ptr as u64
+    }
+
+    #[inline]
+    fn addr_diff(base: Self::Addr, addr: Self::Addr) -> Self::Addend {
+        (addr as i64) - (base as i64)
     }
 }
 

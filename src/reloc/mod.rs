@@ -186,6 +186,15 @@ pub trait RelaOffsets: RelOffsets {
     const RELA_SIZE_OFFSET: Self::Offset;
 }
 
+pub trait Reloc<Class: ElfClass> {
+    /// Type of errors from applying relocations.
+    type Error;
+
+    /// Perform the relocation.
+    fn reloc(&self, mem: &mut [u8], base: Class::Addr) ->
+        Result<(), Self::Error>;
+}
+
 /// In-place read-only ELF relocation table.
 ///
 /// An ELF relocation table is an array of entries describing

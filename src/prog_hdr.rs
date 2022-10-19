@@ -613,7 +613,17 @@ pub enum ProgHdrData<Offsets: ElfClass, Data, Str, Dyn> {
         align: Offsets::Offset
     }
 }
-
+/*
+/// Association data for a section (see
+/// [SectionHdrs](crate::section_hdr::SectionHdrs)) to a loadable
+/// segment.
+pub struct SectionSegment<Class: ElfClass> {
+    /// Index of the segment to which the section is associated.
+    segment: usize,
+    /// Offset into the segment of the section.
+    offset: Class::Offset
+}
+*/
 /// Type alias for [ProgHdrData] as projected from a [ProgHdr].
 ///
 /// This is obtained directly from the [TryFrom] insance acting on a
@@ -679,6 +689,16 @@ pub struct Segment<Word> {
     pub offset: Word,
     /// Size of the segment in bytes.
     pub size: Word
+}
+
+/// Allocation information for a loadable segment.
+pub struct AllocInfo<Class: ElfClass> {
+    /// The requested base address.
+    pub base: Class::Addr,
+    /// The requested memory size.
+    pub size: Class::Offset,
+    /// The requested segment alignment.
+    pub align: Class::Offset
 }
 
 #[inline]
@@ -1410,6 +1430,20 @@ impl<'a, B, Offsets: ProgHdrOffsets> ProgHdrs<'a, B, Offsets>
     pub fn iter(&self) -> ProgHdrIter<'a, B, Offsets> {
         ProgHdrIter { byteorder: PhantomData, offsets: PhantomData,
                       hdrs: self.hdrs, idx: 0 }
+    }
+}
+
+impl<Class, Data, Str, Dyn> ProgHdrData<Class, Data, Str, Dyn>
+    where Class: ElfClass {
+    /// Get the allocation information for the segment if it is loadable.
+    #[inline]
+    pub fn alloc_info(&self) -> Option<AllocInfo<Class>> {
+        match self {
+            ProgHdrData::Load { virt_addr, mem_size, align, .. } =>
+                Some(AllocInfo { base: *virt_addr, size: *mem_size,
+                                 align: *align }),
+            _ => None,
+        }
     }
 }
 
