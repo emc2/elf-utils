@@ -1449,6 +1449,32 @@ impl<'a, B, Offsets> WithStrtab<'a> for Sym<'a, B, Offsets>
     }
 }
 
+impl<'a, B, Offsets> WithStrtab<'a> for &'_ Sym<'a, B, Offsets>
+    where Offsets: 'a + SymOffsets,
+          B: ByteOrder {
+    type Result = SymDataStrData<'a, Offsets>;
+    type Error = StrSymError;
+
+    #[inline]
+    fn with_strtab(self, strtab: Strtab<'a>) ->
+        Result<Self::Result, Self::Error> {
+        self.clone().with_strtab(strtab)
+    }
+}
+
+impl<'a, B, Offsets> WithStrtab<'a> for &'_ mut Sym<'a, B, Offsets>
+    where Offsets: 'a + SymOffsets,
+          B: ByteOrder {
+    type Result = SymDataStrData<'a, Offsets>;
+    type Error = StrSymError;
+
+    #[inline]
+    fn with_strtab(self, strtab: Strtab<'a>) ->
+        Result<Self::Result, Self::Error> {
+        self.clone().with_strtab(strtab)
+    }
+}
+
 impl<'a, Offsets> TryFrom<SymDataStrData<'a, Offsets>>
     for SymDataStr<'a, Offsets>
     where Offsets: SymOffsets {
@@ -1470,6 +1496,55 @@ impl<'a, Offsets> TryFrom<SymDataStrData<'a, Offsets>>
     }
 }
 
+impl<'a, Offsets> TryFrom<&'_ mut SymDataStrData<'a, Offsets>>
+    for SymDataStr<'a, Offsets>
+    where Offsets: SymOffsets {
+    type Error = &'a [u8];
+
+    #[inline]
+    fn try_from(sym: &'_ mut SymDataStrData<'a, Offsets>) ->
+        Result<SymDataStr<'a, Offsets>, &'a [u8]> {
+        SymDataStr::try_from(sym.clone())
+    }
+}
+
+impl<'a, Offsets> TryFrom<&'_ SymDataStrData<'a, Offsets>>
+    for SymDataStr<'a, Offsets>
+    where Offsets: SymOffsets {
+    type Error = &'a [u8];
+
+    #[inline]
+    fn try_from(sym: &'_ SymDataStrData<'a, Offsets>) ->
+        Result<SymDataStr<'a, Offsets>, &'a [u8]> {
+        SymDataStr::try_from(sym.clone())
+    }
+}
+
+impl<'a, B, Offsets> TryFrom<&'_ Sym<'a, B, Offsets>> for SymDataRaw<Offsets>
+    where Offsets: SymOffsets,
+          B: ByteOrder {
+    type Error = SymError;
+
+    #[inline]
+    fn try_from(sym: &'_ Sym<'a, B, Offsets>) ->
+        Result<SymDataRaw<Offsets>, Self::Error> {
+        project::<B, Offsets>(sym.sym)
+    }
+}
+
+impl<'a, B, Offsets> TryFrom<&'_ mut Sym<'a, B, Offsets>>
+    for SymDataRaw<Offsets>
+    where Offsets: SymOffsets,
+          B: ByteOrder {
+    type Error = SymError;
+
+    #[inline]
+    fn try_from(sym: &'_ mut Sym<'a, B, Offsets>) ->
+        Result<SymDataRaw<Offsets>, Self::Error> {
+        project::<B, Offsets>(sym.sym)
+    }
+}
+
 impl<'a, B, Offsets> TryFrom<Sym<'a, B, Offsets>> for SymDataRaw<Offsets>
     where Offsets: SymOffsets,
           B: ByteOrder {
@@ -1482,8 +1557,7 @@ impl<'a, B, Offsets> TryFrom<Sym<'a, B, Offsets>> for SymDataRaw<Offsets>
     }
 }
 
-impl<'a, Name, Section, Class> WithStrtab<'a>
-    for SymData<Name, Section, Class>
+impl<'a, Name, Section, Class> WithStrtab<'a> for SymData<Name, Section, Class>
     where Class: ElfClass,
           Name: Copy + TryInto<usize> {
     type Error = Name;
@@ -1499,9 +1573,9 @@ impl<'a, Name, Section, Class> WithStrtab<'a>
         match name {
             Some(name) => {
                 match strtab.idx(name) {
-                    Ok(name) => Ok(SymData { name: Some(Ok(name)), value: value,
-                                             size: size, bind: bind, kind: kind,
-                                             section: section }),
+                    Ok(name) => Ok(SymData { name: Some(Ok(name)), size: size,
+                                             kind: kind, value: value,
+                                             section: section, bind: bind }),
                     Err(StrtabIdxError::UTF8Decode(data)) => {
                         Ok(SymData { name: Some(Err(data)), value: value,
                                      size: size, bind: bind, kind: kind,
@@ -1515,6 +1589,36 @@ impl<'a, Name, Section, Class> WithStrtab<'a>
                              bind: bind, kind: kind, section: section })
             }
         }
+    }
+}
+
+impl<'a, Name, Section, Class> WithStrtab<'a>
+    for &'_ mut SymData<Name, Section, Class>
+    where Class: ElfClass,
+          Name: Copy + TryInto<usize>,
+          Section: Clone {
+    type Error = Name;
+    type Result = SymData<Result<&'a str, &'a [u8]>, Section, Class>;
+
+    #[inline]
+    fn with_strtab(self, strtab: Strtab<'a>) ->
+        Result<Self::Result, Self::Error> {
+        self.clone().with_strtab(strtab)
+    }
+}
+
+impl<'a, Name, Section, Class> WithStrtab<'a>
+    for &'_ SymData<Name, Section, Class>
+    where Class: ElfClass,
+          Name: Copy + TryInto<usize>,
+          Section: Clone {
+    type Error = Name;
+    type Result = SymData<Result<&'a str, &'a [u8]>, Section, Class>;
+
+    #[inline]
+    fn with_strtab(self, strtab: Strtab<'a>) ->
+        Result<Self::Result, Self::Error> {
+        self.clone().with_strtab(strtab)
     }
 }
 
