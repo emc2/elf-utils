@@ -1392,7 +1392,6 @@ impl<'a, B, Offsets> Dynamic<'a, B, Offsets>
     }
 }
 
-
 impl<'a, B, Offsets> TryFrom<DynamicEnt<'a, B, Offsets>>
     for DynamicEntDataRaw<Offsets>
     where Offsets: DynamicOffsets,
@@ -1401,6 +1400,34 @@ impl<'a, B, Offsets> TryFrom<DynamicEnt<'a, B, Offsets>>
 
     #[inline]
     fn try_from(ent: DynamicEnt<'a, B, Offsets>) ->
+        Result<DynamicEntData<Offsets::Offset, Offsets::Offset, Offsets>,
+               Self::Error> {
+        project::<B, Offsets>(ent.data)
+    }
+}
+
+impl<'a, B, Offsets> TryFrom<&'_ DynamicEnt<'a, B, Offsets>>
+    for DynamicEntDataRaw<Offsets>
+    where Offsets: DynamicOffsets,
+          B: ByteOrder {
+    type Error = DynamicEntDataError<Offsets>;
+
+    #[inline]
+    fn try_from(ent: &'_ DynamicEnt<'a, B, Offsets>) ->
+        Result<DynamicEntData<Offsets::Offset, Offsets::Offset, Offsets>,
+               Self::Error> {
+        project::<B, Offsets>(ent.data)
+    }
+}
+
+impl<'a, B, Offsets> TryFrom<&'_ mut DynamicEnt<'a, B, Offsets>>
+    for DynamicEntDataRaw<Offsets>
+    where Offsets: DynamicOffsets,
+          B: ByteOrder {
+    type Error = DynamicEntDataError<Offsets>;
+
+    #[inline]
+    fn try_from(ent: &'_ mut DynamicEnt<'a, B, Offsets>) ->
         Result<DynamicEntData<Offsets::Offset, Offsets::Offset, Offsets>,
                Self::Error> {
         project::<B, Offsets>(ent.data)
@@ -1504,10 +1531,37 @@ impl<'a, B, Offsets> WithStrtab<'a> for DynamicEnt<'a, B, Offsets>
     }
 }
 
-impl<'a, Name, Idx, Class> WithStrtab<'a>
-    for DynamicEntData<Name, Idx, Class>
+impl<'a, B, Offsets> WithStrtab<'a> for &'_ DynamicEnt<'a, B, Offsets>
+    where Offsets: DynamicOffsets,
+          B: ByteOrder {
+    type Error = DynamicEntStrsError<Offsets>;
+    type Result = DynamicEntData<Result<&'a str, &'a [u8]>,
+                                 Offsets::Offset, Offsets>;
+
+    #[inline]
+    fn with_strtab(self, strtab: Strtab<'a>) ->
+        Result<Self::Result, Self::Error> {
+        self.clone().with_strtab(strtab.clone())
+    }
+}
+
+impl<'a, B, Offsets> WithStrtab<'a> for &'_ mut DynamicEnt<'a, B, Offsets>
+    where Offsets: DynamicOffsets,
+          B: ByteOrder {
+    type Error = DynamicEntStrsError<Offsets>;
+    type Result = DynamicEntData<Result<&'a str, &'a [u8]>,
+                                 Offsets::Offset, Offsets>;
+
+    #[inline]
+    fn with_strtab(self, strtab: Strtab<'a>) ->
+        Result<Self::Result, Self::Error> {
+        self.clone().with_strtab(strtab)
+    }
+}
+
+impl<'a, Name, Idx, Class> WithStrtab<'a> for DynamicEntData<Name, Idx, Class>
     where Class: ElfClass,
-          Name: Copy + TryInto<usize> {
+          Name: TryInto<usize> + Copy {
     type Error = Name;
     type Result = DynamicEntData<Result<&'a str, &'a [u8]>, Idx, Class>;
 
@@ -1597,10 +1651,41 @@ impl<'a, Name, Idx, Class> WithStrtab<'a>
     }
 }
 
+impl<'a, Name, Idx, Class> WithStrtab<'a>
+    for &'_ DynamicEntData<Name, Idx, Class>
+    where Class: ElfClass,
+          Name: Copy + TryInto<usize>,
+          Idx: Copy {
+    type Error = Name;
+    type Result = DynamicEntData<Result<&'a str, &'a [u8]>, Idx, Class>;
+
+    #[inline]
+    fn with_strtab(self, strtab: Strtab<'a>) ->
+        Result<Self::Result, Self::Error> {
+        self.clone().with_strtab(strtab)
+    }
+}
+
+impl<'a, Name, Idx, Class> WithStrtab<'a>
+    for &'_ mut DynamicEntData<Name, Idx, Class>
+    where Class: ElfClass,
+          Name: Copy + TryInto<usize>,
+          Idx: Copy {
+    type Error = Name;
+    type Result = DynamicEntData<Result<&'a str, &'a [u8]>, Idx, Class>;
+
+    #[inline]
+    fn with_strtab(self, strtab: Strtab<'a>) ->
+        Result<Self::Result, Self::Error> {
+        self.clone().with_strtab(strtab)
+    }
+}
+
 impl<'a, Idx, Class> TryFrom<DynamicEntData<Result<&'a str, &'a [u8]>,
                                             Idx, Class>>
     for DynamicEntData<&'a str, Idx, Class>
-    where Class: ElfClass {
+    where Class: ElfClass,
+          Idx: Copy {
     type Error = &'a [u8];
 
     #[inline]
@@ -1678,6 +1763,36 @@ impl<'a, Idx, Class> TryFrom<DynamicEntData<Result<&'a str, &'a [u8]>,
             DynamicEntData::Unknown { tag, info } =>
                 Ok(DynamicEntData::Unknown { tag: tag, info: info }),
         }
+    }
+}
+
+impl<'a, Idx, Class> TryFrom<&'_ DynamicEntData<Result<&'a str, &'a [u8]>,
+                                                Idx, Class>>
+    for DynamicEntData<&'a str, Idx, Class>
+    where Class: ElfClass,
+          Idx: Copy {
+    type Error = &'a [u8];
+
+    #[inline]
+    fn try_from(data: &'_ DynamicEntData<Result<&'a str, &'a [u8]>,
+                                         Idx, Class>) ->
+        Result<DynamicEntData<&'a str, Idx, Class>, Self::Error> {
+        DynamicEntData::try_from(data.clone())
+    }
+}
+
+impl<'a, Idx, Class> TryFrom<&'_ mut DynamicEntData<Result<&'a str, &'a [u8]>,
+                                                    Idx, Class>>
+    for DynamicEntData<&'a str, Idx, Class>
+    where Class: ElfClass,
+          Idx: Copy {
+    type Error = &'a [u8];
+
+    #[inline]
+    fn try_from(data: &'_ mut DynamicEntData<Result<&'a str, &'a [u8]>,
+                                             Idx, Class>) ->
+        Result<DynamicEntData<&'a str, Idx, Class>, Self::Error> {
+        DynamicEntData::try_from(data.clone())
     }
 }
 
