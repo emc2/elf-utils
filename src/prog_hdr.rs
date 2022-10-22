@@ -682,6 +682,20 @@ pub enum ProgHdrError<Offsets: ProgHdrOffsets> {
     }
 }
 
+/// Errors that can occur when projecting a [ProgHdrDataBufs] to a
+/// [ProgHdrDataFull].
+#[derive(Clone, Copy, Debug, Hash, Eq, Ord, PartialEq, PartialOrd)]
+pub enum ProgHdrProjectError<'a> {
+    Dynamic {
+        /// The [DynamicError].
+        err: DynamicError
+    },
+    BadUTF8 {
+        /// The bad UTF-8 string data.
+        data: &'a [u8]
+    }
+}
+
 /// Offset and size of segment data.
 #[derive(Clone, Copy, Debug, Hash, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Segment<Word> {
@@ -1447,8 +1461,7 @@ impl<Class, Data, Str, Dyn> ProgHdrData<Class, Data, Str, Dyn>
     }
 }
 
-impl<'a, Offsets> WithElfData<'a>
-    for ProgHdrDataRaw<Offsets>
+impl<'a, Offsets> WithElfData<'a> for ProgHdrDataRaw<Offsets>
     where Offsets: ProgHdrOffsets {
     type Result = ProgHdrDataBufs<'a, Offsets>;
     type Error = ProgHdrError<Offsets>;
@@ -1461,7 +1474,7 @@ impl<'a, Offsets> WithElfData<'a>
             ProgHdrData::Load { content: Segment { offset, size },
                                 virt_addr, phys_addr, mem_size,
                                 align, read, write, exec } => {
-                match (offset.try_into(), size.try_into()) {
+                match ((offset).try_into(), (size).try_into()) {
                     (Ok(offset), Ok(size)) if offset + size <= data.len() =>
                         Ok(ProgHdrData::Load {
                             virt_addr: virt_addr, phys_addr: phys_addr,
@@ -1475,7 +1488,7 @@ impl<'a, Offsets> WithElfData<'a>
             },
             ProgHdrData::Dynamic { content: Segment { offset, size },
                                    virt_addr, phys_addr } => {
-                match (offset.try_into(), size.try_into()) {
+                match ((offset).try_into(), (size).try_into()) {
                     (Ok(offset), Ok(size)) if offset + size <= data.len() =>
                         Ok(ProgHdrData::Dynamic {
                             virt_addr: virt_addr, phys_addr: phys_addr,
@@ -1487,7 +1500,7 @@ impl<'a, Offsets> WithElfData<'a>
             },
             ProgHdrData::Interp { str: Segment { offset, size },
                                   virt_addr, phys_addr } => {
-                match (offset.try_into(), size.try_into()) {
+                match ((offset).try_into(), (size).try_into()) {
                     (Ok(offset), Ok(size)) if offset + size <= data.len() =>
                         Ok(ProgHdrData::Interp {
                             virt_addr: virt_addr, phys_addr: phys_addr,
@@ -1499,7 +1512,7 @@ impl<'a, Offsets> WithElfData<'a>
             },
             ProgHdrData::Note { content: Segment { offset, size },
                                 virt_addr, phys_addr } => {
-                match (offset.try_into(), size.try_into()) {
+                match ((offset).try_into(), (size).try_into()) {
                     (Ok(offset), Ok(size)) if offset + size <= data.len() =>
                         Ok(ProgHdrData::Note {
                             virt_addr: virt_addr, phys_addr: phys_addr,
@@ -1512,7 +1525,7 @@ impl<'a, Offsets> WithElfData<'a>
             ProgHdrData::Shlib => Ok(ProgHdrData::Shlib),
             ProgHdrData::ProgHdr { content: Segment { offset, size },
                                    virt_addr, phys_addr } => {
-                match (offset.try_into(), size.try_into()) {
+                match ((offset).try_into(), (size).try_into()) {
                     (Ok(offset), Ok(size)) if offset + size <= data.len() =>
                         Ok(ProgHdrData::ProgHdr {
                             virt_addr: virt_addr, phys_addr: phys_addr,
@@ -1532,6 +1545,30 @@ impl<'a, Offsets> WithElfData<'a>
                 })
             }
         }
+    }
+}
+
+impl<'a, Offsets> WithElfData<'a> for &'_ ProgHdrDataRaw<Offsets>
+    where Offsets: ProgHdrOffsets {
+    type Result = ProgHdrDataBufs<'a, Offsets>;
+    type Error = ProgHdrError<Offsets>;
+
+    #[inline]
+    fn with_elf_data(self, data: &'a [u8]) ->
+        Result<Self::Result, Self::Error> {
+        self.clone().with_elf_data(data)
+    }
+}
+
+impl<'a, Offsets> WithElfData<'a> for &'_ mut ProgHdrDataRaw<Offsets>
+    where Offsets: ProgHdrOffsets {
+    type Result = ProgHdrDataBufs<'a, Offsets>;
+    type Error = ProgHdrError<Offsets>;
+
+    #[inline]
+    fn with_elf_data(self, data: &'a [u8]) ->
+        Result<Self::Result, Self::Error> {
+        self.clone().with_elf_data(data)
     }
 }
 
@@ -1581,8 +1618,33 @@ impl<'a, B, Offsets> TryFrom<ProgHdr<'a, B, Offsets>>
 
     #[inline]
     fn try_from(ent: ProgHdr<'a, B, Offsets>) ->
-        Result<ProgHdrDataRaw<Offsets>,
-               Self::Error> {
+        Result<ProgHdrDataRaw<Offsets>, Self::Error> {
+        project::<B, Offsets>(ent.ent)
+    }
+}
+
+impl<'a, B, Offsets> TryFrom<&'_ ProgHdr<'a, B, Offsets>>
+    for ProgHdrDataRaw<Offsets>
+    where Offsets: ProgHdrOffsets,
+          B: ByteOrder {
+    type Error = ProgHdrError<Offsets>;
+
+    #[inline]
+    fn try_from(ent: &'_ ProgHdr<'a, B, Offsets>) ->
+        Result<ProgHdrDataRaw<Offsets>, Self::Error> {
+        project::<B, Offsets>(ent.ent)
+    }
+}
+
+impl<'a, B, Offsets> TryFrom<&'_ mut ProgHdr<'a, B, Offsets>>
+    for ProgHdrDataRaw<Offsets>
+    where Offsets: ProgHdrOffsets,
+          B: ByteOrder {
+    type Error = ProgHdrError<Offsets>;
+
+    #[inline]
+    fn try_from(ent: &'_ mut ProgHdr<'a, B, Offsets>) ->
+        Result<ProgHdrDataRaw<Offsets>, Self::Error> {
         project::<B, Offsets>(ent.ent)
     }
 }
@@ -1595,8 +1657,33 @@ impl<'a, B, Offsets> TryFrom<ProgHdrMut<'a, B, Offsets>>
 
     #[inline]
     fn try_from(ent: ProgHdrMut<'a, B, Offsets>) ->
-        Result<ProgHdrDataRaw<Offsets>,
-               Self::Error> {
+        Result<ProgHdrDataRaw<Offsets>, Self::Error> {
+        project::<B, Offsets>(ent.ent)
+    }
+}
+
+impl<'a, B, Offsets> TryFrom<&'_ ProgHdrMut<'a, B, Offsets>>
+    for ProgHdrDataRaw<Offsets>
+    where Offsets: ProgHdrOffsets,
+          B: ByteOrder {
+    type Error = ProgHdrError<Offsets>;
+
+    #[inline]
+    fn try_from(ent: &'_ ProgHdrMut<'a, B, Offsets>) ->
+        Result<ProgHdrDataRaw<Offsets>, Self::Error> {
+        project::<B, Offsets>(ent.ent)
+    }
+}
+
+impl<'a, B, Offsets> TryFrom<&'_ mut ProgHdrMut<'a, B, Offsets>>
+    for ProgHdrDataRaw<Offsets>
+    where Offsets: ProgHdrOffsets,
+          B: ByteOrder {
+    type Error = ProgHdrError<Offsets>;
+
+    #[inline]
+    fn try_from(ent: &'_ mut ProgHdrMut<'a, B, Offsets>) ->
+        Result<ProgHdrDataRaw<Offsets>, Self::Error> {
         project::<B, Offsets>(ent.ent)
     }
 }
@@ -1616,28 +1703,72 @@ impl<'a, B, Offsets, Data, Str> TryFrom<ProgHdrData<Offsets, Data,
             ProgHdrData::Null => Ok(ProgHdrData::Null),
             ProgHdrData::Load { content, virt_addr, phys_addr, mem_size,
                                 align, read, write, exec } =>
-                Ok(ProgHdrData::Load { content, virt_addr, phys_addr, mem_size,
-                                       align, read, write, exec }),
+                Ok(ProgHdrData::Load { content: content, virt_addr: virt_addr,
+                                       phys_addr: phys_addr, align: align,
+                                       mem_size: mem_size, read: read,
+                                       write: write, exec: exec }),
             ProgHdrData::Dynamic { content, virt_addr, phys_addr } =>
                 match Dynamic::try_from(content) {
                     Ok(content) =>
-                        Ok(ProgHdrData::Dynamic { content, virt_addr,
-                                                  phys_addr }),
+                        Ok(ProgHdrData::Dynamic { content: content,
+                                                  virt_addr: virt_addr,
+                                                  phys_addr: phys_addr }),
                     Err(err) => Err(err)
                 },
             ProgHdrData::Interp { str, virt_addr, phys_addr } =>
-                Ok(ProgHdrData::Interp { str, virt_addr, phys_addr }),
+                Ok(ProgHdrData::Interp { str: str, virt_addr: virt_addr,
+                                         phys_addr: phys_addr }),
             ProgHdrData::Note { content, virt_addr, phys_addr } =>
-                Ok(ProgHdrData::Note { content, virt_addr, phys_addr }),
+                Ok(ProgHdrData::Note { content: content, virt_addr: virt_addr,
+                                       phys_addr: phys_addr }),
             ProgHdrData::Shlib => Ok(ProgHdrData::Shlib),
             ProgHdrData::ProgHdr { content, virt_addr, phys_addr } =>
-                Ok(ProgHdrData::ProgHdr { content, virt_addr, phys_addr }),
+                Ok(ProgHdrData::ProgHdr { content: content,
+                                          virt_addr: virt_addr,
+                                          phys_addr: phys_addr }),
             ProgHdrData::Unknown { tag, flags, offset, file_size, mem_size,
                                    phys_addr, virt_addr, align } =>
-                Ok(ProgHdrData::Unknown { tag, flags, offset, file_size,
-                                          mem_size, phys_addr, virt_addr,
-                                          align })
+                Ok(ProgHdrData::Unknown { tag: tag, flags: flags,
+                                          offset: offset, align: align,
+                                          file_size: file_size,
+                                          mem_size: mem_size,
+                                          phys_addr: phys_addr,
+                                          virt_addr: virt_addr })
         }
+    }
+}
+
+impl<'a, B, Offsets, Data, Str> TryFrom<&'_ ProgHdrData<Offsets, Data,
+                                                        Str, &'a [u8]>>
+    for ProgHdrData<Offsets, Data, Str, Dynamic<'a, B, Offsets>>
+    where Offsets: ProgHdrOffsets + DynamicOffsets,
+          B: ByteOrder,
+          Data: Clone,
+          Str: Clone {
+    type Error = DynamicError;
+
+    #[inline]
+    fn try_from(ent: &'_ ProgHdrData<Offsets, Data, Str, &'a [u8]>) ->
+        Result<ProgHdrData<Offsets, Data, Str, Dynamic<'a, B, Offsets>>,
+               Self::Error> {
+        ProgHdrData::try_from(ent.clone())
+    }
+}
+
+impl<'a, B, Offsets, Data, Str> TryFrom<&'_ mut ProgHdrData<Offsets, Data,
+                                                            Str, &'a [u8]>>
+    for ProgHdrData<Offsets, Data, Str, Dynamic<'a, B, Offsets>>
+    where Offsets: ProgHdrOffsets + DynamicOffsets,
+          B: ByteOrder,
+          Data: Clone,
+          Str: Clone {
+    type Error = DynamicError;
+
+    #[inline]
+    fn try_from(ent: &'_ mut ProgHdrData<Offsets, Data, Str, &'a [u8]>) ->
+        Result<ProgHdrData<Offsets, Data, Str, Dynamic<'a, B, Offsets>>,
+               Self::Error> {
+        ProgHdrData::try_from(ent.clone())
     }
 }
 
@@ -1648,33 +1779,159 @@ impl<'a, Offsets, Data, Dyn> TryFrom<ProgHdrData<Offsets, Data, &'a [u8], Dyn>>
 
     #[inline]
     fn try_from(ent: ProgHdrData<Offsets, Data, &'a [u8], Dyn>) ->
-        Result<ProgHdrData<Offsets, Data, &'a str, Dyn>,
+        Result<ProgHdrData<Offsets, Data, &'a str, Dyn>, Self::Error> {
+        match ent {
+            ProgHdrData::Null => Ok(ProgHdrData::Null),
+            ProgHdrData::Load { content, virt_addr, phys_addr, mem_size,
+                                align, read, write, exec } =>
+                Ok(ProgHdrData::Load { content: content, virt_addr: virt_addr,
+                                       phys_addr: phys_addr, align: align,
+                                       mem_size: mem_size, read: read,
+                                       write: write, exec: exec }),
+            ProgHdrData::Dynamic { content, virt_addr, phys_addr } =>
+                Ok(ProgHdrData::Dynamic { content: content,
+                                          virt_addr: virt_addr,
+                                          phys_addr: phys_addr }),
+            ProgHdrData::Interp { str, virt_addr, phys_addr } =>
+                match from_utf8(str) {
+                    Ok(str) => Ok(ProgHdrData::Interp { virt_addr: virt_addr,
+                                                        phys_addr: phys_addr,
+                                                        str }),
+                    Err(_) => Err(str)
+                }
+            ProgHdrData::Note { content, virt_addr, phys_addr } =>
+                Ok(ProgHdrData::Note { content: content, virt_addr: virt_addr,
+                                       phys_addr: phys_addr }),
+            ProgHdrData::Shlib => Ok(ProgHdrData::Shlib),
+            ProgHdrData::ProgHdr { content, virt_addr, phys_addr } =>
+                Ok(ProgHdrData::ProgHdr { content: content,
+                                          virt_addr: virt_addr,
+                                          phys_addr: phys_addr }),
+            ProgHdrData::Unknown { tag, flags, offset, file_size, mem_size,
+                                   phys_addr, virt_addr, align } =>
+                Ok(ProgHdrData::Unknown { tag: tag, flags: flags,
+                                          offset: offset, align: align,
+                                          file_size: file_size,
+                                          mem_size: mem_size,
+                                          phys_addr: phys_addr,
+                                          virt_addr: virt_addr })
+        }
+    }
+}
+
+impl<'a, Offsets, Data, Dyn> TryFrom<&'_ ProgHdrData<Offsets, Data,
+                                                     &'a [u8], Dyn>>
+    for ProgHdrData<Offsets, Data, &'a str, Dyn>
+    where Offsets: ProgHdrOffsets,
+          Data: Clone,
+          Dyn: Clone {
+    type Error = &'a [u8];
+
+    #[inline]
+    fn try_from(ent: &'_ ProgHdrData<Offsets, Data, &'a [u8], Dyn>) ->
+        Result<ProgHdrData<Offsets, Data, &'a str, Dyn>, Self::Error> {
+        ProgHdrData::try_from(ent.clone())
+    }
+}
+
+impl<'a, Offsets, Data, Dyn> TryFrom<&'_ mut ProgHdrData<Offsets, Data,
+                                                         &'a [u8], Dyn>>
+    for ProgHdrData<Offsets, Data, &'a str, Dyn>
+    where Offsets: ProgHdrOffsets,
+          Data: Clone,
+          Dyn: Clone {
+    type Error = &'a [u8];
+
+    #[inline]
+    fn try_from(ent: &'_ mut ProgHdrData<Offsets, Data, &'a [u8], Dyn>) ->
+        Result<ProgHdrData<Offsets, Data, &'a str, Dyn>, Self::Error> {
+        ProgHdrData::try_from(ent.clone())
+    }
+}
+
+impl<'a, B, Offsets, Data> TryFrom<ProgHdrData<Offsets, Data,
+                                               &'a [u8], &'a [u8]>>
+    for ProgHdrData<Offsets, Data, &'a str, Dynamic<'a, B, Offsets>>
+    where Offsets: ProgHdrOffsets + DynamicOffsets,
+          B: ByteOrder {
+    type Error = ProgHdrProjectError<'a>;
+
+    #[inline]
+    fn try_from(ent: ProgHdrData<Offsets, Data, &'a [u8], &'a [u8]>) ->
+        Result<ProgHdrData<Offsets, Data, &'a str, Dynamic<'a, B, Offsets>>,
                Self::Error> {
         match ent {
             ProgHdrData::Null => Ok(ProgHdrData::Null),
             ProgHdrData::Load { content, virt_addr, phys_addr, mem_size,
                                 align, read, write, exec } =>
-                Ok(ProgHdrData::Load { content, virt_addr, phys_addr, mem_size,
-                                       align, read, write, exec }),
+                Ok(ProgHdrData::Load { content: content, virt_addr: virt_addr,
+                                       phys_addr: phys_addr, align: align,
+                                       mem_size: mem_size, read: read,
+                                       write: write, exec: exec }),
             ProgHdrData::Dynamic { content, virt_addr, phys_addr } =>
-                Ok(ProgHdrData::Dynamic { content, virt_addr, phys_addr }),
+                match Dynamic::try_from(content) {
+                    Ok(content) =>
+                        Ok(ProgHdrData::Dynamic { content: content,
+                                                  virt_addr: virt_addr,
+                                                  phys_addr: phys_addr }),
+                    Err(err) => Err(ProgHdrProjectError::Dynamic { err: err })
+                },
             ProgHdrData::Interp { str, virt_addr, phys_addr } =>
                 match from_utf8(str) {
-                    Ok(str) => Ok(ProgHdrData::Interp { str, virt_addr,
-                                                        phys_addr }),
-                    Err(_) => Err(str)
+                    Ok(str) => Ok(ProgHdrData::Interp { virt_addr: virt_addr,
+                                                        phys_addr: phys_addr,
+                                                        str }),
+                    Err(_) => Err(ProgHdrProjectError::BadUTF8 { data: str })
                 }
             ProgHdrData::Note { content, virt_addr, phys_addr } =>
-                Ok(ProgHdrData::Note { content, virt_addr, phys_addr }),
+                Ok(ProgHdrData::Note { content: content, virt_addr: virt_addr,
+                                       phys_addr: phys_addr }),
             ProgHdrData::Shlib => Ok(ProgHdrData::Shlib),
             ProgHdrData::ProgHdr { content, virt_addr, phys_addr } =>
-                Ok(ProgHdrData::ProgHdr { content, virt_addr, phys_addr }),
+                Ok(ProgHdrData::ProgHdr { content: content,
+                                          virt_addr: virt_addr,
+                                          phys_addr: phys_addr }),
             ProgHdrData::Unknown { tag, flags, offset, file_size, mem_size,
                                    phys_addr, virt_addr, align } =>
-                Ok(ProgHdrData::Unknown { tag, flags, offset, file_size,
-                                          mem_size, phys_addr, virt_addr,
-                                          align })
+                Ok(ProgHdrData::Unknown { tag: tag, flags: flags,
+                                          offset: offset, align: align,
+                                          file_size: file_size,
+                                          mem_size: mem_size,
+                                          phys_addr: phys_addr,
+                                          virt_addr: virt_addr })
         }
+    }
+}
+
+impl<'a, B, Offsets, Data> TryFrom<&'_ ProgHdrData<Offsets, Data,
+                                                   &'a [u8], &'a [u8]>>
+    for ProgHdrData<Offsets, Data, &'a str, Dynamic<'a, B, Offsets>>
+    where Offsets: ProgHdrOffsets + DynamicOffsets,
+          B: ByteOrder,
+          Data: Clone {
+    type Error = ProgHdrProjectError<'a>;
+
+    #[inline]
+    fn try_from(ent: &'_ ProgHdrData<Offsets, Data, &'a [u8], &'a [u8]>) ->
+        Result<ProgHdrData<Offsets, Data, &'a str, Dynamic<'a, B, Offsets>>,
+               Self::Error> {
+        ProgHdrData::try_from(ent.clone())
+    }
+}
+
+impl<'a, B, Offsets, Data> TryFrom<&'_ mut ProgHdrData<Offsets, Data,
+                                                       &'a [u8], &'a [u8]>>
+    for ProgHdrData<Offsets, Data, &'a str, Dynamic<'a, B, Offsets>>
+    where Offsets: ProgHdrOffsets + DynamicOffsets,
+          B: ByteOrder,
+          Data: Clone {
+    type Error = ProgHdrProjectError<'a>;
+
+    #[inline]
+    fn try_from(ent: &'_ mut ProgHdrData<Offsets, Data, &'a [u8], &'a [u8]>) ->
+        Result<ProgHdrData<Offsets, Data, &'a str, Dynamic<'a, B, Offsets>>,
+               Self::Error> {
+        ProgHdrData::try_from(ent.clone())
     }
 }
 
@@ -1801,12 +2058,36 @@ impl<Offsets, Data, Str, Dyn> Display for ProgHdrData<Offsets, Data, Str, Dyn>
     }
 }
 
-    impl Display for ProgHdrsError {
+impl Display for ProgHdrsError {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
         match self {
             ProgHdrsError::BadSize(size) =>
                 write!(f, "bad program header table size {}",
                        size)
+        }
+    }
+}
+
+impl<Offsets> Display for ProgHdrError<Offsets>
+    where Offsets: ProgHdrOffsets {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
+        match self {
+            ProgHdrError::DataOutOfBounds { offset, size } =>
+                write!(f, "data offset {} outside bounds {}", offset, size),
+            ProgHdrError::EntryOutOfBounds { idx } => {
+                write!(f, "section index out of bounds: {}", idx)
+            }
+        }
+    }
+}
+
+impl<'a> Display for ProgHdrProjectError<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
+        match self {
+            ProgHdrProjectError::Dynamic { err } => err.fmt(f),
+            ProgHdrProjectError::BadUTF8 { .. } => {
+                write!(f, "bad UTF-8 string data")
+            }
         }
     }
 }
