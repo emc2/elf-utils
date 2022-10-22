@@ -52,21 +52,22 @@ impl<'a, Class: ElfClass> LoadBuf<'a, Class> {
 
     /// Attempt to load data from a [ProgHdrData] into this `LoadBuf`.
     #[inline]
-    pub fn load<S, D>(&mut self, hdr: ProgHdrData<Class, &'a [u8], S, D>) ->
+    pub fn load<S, D>(&mut self, hdr: &ProgHdrData<Class, &'a [u8], S, D>) ->
         Result<(), LoadErr<Class>> {
         match hdr {
             ProgHdrData::Load { content, mem_size, virt_addr, .. } =>
-                match mem_size.try_into() {
+                match (*mem_size).try_into() {
                     Ok(mem_size) => if self.mem.len() >= mem_size {
-                        self.mem.clone_from_slice(content);
+                        (&mut self.mem[..content.len()])
+                            .clone_from_slice(content);
                         // Generate the adjustment.
-                        self.orig_addr = virt_addr;
+                        self.orig_addr = *virt_addr;
 
                         Ok(())
                     } else {
                         Err(LoadErr::TooShort(mem_size))
                     },
-                    Err(_) => Err(LoadErr::BadMemSize(mem_size))
+                    Err(_) => Err(LoadErr::BadMemSize(*mem_size))
                 }
             _ => Err(LoadErr::BadHdr)
         }
@@ -106,5 +107,4 @@ impl<'a, Class: ElfClass> LoadBuf<'a, Class> {
             _ => Ok(None)
         }
     }
-
 }
