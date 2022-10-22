@@ -51,9 +51,9 @@ pub trait ElfClass: Copy + PartialEq + PartialOrd {
                PartialOrd + TryFrom<usize> + TryInto<usize>;
     /// An offset (into the file or memory).
     type Offset: Add<Output = Self::Offset> + BitAnd<Output = Self::Offset> +
-                 Copy + Debug + Display + Eq + From<u8> + Hash + LowerHex +
-                 Mul<Output = Self::Offset> + Ord + PartialEq + PartialOrd +
-                 TryFrom<usize> + TryInto<usize>;
+                 Copy + Debug + Display + Eq + From<u8> + From<u32> + Hash +
+                 LowerHex + Mul<Output = Self::Offset> + Ord + PartialEq +
+                 PartialOrd + TryFrom<usize> + TryInto<usize>;
     /// An addend (a signed offset).
     type Addend: Copy + Debug + Display + Eq + From<u8> + Hash + LowerHex +
                  Ord + PartialEq + PartialOrd + TryInto<usize>;
@@ -1568,7 +1568,8 @@ impl<'a, B, Offsets, T> WithElfData<'a>
                 match ph_offset.try_into() {
                     Ok(offset) if offset + size <= data.len() =>
                         Ok(Some(&data[offset .. offset + size])),
-                    _ => Err(ElfHdrWithDataError::ProgHdrOutOfBounds(ph_offset))
+                    _ => Err(ElfHdrWithDataError
+                             ::ProgHdrOutOfBounds(ph_offset))
                 }
             },
             None => Ok(None)
@@ -1582,9 +1583,40 @@ impl<'a, B, Offsets, T> WithElfData<'a>
         };
 
         Ok(ElfHdrData { abi: abi, abi_version: abi_version, kind: kind,
-                        section_hdr_strtab: section_hdr_strtab, flags: flags,
-                        arch: arch.into(), entry: entry, prog_hdrs: prog_hdrs?,
-                        section_hdrs: section_hdrs?, byteorder: byteorder })
+                        section_hdr_strtab: section_hdr_strtab,
+                        flags: flags, prog_hdrs: prog_hdrs?,
+                        section_hdrs: section_hdrs?, arch: (arch).into(),
+                        entry: entry, byteorder: byteorder })
+    }
+}
+
+impl<'a, B, Offsets, T> WithElfData<'a>
+    for &'_ ElfHdrData<B, Offsets, ElfTable<Offsets>, ElfTable<Offsets>, T>
+    where Offsets: ElfHdrOffsets,
+          B: ElfByteOrder,
+          T: Copy {
+    type Result = ElfHdrData<B, Offsets, &'a [u8], &'a [u8], T>;
+    type Error = ElfHdrWithDataError<Offsets>;
+
+    #[inline]
+    fn with_elf_data(self, data: &'a [u8]) ->
+        Result<ElfHdrData<B, Offsets, &'a [u8], &'a [u8], T>, Self::Error> {
+        self.clone().with_elf_data(data)
+    }
+}
+
+impl<'a, B, Offsets, T> WithElfData<'a>
+    for &'_ mut ElfHdrData<B, Offsets, ElfTable<Offsets>, ElfTable<Offsets>, T>
+    where Offsets: ElfHdrOffsets,
+          B: ElfByteOrder,
+          T: Copy {
+    type Result = ElfHdrData<B, Offsets, &'a [u8], &'a [u8], T>;
+    type Error = ElfHdrWithDataError<Offsets>;
+
+    #[inline]
+    fn with_elf_data(self, data: &'a [u8]) ->
+        Result<ElfHdrData<B, Offsets, &'a [u8], &'a [u8], T>, Self::Error> {
+        self.clone().with_elf_data(data)
     }
 }
 
@@ -1616,9 +1648,44 @@ impl<'a, B, Offsets, T> TryFrom<ElfHdrData<B, Offsets, &'a [u8], &'a [u8], T>>
         };
 
         Ok(ElfHdrData { abi: abi, abi_version: abi_version, kind: kind,
-                        section_hdr_strtab: section_hdr_strtab, flags: flags,
-                        prog_hdrs: prog_hdrs?, section_hdrs: section_hdrs?,
-                        byteorder: byteorder, arch: arch.into(), entry: entry })
+                        section_hdr_strtab: section_hdr_strtab,
+                        section_hdrs: section_hdrs?, byteorder: byteorder,
+                        flags: flags, prog_hdrs: prog_hdrs?,
+                        arch: (arch).into(), entry: entry })
+    }
+}
+
+impl<'a, B, Offsets, T> TryFrom<&'_ ElfHdrData<B, Offsets, &'a [u8],
+                                               &'a [u8], T>>
+    for ElfHdrData<B, Offsets, ProgHdrs<'a, B, Offsets>,
+                   SectionHdrs<'a, B, Offsets>, T>
+    where Offsets: ElfHdrOffsets,
+          B: ElfByteOrder,
+          T: Copy {
+    type Error = ElfHdrTableError;
+
+    fn try_from(elf: &'_ ElfHdrData<B, Offsets, &'a [u8], &'a [u8], T>) ->
+        Result<ElfHdrData<B, Offsets, ProgHdrs<'a, B, Offsets>,
+                          SectionHdrs<'a, B, Offsets>, T>,
+               Self::Error> {
+        ElfHdrData::try_from(elf.clone())
+    }
+}
+
+impl<'a, B, Offsets, T> TryFrom<&'_ mut ElfHdrData<B, Offsets, &'a [u8],
+                                                   &'a [u8], T>>
+    for ElfHdrData<B, Offsets, ProgHdrs<'a, B, Offsets>,
+                   SectionHdrs<'a, B, Offsets>, T>
+    where Offsets: ElfHdrOffsets,
+          B: ElfByteOrder,
+          T: Copy {
+    type Error = ElfHdrTableError;
+
+    fn try_from(elf: &'_ mut ElfHdrData<B, Offsets, &'a [u8], &'a [u8], T>) ->
+        Result<ElfHdrData<B, Offsets, ProgHdrs<'a, B, Offsets>,
+                          SectionHdrs<'a, B, Offsets>, T>,
+               Self::Error> {
+        ElfHdrData::try_from(elf.clone())
     }
 }
 
@@ -1746,7 +1813,6 @@ impl<'a, B, Offsets> Elf<'a, B, Offsets>
     }
 }
 
-
 impl<'a, B, Offsets> TryFrom<Elf<'a, B, Offsets>>
     for ElfHdrData<B, Offsets, ElfTable<Offsets>,
                    ElfTable<Offsets>, Offsets::Half>
@@ -1762,6 +1828,36 @@ impl<'a, B, Offsets> TryFrom<Elf<'a, B, Offsets>>
     }
 }
 
+impl<'a, B, Offsets> TryFrom<&'_ Elf<'a, B, Offsets>>
+    for ElfHdrData<B, Offsets, ElfTable<Offsets>,
+                   ElfTable<Offsets>, Offsets::Half>
+    where Offsets: ElfHdrOffsets,
+          B: ElfByteOrder {
+    type Error = ElfHdrDataError<Offsets>;
+
+    fn try_from(elf: &'_ Elf<'a, B, Offsets>) ->
+        Result<ElfHdrData<B, Offsets, ElfTable<Offsets>,
+                          ElfTable<Offsets>, Offsets::Half>,
+               Self::Error> {
+        project::<B, Offsets>(elf.data)
+    }
+}
+
+impl<'a, B, Offsets> TryFrom<&'_ mut Elf<'a, B, Offsets>>
+    for ElfHdrData<B, Offsets, ElfTable<Offsets>,
+                   ElfTable<Offsets>, Offsets::Half>
+    where Offsets: ElfHdrOffsets,
+          B: ElfByteOrder {
+    type Error = ElfHdrDataError<Offsets>;
+
+    fn try_from(elf: &'_ mut Elf<'a, B, Offsets>) ->
+        Result<ElfHdrData<B, Offsets, ElfTable<Offsets>,
+                          ElfTable<Offsets>, Offsets::Half>,
+               Self::Error> {
+        project::<B, Offsets>(elf.data)
+    }
+}
+
 impl<'a, B, Offsets> TryFrom<ElfMut<'a, B, Offsets>>
     for ElfHdrData<B, Offsets, ElfTable<Offsets>,
                    ElfTable<Offsets>, Offsets::Half>
@@ -1770,6 +1866,36 @@ impl<'a, B, Offsets> TryFrom<ElfMut<'a, B, Offsets>>
     type Error = ElfHdrDataError<Offsets>;
 
     fn try_from(elf: ElfMut<'a, B, Offsets>) ->
+        Result<ElfHdrData<B, Offsets, ElfTable<Offsets>,
+                          ElfTable<Offsets>, Offsets::Half>,
+               Self::Error> {
+        project::<B, Offsets>(elf.data)
+    }
+}
+
+impl<'a, B, Offsets> TryFrom<&'_ ElfMut<'a, B, Offsets>>
+    for ElfHdrData<B, Offsets, ElfTable<Offsets>,
+                   ElfTable<Offsets>, Offsets::Half>
+    where Offsets: ElfHdrOffsets,
+          B: ElfByteOrder {
+    type Error = ElfHdrDataError<Offsets>;
+
+    fn try_from(elf: &'_ ElfMut<'a, B, Offsets>) ->
+        Result<ElfHdrData<B, Offsets, ElfTable<Offsets>,
+                          ElfTable<Offsets>, Offsets::Half>,
+               Self::Error> {
+        project::<B, Offsets>(elf.data)
+    }
+}
+
+impl<'a, B, Offsets> TryFrom<&'_ mut ElfMut<'a, B, Offsets>>
+    for ElfHdrData<B, Offsets, ElfTable<Offsets>,
+                   ElfTable<Offsets>, Offsets::Half>
+    where Offsets: ElfHdrOffsets,
+          B: ElfByteOrder {
+    type Error = ElfHdrDataError<Offsets>;
+
+    fn try_from(elf: &'_ mut ElfMut<'a, B, Offsets>) ->
         Result<ElfHdrData<B, Offsets, ElfTable<Offsets>,
                           ElfTable<Offsets>, Offsets::Half>,
                Self::Error> {
