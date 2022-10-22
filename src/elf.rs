@@ -44,7 +44,7 @@ pub trait ElfClass: Copy + PartialEq + PartialOrd {
     /// A full-word.
     type Word: BitAnd<Output = Self::Word> + Copy + Debug + Display + Eq +
                From<u8> + From<u32> + Hash + Into<u32> + LowerHex +
-               Ord + PartialEq + PartialOrd + TryInto<usize>;
+               Ord + PartialEq + PartialOrd + TryFrom<usize> + TryInto<usize>;
     /// A memory address.
     type Addr: Copy + Debug + Display + Eq + From<u8> + Hash +
                LowerHex + PartialEq + PartialOrd + TryFrom<usize> +
@@ -79,36 +79,26 @@ pub trait ElfClass: Copy + PartialEq + PartialOrd {
     const TYPE_CODE: u8;
 
     /// Read a half-word value.
-    fn read_half<B: ByteOrder>(data: &[u8], byteorder: PhantomData<B>) ->
-        Self::Half;
+    fn read_half<B: ByteOrder>(data: &[u8]) -> Self::Half;
     /// Read a word value.
-    fn read_word<B: ByteOrder>(data: &[u8], byteorder: PhantomData<B>) ->
-        Self::Word;
+    fn read_word<B: ByteOrder>(data: &[u8]) -> Self::Word;
     /// Read an address value.
-    fn read_addr<B: ByteOrder>(data: &[u8], byteorder: PhantomData<B>) ->
-        Self::Addr;
+    fn read_addr<B: ByteOrder>(data: &[u8]) -> Self::Addr;
     /// Read an offset value.
-    fn read_offset<B: ByteOrder>(data: &[u8], byteorder: PhantomData<B>) ->
-        Self::Offset;
+    fn read_offset<B: ByteOrder>(data: &[u8]) -> Self::Offset;
     /// Read an addend value.
-    fn read_addend<B: ByteOrder>(data: &[u8], byteorder: PhantomData<B>) ->
-        Self::Addend;
+    fn read_addend<B: ByteOrder>(data: &[u8]) -> Self::Addend;
 
     /// Write a half-word value.
-    fn write_half<B: ByteOrder>(data: &mut [u8], val: Self::Half,
-                                byteorder: PhantomData<B>);
+    fn write_half<B: ByteOrder>(data: &mut [u8], val: Self::Half);
     /// Write a word value.
-    fn write_word<B: ByteOrder>(data: &mut [u8], val: Self::Word,
-                                byteorder: PhantomData<B>);
+    fn write_word<B: ByteOrder>(data: &mut [u8], val: Self::Word);
     /// Write an address value.
-    fn write_addr<B: ByteOrder>(data: &mut [u8], val: Self::Addr,
-                                byteorder: PhantomData<B>);
+    fn write_addr<B: ByteOrder>(data: &mut [u8], val: Self::Addr);
     /// Write an offset value.
-    fn write_offset<B: ByteOrder>(data: &mut [u8], val: Self::Offset,
-                                  byteorder: PhantomData<B>);
+    fn write_offset<B: ByteOrder>(data: &mut [u8], val: Self::Offset);
     /// Write an addend value.
-    fn write_addend<B: ByteOrder>(data: &mut [u8], val: Self::Addend,
-                                  byteorder: PhantomData<B>);
+    fn write_addend<B: ByteOrder>(data: &mut [u8], val: Self::Addend);
 }
 
 /// Trait for ELF header offsets for `Class`.  This defines the
@@ -935,22 +925,18 @@ pub enum ElfHdrTableError {
     BadSectionHdr(SectionHdrsError),
 }
 
-fn project<'a, B, Offsets>(data: &'a [u8], byteorder: PhantomData<B>,
-                           _offsets: PhantomData<Offsets>) ->
+fn project<'a, B, Offsets>(data: &'a [u8]) ->
     Result<ElfHdrData<B, Offsets, ElfTable<Offsets>,
                       ElfTable<Offsets>, Offsets::Half>,
            ElfHdrDataError<Offsets>>
     where Offsets: ElfHdrOffsets,
           B: ByteOrder {
-    let ph_offset = Offsets::read_offset(&data[Offsets::E_PHOFF_START ..
-                                               Offsets::E_PHOFF_END],
-                                         byteorder);
-    let ph_entsize = Offsets::read_half(&data[Offsets::E_PHENTSIZE_START ..
-                                              Offsets::E_PHENTSIZE_END],
-                                        byteorder);
-    let ph_num = Offsets::read_half(&data[Offsets::E_PHNUM_START ..
-                                          Offsets::E_PHNUM_END],
-                                    byteorder);
+    let ph_offset = Offsets::read_offset::<B>(&data[Offsets::E_PHOFF_START ..
+                                                    Offsets::E_PHOFF_END]);
+    let ph_entsize = Offsets::read_half::<B>(&data[Offsets::E_PHENTSIZE_START ..
+                                                   Offsets::E_PHENTSIZE_END]);
+    let ph_num = Offsets::read_half::<B>(&data[Offsets::E_PHNUM_START ..
+                                               Offsets::E_PHNUM_END]);
 
     let prog_hdrs = if ph_offset == (0 as u8).into() &&
                        ph_num == (0 as u8).into() {
@@ -962,15 +948,12 @@ fn project<'a, B, Offsets>(data: &'a [u8], byteorder: PhantomData<B>,
         Some(ElfTable { offset: ph_offset, num_ents: ph_num })
     };
 
-    let sh_offset = Offsets::read_offset(&data[Offsets::E_SHOFF_START ..
-                                               Offsets::E_SHOFF_END],
-                                         byteorder);
-    let sh_entsize = Offsets::read_half(&data[Offsets::E_SHENTSIZE_START ..
-                                              Offsets::E_SHENTSIZE_END],
-                                        byteorder);
-    let sh_num = Offsets::read_half(&data[Offsets::E_SHNUM_START ..
-                                          Offsets::E_SHNUM_END],
-                                    byteorder);
+    let sh_offset = Offsets::read_offset::<B>(&data[Offsets::E_SHOFF_START ..
+                                                    Offsets::E_SHOFF_END]);
+    let sh_entsize = Offsets::read_half::<B>(&data[Offsets::E_SHENTSIZE_START ..
+                                                   Offsets::E_SHENTSIZE_END]);
+    let sh_num = Offsets::read_half::<B>(&data[Offsets::E_SHNUM_START ..
+                                               Offsets::E_SHNUM_END]);
 
     let section_hdrs = if sh_entsize.into() as usize !=
                           Offsets::SECTION_HDR_SIZE {
@@ -979,26 +962,23 @@ fn project<'a, B, Offsets>(data: &'a [u8], byteorder: PhantomData<B>,
         ElfTable { offset: sh_offset, num_ents: sh_num }
     };
 
-    let kind = Offsets::read_half(&data[Offsets::E_TYPE_START ..
-                                        Offsets::E_TYPE_END],
-                                  byteorder);
+    let kind = Offsets::read_half::<B>(&data[Offsets::E_TYPE_START ..
+                                             Offsets::E_TYPE_END]);
 
     match kind.into().try_into() {
         Ok(kind) => {
             let abi = data[ELF_ABI_OFFSET].into();
             let abi_version = data[ELF_ABI_VERSION_OFFSET];
-            let arch = Offsets::read_half(&data[Offsets::E_MACHINE_START ..
-                                                Offsets::E_MACHINE_END],
-                                          byteorder).into();
-            let entry = Offsets::read_addr(&data[Offsets::E_ENTRY_START ..
-                                                 Offsets::E_ENTRY_END],
-                                           byteorder);
-            let flags = Offsets::read_word(&data[Offsets::E_FLAGS_START ..
-                                                 Offsets::E_FLAGS_END],
-                                           byteorder);
-            let strtab = Offsets::read_half(&data[Offsets::E_SHSTRTAB_START ..
-                                                  Offsets::E_SHSTRTAB_END],
-                                            byteorder);
+            let arch = Offsets::read_half::<B>(&data[Offsets::E_MACHINE_START ..
+                                                     Offsets::E_MACHINE_END])
+                .into();
+            let entry = Offsets::read_addr::<B>(&data[Offsets::E_ENTRY_START ..
+                                                      Offsets::E_ENTRY_END]);
+            let flags = Offsets::read_word::<B>(&data[Offsets::E_FLAGS_START ..
+                                                      Offsets::E_FLAGS_END]);
+            let strtab = Offsets::read_half::<B>(
+                &data[Offsets::E_SHSTRTAB_START .. Offsets::E_SHSTRTAB_END]
+            );
 
             Ok(ElfHdrData { abi: abi, abi_version: abi_version, kind: kind,
                             arch: arch.into(), entry: entry, flags: flags,
@@ -1177,10 +1157,10 @@ fn create<'a, B, Offsets>(buf: &'a mut [u8],
     where Offsets: ElfHdrOffsets,
           B: ElfByteOrder {
     if buf.len() >= Offsets::ELF_HDR_SIZE {
-        let ElfHdrData { abi, abi_version, kind, arch, entry, flags,
-                         byteorder, prog_hdrs, section_hdr_strtab,
-                         section_hdrs: ElfTable { offset: sh_offset,
-                                                  num_ents: sh_ents } } = hdr;
+        let ElfHdrData { section_hdrs: ElfTable { offset: sh_offset,
+                                                  num_ents: sh_ents },
+                         abi, abi_version, kind, arch, entry, flags,
+                         prog_hdrs, section_hdr_strtab, .. } = hdr;
 
         for i in 0 .. ELF_MAGIC.len() {
             buf[i] = ELF_MAGIC[i];
@@ -1197,62 +1177,62 @@ fn create<'a, B, Offsets>(buf: &'a mut [u8],
         }
 
         let kind: u16 = kind.into();
-        Offsets::write_half(&mut buf[Offsets::E_TYPE_START ..
-                                     Offsets::E_TYPE_END],
-                            kind.into(), byteorder);
+        Offsets::write_half::<B>(&mut buf[Offsets::E_TYPE_START ..
+                                          Offsets::E_TYPE_END],
+                                 kind.into());
 
         let machine: u16 = arch.into();
 
-        Offsets::write_half(&mut buf[Offsets::E_MACHINE_START ..
-                                     Offsets::E_MACHINE_END],
-                            machine.into(), byteorder);
-        Offsets::write_word(&mut buf[Offsets::E_VERSION_START ..
-                                     Offsets::E_VERSION_END],
-                            ELF_VERSION.into(), byteorder);
-        Offsets::write_addr(&mut buf[Offsets::E_ENTRY_START ..
-                                     Offsets::E_ENTRY_END],
-                            entry, byteorder);
-        Offsets::write_offset(&mut buf[Offsets::E_SHOFF_START ..
-                                       Offsets::E_SHOFF_END],
-                              sh_offset, byteorder);
-        Offsets::write_word(&mut buf[Offsets::E_FLAGS_START ..
-                                     Offsets::E_FLAGS_END],
-                            flags, byteorder);
-        Offsets::write_half(&mut buf[Offsets::E_EHSIZE_START ..
-                                     Offsets::E_EHSIZE_END],
-                            Offsets::ELF_HDR_SIZE_HALF, byteorder);
-        Offsets::write_half(&mut buf[Offsets::E_SHENTSIZE_START ..
-                                     Offsets::E_SHENTSIZE_END],
-                            Offsets::SECTION_HDR_SIZE_HALF, byteorder);
-        Offsets::write_half(&mut buf[Offsets::E_SHNUM_START ..
-                                     Offsets::E_SHNUM_END],
-                            sh_ents, byteorder);
-        Offsets::write_half(&mut buf[Offsets::E_SHSTRTAB_START ..
-                                     Offsets::E_SHSTRTAB_END],
-                            section_hdr_strtab, byteorder);
+        Offsets::write_half::<B>(&mut buf[Offsets::E_MACHINE_START ..
+                                          Offsets::E_MACHINE_END],
+                                 machine.into());
+        Offsets::write_word::<B>(&mut buf[Offsets::E_VERSION_START ..
+                                          Offsets::E_VERSION_END],
+                                 ELF_VERSION.into());
+        Offsets::write_addr::<B>(&mut buf[Offsets::E_ENTRY_START ..
+                                          Offsets::E_ENTRY_END],
+                                 entry);
+        Offsets::write_offset::<B>(&mut buf[Offsets::E_SHOFF_START ..
+                                            Offsets::E_SHOFF_END],
+                                   sh_offset);
+        Offsets::write_word::<B>(&mut buf[Offsets::E_FLAGS_START ..
+                                          Offsets::E_FLAGS_END],
+                                 flags);
+        Offsets::write_half::<B>(&mut buf[Offsets::E_EHSIZE_START ..
+                                          Offsets::E_EHSIZE_END],
+                                 Offsets::ELF_HDR_SIZE_HALF);
+        Offsets::write_half::<B>(&mut buf[Offsets::E_SHENTSIZE_START ..
+                                          Offsets::E_SHENTSIZE_END],
+                                 Offsets::SECTION_HDR_SIZE_HALF);
+        Offsets::write_half::<B>(&mut buf[Offsets::E_SHNUM_START ..
+                                          Offsets::E_SHNUM_END],
+                                 sh_ents);
+        Offsets::write_half::<B>(&mut buf[Offsets::E_SHSTRTAB_START ..
+                                          Offsets::E_SHSTRTAB_END],
+                                 section_hdr_strtab);
 
         match prog_hdrs {
             Some(ElfTable { offset: ph_offset, num_ents: ph_ents }) => {
-                Offsets::write_offset(&mut buf[Offsets::E_PHOFF_START ..
-                                               Offsets::E_PHOFF_END],
-                                      ph_offset, byteorder);
-                Offsets::write_half(&mut buf[Offsets::E_PHENTSIZE_START ..
-                                             Offsets::E_PHENTSIZE_END],
-                                    Offsets::PROG_HDR_SIZE_HALF, byteorder);
-                Offsets::write_half(&mut buf[Offsets::E_PHNUM_START ..
-                                             Offsets::E_PHNUM_END],
-                                    ph_ents, byteorder);
+                Offsets::write_offset::<B>(&mut buf[Offsets::E_PHOFF_START ..
+                                                    Offsets::E_PHOFF_END],
+                                           ph_offset);
+                Offsets::write_half::<B>(&mut buf[Offsets::E_PHENTSIZE_START ..
+                                                  Offsets::E_PHENTSIZE_END],
+                                         Offsets::PROG_HDR_SIZE_HALF);
+                Offsets::write_half::<B>(&mut buf[Offsets::E_PHNUM_START ..
+                                                  Offsets::E_PHNUM_END],
+                                         ph_ents);
             },
             None => {
-                Offsets::write_offset(&mut buf[Offsets::E_PHOFF_START ..
-                                               Offsets::E_PHOFF_END],
-                                      (0 as u8).into(), byteorder);
-                Offsets::write_half(&mut buf[Offsets::E_PHENTSIZE_START ..
-                                             Offsets::E_PHENTSIZE_END],
-                                    (0 as u8).into(), byteorder);
-                Offsets::write_half(&mut buf[Offsets::E_PHNUM_START ..
-                                             Offsets::E_PHNUM_END],
-                                    (0 as u8).into(), byteorder);
+                Offsets::write_offset::<B>(&mut buf[Offsets::E_PHOFF_START ..
+                                                    Offsets::E_PHOFF_END],
+                                           (0 as u8).into());
+                Offsets::write_half::<B>(&mut buf[Offsets::E_PHENTSIZE_START ..
+                                                  Offsets::E_PHENTSIZE_END],
+                                         (0 as u8).into());
+                Offsets::write_half::<B>(&mut buf[Offsets::E_PHNUM_START ..
+                                                  Offsets::E_PHNUM_END],
+                                         (0 as u8).into());
             }
         }
 
@@ -1772,7 +1752,7 @@ impl<'a, B, Offsets> TryFrom<Elf<'a, B, Offsets>>
         Result<ElfHdrData<B, Offsets, ElfTable<Offsets>,
                           ElfTable<Offsets>, Offsets::Half>,
                Self::Error> {
-        project(elf.data, elf.byteorder, elf.offsets)
+        project::<B, Offsets>(elf.data)
     }
 }
 
@@ -1787,7 +1767,7 @@ impl<'a, B, Offsets> TryFrom<ElfMut<'a, B, Offsets>>
         Result<ElfHdrData<B, Offsets, ElfTable<Offsets>,
                           ElfTable<Offsets>, Offsets::Half>,
                Self::Error> {
-        project(elf.data, elf.byteorder, elf.offsets)
+        project::<B, Offsets>(elf.data)
     }
 }
 
@@ -2640,62 +2620,52 @@ impl ElfClass for Elf32 {
     const TYPE_CODE: u8 = 1;
 
     #[inline]
-    fn read_half<B: ByteOrder>(data: &[u8], _byteorder: PhantomData<B>) ->
-        Self::Half {
+    fn read_half<B: ByteOrder>(data: &[u8]) -> Self::Half {
         B::read_u16(data)
     }
 
     #[inline]
-    fn read_word<B: ByteOrder>(data: &[u8], _byteorder: PhantomData<B>) ->
-        Self::Word {
+    fn read_word<B: ByteOrder>(data: &[u8]) -> Self::Word {
         B::read_u32(data)
     }
 
     #[inline]
-    fn read_addr<B: ByteOrder>(data: &[u8], _byteorder: PhantomData<B>) ->
-        Self::Addr {
+    fn read_addr<B: ByteOrder>(data: &[u8]) -> Self::Addr {
         B::read_u32(data)
     }
 
     #[inline]
-    fn read_offset<B: ByteOrder>(data: &[u8], _byteorder: PhantomData<B>) ->
-        Self::Offset {
+    fn read_offset<B: ByteOrder>(data: &[u8]) -> Self::Offset {
         B::read_u32(data)
     }
 
     #[inline]
-    fn read_addend<B: ByteOrder>(data: &[u8], _byteorder: PhantomData<B>) ->
-        Self::Addend {
+    fn read_addend<B: ByteOrder>(data: &[u8]) -> Self::Addend {
         B::read_i32(data)
     }
 
     #[inline]
-    fn write_half<B: ByteOrder>(data: &mut [u8], val: Self::Half,
-                                _byteorder: PhantomData<B>) {
+    fn write_half<B: ByteOrder>(data: &mut [u8], val: Self::Half) {
         B::write_u16(data, val)
     }
 
     #[inline]
-    fn write_word<B: ByteOrder>(data: &mut [u8], val: Self::Word,
-                                _byteorder: PhantomData<B>) {
+    fn write_word<B: ByteOrder>(data: &mut [u8], val: Self::Word) {
         B::write_u32(data, val)
     }
 
     #[inline]
-    fn write_addr<B: ByteOrder>(data: &mut [u8], val: Self::Addr,
-                                _byteorder: PhantomData<B>) {
+    fn write_addr<B: ByteOrder>(data: &mut [u8], val: Self::Addr) {
         B::write_u32(data, val)
     }
 
     #[inline]
-    fn write_offset<B: ByteOrder>(data: &mut [u8], val: Self::Offset,
-                                  _byteorder: PhantomData<B>) {
+    fn write_offset<B: ByteOrder>(data: &mut [u8], val: Self::Offset) {
         B::write_u32(data, val)
     }
 
     #[inline]
-    fn write_addend<B: ByteOrder>(data: &mut [u8], val: Self::Addend,
-                                  _byteorder: PhantomData<B>) {
+    fn write_addend<B: ByteOrder>(data: &mut [u8], val: Self::Addend) {
         B::write_i32(data, val)
     }
 }
@@ -2719,62 +2689,52 @@ impl ElfClass for Elf64 {
     const TYPE_CODE: u8 = 2;
 
     #[inline]
-    fn read_half<B: ByteOrder>(data: &[u8], _byteorder: PhantomData<B>) ->
-        Self::Half {
+    fn read_half<B: ByteOrder>(data: &[u8]) -> Self::Half {
         B::read_u16(data)
     }
 
     #[inline]
-    fn read_word<B: ByteOrder>(data: &[u8], _byteorder: PhantomData<B>) ->
-        Self::Word {
+    fn read_word<B: ByteOrder>(data: &[u8]) -> Self::Word {
         B::read_u32(data)
     }
 
     #[inline]
-    fn read_addr<B: ByteOrder>(data: &[u8], _byteorder: PhantomData<B>) ->
-        Self::Addr {
+    fn read_addr<B: ByteOrder>(data: &[u8]) -> Self::Addr {
         B::read_u64(data)
     }
 
     #[inline]
-    fn read_offset<B: ByteOrder>(data: &[u8], _byteorder: PhantomData<B>) ->
-        Self::Offset {
+    fn read_offset<B: ByteOrder>(data: &[u8]) -> Self::Offset {
         B::read_u64(data)
     }
 
     #[inline]
-    fn read_addend<B: ByteOrder>(data: &[u8], _byteorder: PhantomData<B>) ->
-        Self::Addend {
+    fn read_addend<B: ByteOrder>(data: &[u8]) -> Self::Addend {
         B::read_i64(data)
     }
 
     #[inline]
-    fn write_half<B: ByteOrder>(data: &mut [u8], val: Self::Half,
-                                _byteorder: PhantomData<B>) {
+    fn write_half<B: ByteOrder>(data: &mut [u8], val: Self::Half) {
         B::write_u16(data, val)
     }
 
     #[inline]
-    fn write_word<B: ByteOrder>(data: &mut [u8], val: Self::Word,
-                                _byteorder: PhantomData<B>) {
+    fn write_word<B: ByteOrder>(data: &mut [u8], val: Self::Word) {
         B::write_u32(data, val)
     }
 
     #[inline]
-    fn write_addr<B: ByteOrder>(data: &mut [u8], val: Self::Addr,
-                                _byteorder: PhantomData<B>) {
+    fn write_addr<B: ByteOrder>(data: &mut [u8], val: Self::Addr) {
         B::write_u64(data, val)
     }
 
     #[inline]
-    fn write_offset<B: ByteOrder>(data: &mut [u8], val: Self::Offset,
-                                  _byteorder: PhantomData<B>) {
+    fn write_offset<B: ByteOrder>(data: &mut [u8], val: Self::Offset) {
         B::write_u64(data, val)
     }
 
     #[inline]
-    fn write_addend<B: ByteOrder>(data: &mut [u8], val: Self::Addend,
-                                  _byteorder: PhantomData<B>) {
+    fn write_addend<B: ByteOrder>(data: &mut [u8], val: Self::Addend) {
         B::write_i64(data, val)
     }
 }

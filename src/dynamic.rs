@@ -110,6 +110,7 @@
 //! ```
 
 use byteorder::ByteOrder;
+use core::borrow::Borrow;
 use core::convert::TryFrom;
 use core::convert::TryInto;
 use core::fmt::Display;
@@ -598,149 +599,128 @@ pub type DynamicEntDataStr<'a, Class> =
     DynamicEntData<&'a str, <Class as ElfClass>::Offset, Class>;
 
 #[inline]
-fn project<'a, B, Offsets>(data: &'a [u8], byteorder: PhantomData<B>,
-                           _offsets: PhantomData<Offsets>) ->
+fn project<'a, B, Offsets>(data: &'a [u8]) ->
     Result<DynamicEntData<Offsets::Offset, Offsets::Offset, Offsets>,
            DynamicEntDataError<Offsets>>
     where Offsets: DynamicOffsets,
           B: ByteOrder {
-    let tag = Offsets::read_offset(&data[Offsets::D_TAG_START ..
-                                         Offsets::D_TAG_END],
-                                   byteorder);
+    let tag = Offsets::read_offset::<B>(&data[Offsets::D_TAG_START ..
+                                              Offsets::D_TAG_END]);
 
     match tag.try_into() {
         Ok(0) => Ok(DynamicEntData::None),
         Ok(1) => {
-            let name = Offsets::read_offset(&data[Offsets::D_VAL_START ..
-                                                  Offsets::D_VAL_END],
-                                            byteorder);
+            let name = Offsets::read_offset::<B>(&data[Offsets::D_VAL_START ..
+                                                       Offsets::D_VAL_END]);
 
             Ok(DynamicEntData::Needed { name: name })
         },
         Ok(2) => {
-            let val = Offsets::read_offset(&data[Offsets::D_VAL_START ..
-                                                 Offsets::D_VAL_END],
-                                           byteorder);
+            let val = Offsets::read_offset::<B>(&data[Offsets::D_VAL_START ..
+                                                      Offsets::D_VAL_END]);
 
             Ok(DynamicEntData::PLTRelSize { size: val })
         },
         Ok(3) => {
-            let ptr = Offsets::read_addr(&data[Offsets::D_PTR_START ..
-                                               Offsets::D_PTR_END],
-                                         byteorder);
+            let ptr = Offsets::read_addr::<B>(&data[Offsets::D_PTR_START ..
+                                                    Offsets::D_PTR_END]);
 
             Ok(DynamicEntData::PLTGOT { tab: ptr })
         },
         Ok(4) => {
-            let ptr = Offsets::read_addr(&data[Offsets::D_PTR_START ..
-                                               Offsets::D_PTR_END],
-                                         byteorder);
+            let ptr = Offsets::read_addr::<B>(&data[Offsets::D_PTR_START ..
+                                                    Offsets::D_PTR_END]);
 
             Ok(DynamicEntData::Hash { tab: ptr })
         },
         Ok(5) => {
-            let ptr = Offsets::read_addr(&data[Offsets::D_PTR_START ..
-                                               Offsets::D_PTR_END],
-                                         byteorder);
+            let ptr = Offsets::read_addr::<B>(&data[Offsets::D_PTR_START ..
+                                                    Offsets::D_PTR_END]);
 
             Ok(DynamicEntData::Strtab { tab: ptr })
         },
         Ok(6) => {
-            let ptr = Offsets::read_addr(&data[Offsets::D_PTR_START ..
-                                               Offsets::D_PTR_END],
-                                         byteorder);
+            let ptr = Offsets::read_addr::<B>(&data[Offsets::D_PTR_START ..
+                                                    Offsets::D_PTR_END]);
 
             Ok(DynamicEntData::Symtab { tab: ptr })
         },
         Ok(7) => {
-            let ptr = Offsets::read_addr(&data[Offsets::D_PTR_START ..
-                                              Offsets::D_PTR_END],
-                                         byteorder);
+            let ptr = Offsets::read_addr::<B>(&data[Offsets::D_PTR_START ..
+                                                    Offsets::D_PTR_END]);
 
             Ok(DynamicEntData::Rela { tab: ptr })
         },
         Ok(8) => {
-            let val = Offsets::read_offset(&data[Offsets::D_VAL_START ..
-                                                 Offsets::D_VAL_END],
-                                           byteorder);
+            let val = Offsets::read_offset::<B>(&data[Offsets::D_VAL_START ..
+                                                      Offsets::D_VAL_END]);
 
             Ok(DynamicEntData::RelaSize { size: val })
         },
         Ok(9) => {
-            let val = Offsets::read_offset(&data[Offsets::D_VAL_START ..
-                                                 Offsets::D_VAL_END],
-                                           byteorder);
+            let val = Offsets::read_offset::<B>(&data[Offsets::D_VAL_START ..
+                                                      Offsets::D_VAL_END]);
 
             Ok(DynamicEntData::RelaEntSize { size: val })
         },
         Ok(10) => {
-            let val = Offsets::read_offset(&data[Offsets::D_VAL_START ..
-                                                 Offsets::D_VAL_END],
-                                           byteorder);
+            let val = Offsets::read_offset::<B>(&data[Offsets::D_VAL_START ..
+                                                      Offsets::D_VAL_END]);
 
             Ok(DynamicEntData::StrtabSize { size: val })
         },
         Ok(11) => {
-            let val = Offsets::read_offset(&data[Offsets::D_VAL_START ..
-                                                 Offsets::D_VAL_END],
-                                           byteorder);
+            let val = Offsets::read_offset::<B>(&data[Offsets::D_VAL_START ..
+                                                      Offsets::D_VAL_END]);
 
             Ok(DynamicEntData::SymtabEntSize { size: val })
         },
         Ok(12) => {
-            let ptr = Offsets::read_addr(&data[Offsets::D_PTR_START ..
-                                               Offsets::D_PTR_END],
-                                         byteorder);
+            let ptr = Offsets::read_addr::<B>(&data[Offsets::D_PTR_START ..
+                                                    Offsets::D_PTR_END]);
 
             Ok(DynamicEntData::Init { func: ptr })
         },
         Ok(13) => {
-            let ptr = Offsets::read_addr(&data[Offsets::D_PTR_START ..
-                                               Offsets::D_PTR_END],
-                                         byteorder);
+            let ptr = Offsets::read_addr::<B>(&data[Offsets::D_PTR_START ..
+                                                    Offsets::D_PTR_END]);
 
             Ok(DynamicEntData::Fini { func: ptr })
         },
         Ok(14) => {
-            let name = Offsets::read_offset(&data[Offsets::D_VAL_START ..
-                                                  Offsets::D_VAL_END],
-                                            byteorder);
+            let name = Offsets::read_offset::<B>(&data[Offsets::D_VAL_START ..
+                                                       Offsets::D_VAL_END]);
 
             Ok(DynamicEntData::Name { name: name })
         },
         Ok(15) => {
-            let path = Offsets::read_offset(&data[Offsets::D_VAL_START ..
-                                                  Offsets::D_VAL_END],
-                                            byteorder);
+            let path = Offsets::read_offset::<B>(&data[Offsets::D_VAL_START ..
+                                                       Offsets::D_VAL_END]);
 
             Ok(DynamicEntData::RPath { path: path })
         },
         Ok(16) => Ok(DynamicEntData::Symbolic),
         Ok(17) => {
-            let ptr = Offsets::read_addr(&data[Offsets::D_PTR_START ..
-                                               Offsets::D_PTR_END],
-                                         byteorder);
+            let ptr = Offsets::read_addr::<B>(&data[Offsets::D_PTR_START ..
+                                                    Offsets::D_PTR_END]);
 
             Ok(DynamicEntData::Rel { tab: ptr })
         },
         Ok(18) => {
-            let val = Offsets::read_offset(&data[Offsets::D_VAL_START ..
-                                                 Offsets::D_VAL_END],
-                                           byteorder);
+            let val = Offsets::read_offset::<B>(&data[Offsets::D_VAL_START ..
+                                                      Offsets::D_VAL_END]);
 
             Ok(DynamicEntData::RelSize { size: val })
         },
         Ok(19) => {
-            let val = Offsets::read_offset(&data[Offsets::D_VAL_START ..
-                                                 Offsets::D_VAL_END],
-                                           byteorder);
+            let val = Offsets::read_offset::<B>(&data[Offsets::D_VAL_START ..
+                                                      Offsets::D_VAL_END]);
 
             Ok(DynamicEntData::RelEntSize { size: val })
         },
         Ok(20) => {
-            let val = Offsets::read_offset(&data[Offsets::D_VAL_START ..
-                                                 Offsets::D_VAL_END],
-                                           byteorder);
+            let val = Offsets::read_offset::<B>(&data[Offsets::D_VAL_START ..
+                                                      Offsets::D_VAL_END]);
 
             match val.try_into() {
                 Ok(7) => Ok(DynamicEntData::PLTRela { rela: true }),
@@ -750,88 +730,76 @@ fn project<'a, B, Offsets>(data: &'a [u8], byteorder: PhantomData<B>,
             }
         },
         Ok(21) => {
-            let ptr = Offsets::read_addr(&data[Offsets::D_PTR_START ..
-                                               Offsets::D_PTR_END],
-                                         byteorder);
+            let ptr = Offsets::read_addr::<B>(&data[Offsets::D_PTR_START ..
+                                                    Offsets::D_PTR_END]);
 
             Ok(DynamicEntData::Debug { tab: ptr })
         },
         Ok(22) => Ok(DynamicEntData::TextRel),
         Ok(23) => {
-            let ptr = Offsets::read_addr(&data[Offsets::D_PTR_START ..
-                                               Offsets::D_PTR_END],
-                                         byteorder);
+            let ptr = Offsets::read_addr::<B>(&data[Offsets::D_PTR_START ..
+                                                    Offsets::D_PTR_END]);
 
             Ok(DynamicEntData::JumpRel { tab: ptr })
         },
         Ok(24) => Ok(DynamicEntData::TextRel),
         Ok(25) => {
-            let ptr = Offsets::read_addr(&data[Offsets::D_PTR_START ..
-                                               Offsets::D_PTR_END],
-                                         byteorder);
+            let ptr = Offsets::read_addr::<B>(&data[Offsets::D_PTR_START ..
+                                                    Offsets::D_PTR_END]);
 
             Ok(DynamicEntData::InitArray { arr: ptr })
         },
         Ok(26) => {
-            let ptr = Offsets::read_addr(&data[Offsets::D_PTR_START ..
-                                               Offsets::D_PTR_END],
-                                         byteorder);
+            let ptr = Offsets::read_addr::<B>(&data[Offsets::D_PTR_START ..
+                                                    Offsets::D_PTR_END]);
 
             Ok(DynamicEntData::FiniArray { arr: ptr })
         },
         Ok(27) => {
-            let val = Offsets::read_offset(&data[Offsets::D_VAL_START ..
-                                                 Offsets::D_VAL_END],
-                                            byteorder);
+            let val = Offsets::read_offset::<B>(&data[Offsets::D_VAL_START ..
+                                                      Offsets::D_VAL_END]);
 
             Ok(DynamicEntData::InitArraySize { size: val })
         },
         Ok(28) => {
-            let val = Offsets::read_offset(&data[Offsets::D_VAL_START ..
-                                                 Offsets::D_VAL_END],
-                                            byteorder);
+            let val = Offsets::read_offset::<B>(&data[Offsets::D_VAL_START ..
+                                                      Offsets::D_VAL_END]);
 
             Ok(DynamicEntData::FiniArraySize { size: val })
         },
         Ok(29) => {
-            let path = Offsets::read_offset(&data[Offsets::D_VAL_START ..
-                                                  Offsets::D_VAL_END],
-                                            byteorder);
+            let path = Offsets::read_offset::<B>(&data[Offsets::D_VAL_START ..
+                                                       Offsets::D_VAL_END]);
 
             Ok(DynamicEntData::RPath { path: path })
         },
         Ok(30) => {
-            let val = Offsets::read_offset(&data[Offsets::D_PTR_START ..
-                                                 Offsets::D_PTR_END],
-                                           byteorder);
+            let val = Offsets::read_offset::<B>(&data[Offsets::D_PTR_START ..
+                                                      Offsets::D_PTR_END]);
 
             Ok(DynamicEntData::Flags { flags: val })
         },
         Ok(32) => {
-            let ptr = Offsets::read_addr(&data[Offsets::D_PTR_START ..
-                                               Offsets::D_PTR_END],
-                                         byteorder);
+            let ptr = Offsets::read_addr::<B>(&data[Offsets::D_PTR_START ..
+                                                    Offsets::D_PTR_END]);
 
             Ok(DynamicEntData::PreInitArray { arr: ptr })
         },
         Ok(33) => {
-            let val = Offsets::read_offset(&data[Offsets::D_VAL_START ..
-                                                 Offsets::D_VAL_END],
-                                           byteorder);
+            let val = Offsets::read_offset::<B>(&data[Offsets::D_VAL_START ..
+                                                      Offsets::D_VAL_END]);
 
             Ok(DynamicEntData::PreInitArraySize { size: val })
         },
         Ok(34) => {
-            let idx = Offsets::read_offset(&data[Offsets::D_VAL_START ..
-                                                 Offsets::D_VAL_END],
-                                           byteorder);
+            let idx = Offsets::read_offset::<B>(&data[Offsets::D_VAL_START ..
+                                                      Offsets::D_VAL_END]);
 
             Ok(DynamicEntData::SymtabIdx { idx: idx })
         },
         Ok(_) => {
-            let val = Offsets::read_offset(&data[Offsets::D_VAL_START ..
-                                                 Offsets::D_VAL_END],
-                                           byteorder);
+            let val = Offsets::read_offset::<B>(&data[Offsets::D_VAL_START ..
+                                                      Offsets::D_VAL_END]);
 
             Ok(DynamicEntData::Unknown { tag: tag, info: val })
         },
@@ -839,301 +807,302 @@ fn project<'a, B, Offsets>(data: &'a [u8], byteorder: PhantomData<B>,
     }
 }
 
-fn create<'a, B, I, Offsets>(buf: &'a mut [u8], ents: I,
-                             byteorder: PhantomData<B>,
-                             _offsets: PhantomData<Offsets>) ->
+fn create<'a, B, I, Offsets>(buf: &'a mut [u8], ents: I) ->
     Result<(&'a mut [u8], &'a mut [u8]), ()>
-    where I: Iterator<Item = DynamicEntData<Offsets::Offset, Offsets::Offset,
-                                            Offsets>>,
+    where I: Iterator,
+          I::Item: Borrow<DynamicEntData<Offsets::Offset, Offsets::Offset,
+                                         Offsets>>,
           Offsets: DynamicOffsets,
           B: ByteOrder {
     let len = buf.len();
     let mut idx = 0;
 
     for ent in ents {
+        let ent = ent.borrow();
+
         if idx + Offsets::DYNAMIC_SIZE <= len {
             let data = &mut buf[idx .. idx + Offsets::DYNAMIC_SIZE];
 
             match ent {
                 DynamicEntData::None => {
-                    Offsets::write_offset(&mut data[Offsets::D_TAG_START ..
-                                                    Offsets::D_TAG_END],
-                                          (0 as u8).into(), byteorder);
-                    Offsets::write_offset(&mut data[Offsets::D_VAL_START ..
-                                                    Offsets::D_VAL_END],
-                                          (0 as u8).into(), byteorder);
+                    Offsets::write_offset::<B>(&mut data[Offsets::D_TAG_START ..
+                                                         Offsets::D_TAG_END],
+                                               (0 as u8).into());
+                    Offsets::write_offset::<B>(&mut data[Offsets::D_VAL_START ..
+                                                         Offsets::D_VAL_END],
+                                               (0 as u8).into());
                 },
                 DynamicEntData::Needed { name } => {
-                    Offsets::write_offset(&mut data[Offsets::D_TAG_START ..
-                                                    Offsets::D_TAG_END],
-                                          (1 as u8).into(), byteorder);
-                    Offsets::write_offset(&mut data[Offsets::D_VAL_START ..
-                                                    Offsets::D_VAL_END],
-                                          name, byteorder);
+                    Offsets::write_offset::<B>(&mut data[Offsets::D_TAG_START ..
+                                                         Offsets::D_TAG_END],
+                                               (1 as u8).into());
+                    Offsets::write_offset::<B>(&mut data[Offsets::D_VAL_START ..
+                                                         Offsets::D_VAL_END],
+                                               *name);
                 },
                 DynamicEntData::PLTRelSize { size } => {
-                    Offsets::write_offset(&mut data[Offsets::D_TAG_START ..
-                                                    Offsets::D_TAG_END],
-                                          (2 as u8).into(), byteorder);
-                    Offsets::write_offset(&mut data[Offsets::D_VAL_START ..
-                                                    Offsets::D_VAL_END],
-                                          size, byteorder);
+                    Offsets::write_offset::<B>(&mut data[Offsets::D_TAG_START ..
+                                                         Offsets::D_TAG_END],
+                                               (2 as u8).into());
+                    Offsets::write_offset::<B>(&mut data[Offsets::D_VAL_START ..
+                                                         Offsets::D_VAL_END],
+                                               *size);
                 },
                 DynamicEntData::PLTGOT { tab } => {
-                    Offsets::write_offset(&mut data[Offsets::D_TAG_START ..
-                                                    Offsets::D_TAG_END],
-                                          (3 as u8).into(), byteorder);
-                    Offsets::write_addr(&mut data[Offsets::D_PTR_START ..
-                                                  Offsets::D_PTR_END],
-                                        tab, byteorder);
+                    Offsets::write_offset::<B>(&mut data[Offsets::D_TAG_START ..
+                                                         Offsets::D_TAG_END],
+                                               (3 as u8).into());
+                    Offsets::write_addr::<B>(&mut data[Offsets::D_PTR_START ..
+                                                       Offsets::D_PTR_END],
+                                             *tab);
                 },
                 DynamicEntData::Hash { tab } => {
-                    Offsets::write_offset(&mut data[Offsets::D_TAG_START ..
-                                                    Offsets::D_TAG_END],
-                                          (4 as u8).into(), byteorder);
-                    Offsets::write_addr(&mut data[Offsets::D_PTR_START ..
-                                                  Offsets::D_PTR_END],
-                                        tab, byteorder);
+                    Offsets::write_offset::<B>(&mut data[Offsets::D_TAG_START ..
+                                                         Offsets::D_TAG_END],
+                                               (4 as u8).into());
+                    Offsets::write_addr::<B>(&mut data[Offsets::D_PTR_START ..
+                                                       Offsets::D_PTR_END],
+                                             *tab);
                 },
                 DynamicEntData::Strtab { tab } => {
-                    Offsets::write_offset(&mut data[Offsets::D_TAG_START ..
-                                                    Offsets::D_TAG_END],
-                                          (5 as u8).into(), byteorder);
-                    Offsets::write_addr(&mut data[Offsets::D_PTR_START ..
-                                                  Offsets::D_PTR_END],
-                                        tab, byteorder);
+                    Offsets::write_offset::<B>(&mut data[Offsets::D_TAG_START ..
+                                                         Offsets::D_TAG_END],
+                                               (5 as u8).into());
+                    Offsets::write_addr::<B>(&mut data[Offsets::D_PTR_START ..
+                                                       Offsets::D_PTR_END],
+                                             *tab);
                 },
                 DynamicEntData::Symtab { tab } => {
-                    Offsets::write_offset(&mut data[Offsets::D_TAG_START ..
-                                                    Offsets::D_TAG_END],
-                                          (6 as u8).into(), byteorder);
-                    Offsets::write_addr(&mut data[Offsets::D_PTR_START ..
-                                                  Offsets::D_PTR_END],
-                                        tab, byteorder);
+                    Offsets::write_offset::<B>(&mut data[Offsets::D_TAG_START ..
+                                                         Offsets::D_TAG_END],
+                                               (6 as u8).into());
+                    Offsets::write_addr::<B>(&mut data[Offsets::D_PTR_START ..
+                                                       Offsets::D_PTR_END],
+                                             *tab);
                 },
                 DynamicEntData::Rela { tab } => {
-                    Offsets::write_offset(&mut data[Offsets::D_TAG_START ..
-                                                    Offsets::D_TAG_END],
-                                          (7 as u8).into(), byteorder);
-                    Offsets::write_addr(&mut data[Offsets::D_PTR_START ..
-                                                  Offsets::D_PTR_END],
-                                        tab, byteorder);
+                    Offsets::write_offset::<B>(&mut data[Offsets::D_TAG_START ..
+                                                         Offsets::D_TAG_END],
+                                               (7 as u8).into());
+                    Offsets::write_addr::<B>(&mut data[Offsets::D_PTR_START ..
+                                                       Offsets::D_PTR_END],
+                                             *tab);
                 },
                 DynamicEntData::RelaSize { size } => {
-                    Offsets::write_offset(&mut data[Offsets::D_TAG_START ..
-                                                    Offsets::D_TAG_END],
-                                          (8 as u8).into(), byteorder);
-                    Offsets::write_offset(&mut data[Offsets::D_VAL_START ..
-                                                    Offsets::D_VAL_END],
-                                          size, byteorder);
+                    Offsets::write_offset::<B>(&mut data[Offsets::D_TAG_START ..
+                                                         Offsets::D_TAG_END],
+                                               (8 as u8).into());
+                    Offsets::write_offset::<B>(&mut data[Offsets::D_VAL_START ..
+                                                         Offsets::D_VAL_END],
+                                               *size);
                 },
                 DynamicEntData::RelaEntSize { size } => {
-                    Offsets::write_offset(&mut data[Offsets::D_TAG_START ..
-                                                    Offsets::D_TAG_END],
-                                          (9 as u8).into(), byteorder);
-                    Offsets::write_offset(&mut data[Offsets::D_VAL_START ..
-                                                    Offsets::D_VAL_END],
-                                          size, byteorder);
+                    Offsets::write_offset::<B>(&mut data[Offsets::D_TAG_START ..
+                                                         Offsets::D_TAG_END],
+                                               (9 as u8).into());
+                    Offsets::write_offset::<B>(&mut data[Offsets::D_VAL_START ..
+                                                         Offsets::D_VAL_END],
+                                               *size);
                 },
                 DynamicEntData::StrtabSize { size } => {
-                    Offsets::write_offset(&mut data[Offsets::D_TAG_START ..
-                                                    Offsets::D_TAG_END],
-                                          (10 as u8).into(), byteorder);
-                    Offsets::write_offset(&mut data[Offsets::D_VAL_START ..
-                                                    Offsets::D_VAL_END],
-                                          size, byteorder);
+                    Offsets::write_offset::<B>(&mut data[Offsets::D_TAG_START ..
+                                                         Offsets::D_TAG_END],
+                                               (10 as u8).into());
+                    Offsets::write_offset::<B>(&mut data[Offsets::D_VAL_START ..
+                                                         Offsets::D_VAL_END],
+                                               *size);
                 },
                 DynamicEntData::SymtabEntSize { size } => {
-                    Offsets::write_offset(&mut data[Offsets::D_TAG_START ..
-                                                    Offsets::D_TAG_END],
-                                          (11 as u8).into(), byteorder);
-                    Offsets::write_offset(&mut data[Offsets::D_VAL_START ..
-                                                    Offsets::D_VAL_END],
-                                          size, byteorder);
+                    Offsets::write_offset::<B>(&mut data[Offsets::D_TAG_START ..
+                                                         Offsets::D_TAG_END],
+                                               (11 as u8).into());
+                    Offsets::write_offset::<B>(&mut data[Offsets::D_VAL_START ..
+                                                         Offsets::D_VAL_END],
+                                               *size);
                 },
                 DynamicEntData::Init { func } => {
-                    Offsets::write_offset(&mut data[Offsets::D_TAG_START ..
-                                                    Offsets::D_TAG_END],
-                                          (12 as u8).into(), byteorder);
-                    Offsets::write_addr(&mut data[Offsets::D_PTR_START ..
-                                                  Offsets::D_PTR_END],
-                                        func, byteorder);
+                    Offsets::write_offset::<B>(&mut data[Offsets::D_TAG_START ..
+                                                         Offsets::D_TAG_END],
+                                               (12 as u8).into());
+                    Offsets::write_addr::<B>(&mut data[Offsets::D_PTR_START ..
+                                                       Offsets::D_PTR_END],
+                                             *func);
                 },
                 DynamicEntData::Fini { func } => {
-                    Offsets::write_offset(&mut data[Offsets::D_TAG_START ..
-                                                    Offsets::D_TAG_END],
-                                          (13 as u8).into(), byteorder);
-                    Offsets::write_addr(&mut data[Offsets::D_PTR_START ..
-                                                  Offsets::D_PTR_END],
-                                        func, byteorder);
+                    Offsets::write_offset::<B>(&mut data[Offsets::D_TAG_START ..
+                                                         Offsets::D_TAG_END],
+                                               (13 as u8).into());
+                    Offsets::write_addr::<B>(&mut data[Offsets::D_PTR_START ..
+                                                       Offsets::D_PTR_END],
+                                             *func);
                 },
                 DynamicEntData::Name { name } => {
-                    Offsets::write_offset(&mut data[Offsets::D_TAG_START ..
-                                                    Offsets::D_TAG_END],
-                                          (14 as u8).into(), byteorder);
-                    Offsets::write_offset(&mut data[Offsets::D_PTR_START ..
-                                                    Offsets::D_PTR_END],
-                                          name, byteorder);
+                    Offsets::write_offset::<B>(&mut data[Offsets::D_TAG_START ..
+                                                         Offsets::D_TAG_END],
+                                               (14 as u8).into());
+                    Offsets::write_offset::<B>(&mut data[Offsets::D_PTR_START ..
+                                                         Offsets::D_PTR_END],
+                                               *name);
                 },
                 DynamicEntData::RPath { path } => {
-                    Offsets::write_offset(&mut data[Offsets::D_TAG_START ..
-                                                    Offsets::D_TAG_END],
-                                          (29 as u8).into(), byteorder);
-                    Offsets::write_offset(&mut data[Offsets::D_PTR_START ..
-                                                    Offsets::D_PTR_END],
-                                          path, byteorder);
+                    Offsets::write_offset::<B>(&mut data[Offsets::D_TAG_START ..
+                                                         Offsets::D_TAG_END],
+                                               (29 as u8).into());
+                    Offsets::write_offset::<B>(&mut data[Offsets::D_PTR_START ..
+                                                         Offsets::D_PTR_END],
+                                               *path);
                 },
                 DynamicEntData::Symbolic => {
-                    Offsets::write_offset(&mut data[Offsets::D_TAG_START ..
-                                                    Offsets::D_TAG_END],
-                                          (16 as u8).into(), byteorder);
-                    Offsets::write_offset(&mut data[Offsets::D_VAL_START ..
-                                                    Offsets::D_VAL_END],
-                                          (0 as u8).into(), byteorder);
+                    Offsets::write_offset::<B>(&mut data[Offsets::D_TAG_START ..
+                                                         Offsets::D_TAG_END],
+                                               (16 as u8).into());
+                    Offsets::write_offset::<B>(&mut data[Offsets::D_VAL_START ..
+                                                         Offsets::D_VAL_END],
+                                               (0 as u8).into());
                 },
                 DynamicEntData::Rel { tab } => {
-                    Offsets::write_offset(&mut data[Offsets::D_TAG_START ..
-                                                    Offsets::D_TAG_END],
-                                          (17 as u8).into(), byteorder);
-                    Offsets::write_addr(&mut data[Offsets::D_PTR_START ..
-                                                  Offsets::D_PTR_END],
-                                        tab, byteorder);
+                    Offsets::write_offset::<B>(&mut data[Offsets::D_TAG_START ..
+                                                         Offsets::D_TAG_END],
+                                               (17 as u8).into());
+                    Offsets::write_addr::<B>(&mut data[Offsets::D_PTR_START ..
+                                                       Offsets::D_PTR_END],
+                                             *tab);
                 },
                 DynamicEntData::RelSize { size } => {
-                    Offsets::write_offset(&mut data[Offsets::D_TAG_START ..
-                                                    Offsets::D_TAG_END],
-                                          (18 as u8).into(), byteorder);
-                    Offsets::write_offset(&mut data[Offsets::D_VAL_START ..
-                                                    Offsets::D_VAL_END],
-                                          size, byteorder);
+                    Offsets::write_offset::<B>(&mut data[Offsets::D_TAG_START ..
+                                                         Offsets::D_TAG_END],
+                                               (18 as u8).into());
+                    Offsets::write_offset::<B>(&mut data[Offsets::D_VAL_START ..
+                                                         Offsets::D_VAL_END],
+                                               *size);
                 },
                 DynamicEntData::RelEntSize { size } => {
-                    Offsets::write_offset(&mut data[Offsets::D_TAG_START ..
-                                                    Offsets::D_TAG_END],
-                                          (19 as u8).into(), byteorder);
-                    Offsets::write_offset(&mut data[Offsets::D_VAL_START ..
-                                                    Offsets::D_VAL_END],
-                                          size, byteorder);
+                    Offsets::write_offset::<B>(&mut data[Offsets::D_TAG_START ..
+                                                         Offsets::D_TAG_END],
+                                               (19 as u8).into());
+                    Offsets::write_offset::<B>(&mut data[Offsets::D_VAL_START ..
+                                                         Offsets::D_VAL_END],
+                                               *size);
                 },
                 DynamicEntData::PLTRela { rela: true } => {
-                    Offsets::write_offset(&mut data[Offsets::D_TAG_START ..
-                                                    Offsets::D_TAG_END],
-                                          (20 as u8).into(), byteorder);
-                    Offsets::write_offset(&mut data[Offsets::D_VAL_START ..
-                                                    Offsets::D_VAL_END],
-                                          (7 as u8).into(), byteorder);
+                    Offsets::write_offset::<B>(&mut data[Offsets::D_TAG_START ..
+                                                         Offsets::D_TAG_END],
+                                               (20 as u8).into());
+                    Offsets::write_offset::<B>(&mut data[Offsets::D_VAL_START ..
+                                                         Offsets::D_VAL_END],
+                                               (7 as u8).into());
                 },
                 DynamicEntData::PLTRela { rela: false } => {
-                    Offsets::write_offset(&mut data[Offsets::D_TAG_START ..
-                                                    Offsets::D_TAG_END],
-                                          (20 as u8).into(), byteorder);
-                    Offsets::write_offset(&mut data[Offsets::D_VAL_START ..
-                                                    Offsets::D_VAL_END],
-                                          (17 as u8).into(), byteorder);
+                    Offsets::write_offset::<B>(&mut data[Offsets::D_TAG_START ..
+                                                         Offsets::D_TAG_END],
+                                               (20 as u8).into());
+                    Offsets::write_offset::<B>(&mut data[Offsets::D_VAL_START ..
+                                                         Offsets::D_VAL_END],
+                                               (17 as u8).into());
                 },
                 DynamicEntData::Debug { tab } => {
-                    Offsets::write_offset(&mut data[Offsets::D_TAG_START ..
-                                                    Offsets::D_TAG_END],
-                                          (21 as u8).into(), byteorder);
-                    Offsets::write_addr(&mut data[Offsets::D_PTR_START ..
-                                                  Offsets::D_PTR_END],
-                                        tab, byteorder);
+                    Offsets::write_offset::<B>(&mut data[Offsets::D_TAG_START ..
+                                                         Offsets::D_TAG_END],
+                                               (21 as u8).into());
+                    Offsets::write_addr::<B>(&mut data[Offsets::D_PTR_START ..
+                                                       Offsets::D_PTR_END],
+                                             *tab);
                 },
                 DynamicEntData::TextRel => {
-                    Offsets::write_offset(&mut data[Offsets::D_TAG_START ..
-                                                    Offsets::D_TAG_END],
-                                          (22 as u8).into(), byteorder);
-                    Offsets::write_offset(&mut data[Offsets::D_VAL_START ..
-                                                    Offsets::D_VAL_END],
-                                          (0 as u8).into(), byteorder);
+                    Offsets::write_offset::<B>(&mut data[Offsets::D_TAG_START ..
+                                                         Offsets::D_TAG_END],
+                                               (22 as u8).into());
+                    Offsets::write_offset::<B>(&mut data[Offsets::D_VAL_START ..
+                                                         Offsets::D_VAL_END],
+                                               (0 as u8).into());
                 },
                 DynamicEntData::JumpRel { tab } => {
-                    Offsets::write_offset(&mut data[Offsets::D_TAG_START ..
-                                                    Offsets::D_TAG_END],
-                                          (23 as u8).into(), byteorder);
-                    Offsets::write_addr(&mut data[Offsets::D_PTR_START ..
-                                                  Offsets::D_PTR_END],
-                                        tab, byteorder);
+                    Offsets::write_offset::<B>(&mut data[Offsets::D_TAG_START ..
+                                                         Offsets::D_TAG_END],
+                                               (23 as u8).into());
+                    Offsets::write_addr::<B>(&mut data[Offsets::D_PTR_START ..
+                                                       Offsets::D_PTR_END],
+                                             *tab);
                 },
                 DynamicEntData::BindNow => {
-                    Offsets::write_offset(&mut data[Offsets::D_TAG_START ..
-                                                    Offsets::D_TAG_END],
-                                          (24 as u8).into(), byteorder);
-                    Offsets::write_offset(&mut data[Offsets::D_VAL_START ..
-                                                    Offsets::D_VAL_END],
-                                          (0 as u8).into(), byteorder);
+                    Offsets::write_offset::<B>(&mut data[Offsets::D_TAG_START ..
+                                                         Offsets::D_TAG_END],
+                                               (24 as u8).into());
+                    Offsets::write_offset::<B>(&mut data[Offsets::D_VAL_START ..
+                                                         Offsets::D_VAL_END],
+                                               (0 as u8).into());
                 },
                 DynamicEntData::InitArray { arr } => {
-                    Offsets::write_offset(&mut data[Offsets::D_TAG_START ..
-                                                    Offsets::D_TAG_END],
-                                          (25 as u8).into(), byteorder);
-                    Offsets::write_addr(&mut data[Offsets::D_PTR_START ..
-                                                  Offsets::D_PTR_END],
-                                        arr, byteorder);
+                    Offsets::write_offset::<B>(&mut data[Offsets::D_TAG_START ..
+                                                         Offsets::D_TAG_END],
+                                               (25 as u8).into());
+                    Offsets::write_addr::<B>(&mut data[Offsets::D_PTR_START ..
+                                                       Offsets::D_PTR_END],
+                                             *arr);
                 },
                 DynamicEntData::FiniArray { arr } => {
-                    Offsets::write_offset(&mut data[Offsets::D_TAG_START ..
-                                                    Offsets::D_TAG_END],
-                                          (26 as u8).into(), byteorder);
-                    Offsets::write_addr(&mut data[Offsets::D_PTR_START ..
-                                                  Offsets::D_PTR_END],
-                                        arr, byteorder);
+                    Offsets::write_offset::<B>(&mut data[Offsets::D_TAG_START ..
+                                                         Offsets::D_TAG_END],
+                                               (26 as u8).into());
+                    Offsets::write_addr::<B>(&mut data[Offsets::D_PTR_START ..
+                                                       Offsets::D_PTR_END],
+                                             *arr);
                 },
                 DynamicEntData::InitArraySize { size } => {
-                    Offsets::write_offset(&mut data[Offsets::D_TAG_START ..
-                                                    Offsets::D_TAG_END],
-                                          (27 as u8).into(), byteorder);
-                    Offsets::write_offset(&mut data[Offsets::D_VAL_START ..
-                                                    Offsets::D_VAL_END],
-                                          size, byteorder);
+                    Offsets::write_offset::<B>(&mut data[Offsets::D_TAG_START ..
+                                                         Offsets::D_TAG_END],
+                                               (27 as u8).into());
+                    Offsets::write_offset::<B>(&mut data[Offsets::D_VAL_START ..
+                                                         Offsets::D_VAL_END],
+                                               *size);
                 },
                 DynamicEntData::FiniArraySize { size } => {
-                    Offsets::write_offset(&mut data[Offsets::D_TAG_START ..
-                                                    Offsets::D_TAG_END],
-                                          (28 as u8).into(), byteorder);
-                    Offsets::write_offset(&mut data[Offsets::D_VAL_START ..
-                                                    Offsets::D_VAL_END],
-                                          size, byteorder);
+                    Offsets::write_offset::<B>(&mut data[Offsets::D_TAG_START ..
+                                                         Offsets::D_TAG_END],
+                                               (28 as u8).into());
+                    Offsets::write_offset::<B>(&mut data[Offsets::D_VAL_START ..
+                                                         Offsets::D_VAL_END],
+                                               *size);
                 },
                 DynamicEntData::Flags { flags } => {
-                    Offsets::write_offset(&mut data[Offsets::D_TAG_START ..
-                                                    Offsets::D_TAG_END],
-                                          (30 as u8).into(), byteorder);
-                    Offsets::write_offset(&mut data[Offsets::D_VAL_START ..
-                                                    Offsets::D_VAL_END],
-                                          flags, byteorder);
+                    Offsets::write_offset::<B>(&mut data[Offsets::D_TAG_START ..
+                                                         Offsets::D_TAG_END],
+                                               (30 as u8).into());
+                    Offsets::write_offset::<B>(&mut data[Offsets::D_VAL_START ..
+                                                         Offsets::D_VAL_END],
+                                               *flags);
                 },
                 DynamicEntData::PreInitArray { arr } => {
-                    Offsets::write_offset(&mut data[Offsets::D_TAG_START ..
-                                                    Offsets::D_TAG_END],
-                                          (32 as u8).into(), byteorder);
-                    Offsets::write_addr(&mut data[Offsets::D_PTR_START ..
-                                                  Offsets::D_PTR_END],
-                                        arr, byteorder);
+                    Offsets::write_offset::<B>(&mut data[Offsets::D_TAG_START ..
+                                                         Offsets::D_TAG_END],
+                                               (32 as u8).into());
+                    Offsets::write_addr::<B>(&mut data[Offsets::D_PTR_START ..
+                                                       Offsets::D_PTR_END],
+                                             *arr);
                 },
                 DynamicEntData::PreInitArraySize { size } => {
-                    Offsets::write_offset(&mut data[Offsets::D_TAG_START ..
-                                                    Offsets::D_TAG_END],
-                                          (33 as u8).into(), byteorder);
-                    Offsets::write_offset(&mut data[Offsets::D_VAL_START ..
-                                                    Offsets::D_VAL_END],
-                                          size, byteorder);
+                    Offsets::write_offset::<B>(&mut data[Offsets::D_TAG_START ..
+                                                         Offsets::D_TAG_END],
+                                               (33 as u8).into());
+                    Offsets::write_offset::<B>(&mut data[Offsets::D_VAL_START ..
+                                                         Offsets::D_VAL_END],
+                                               *size);
                 },
                 DynamicEntData::SymtabIdx { idx } => {
-                    Offsets::write_offset(&mut data[Offsets::D_TAG_START ..
-                                                    Offsets::D_TAG_END],
-                                          (34 as u8).into(), byteorder);
-                    Offsets::write_offset(&mut data[Offsets::D_VAL_START ..
-                                                    Offsets::D_VAL_END],
-                                          idx, byteorder);
+                    Offsets::write_offset::<B>(&mut data[Offsets::D_TAG_START ..
+                                                         Offsets::D_TAG_END],
+                                               (34 as u8).into());
+                    Offsets::write_offset::<B>(&mut data[Offsets::D_VAL_START ..
+                                                         Offsets::D_VAL_END],
+                                               *idx);
                 },
                 DynamicEntData::Unknown { tag, info } => {
-                    Offsets::write_offset(&mut data[Offsets::D_TAG_START ..
-                                                    Offsets::D_TAG_END],
-                                          tag, byteorder);
-                    Offsets::write_offset(&mut data[Offsets::D_VAL_START ..
-                                                    Offsets::D_VAL_END],
-                                          info, byteorder);
+                    Offsets::write_offset::<B>(&mut data[Offsets::D_TAG_START ..
+                                                         Offsets::D_TAG_END],
+                                               *tag);
+                    Offsets::write_offset::<B>(&mut data[Offsets::D_VAL_START ..
+                                                         Offsets::D_VAL_END],
+                                               *info);
                 }
             }
 
@@ -1311,10 +1280,11 @@ impl<'a, B, Offsets> Dynamic<'a, B, Offsets>
     #[inline]
     pub fn create_split<I>(buf: &'a mut [u8], ents: I) ->
         Result<(Self, &'a mut [u8]), ()>
-        where I: Iterator<Item = DynamicEntDataRaw<Offsets>> {
+        where I: Iterator,
+              I::Item: Borrow<DynamicEntDataRaw<Offsets>> {
         let byteorder: PhantomData<B> = PhantomData;
         let offsets: PhantomData<Offsets> = PhantomData;
-        let (data, out) = create(buf, ents, byteorder, offsets)?;
+        let (data, out) = create::<B, I, Offsets>(buf, ents)?;
 
         Ok((Dynamic { byteorder: byteorder, offsets: offsets, data: data },
             out))
@@ -1380,8 +1350,8 @@ impl<'a, B, Offsets> Dynamic<'a, B, Offsets>
     /// ```
     #[inline]
     pub fn create<I>(buf: &'a mut [u8], ents: I) -> Result<Self, ()>
-        where I: Iterator<Item = DynamicEntDataRaw<Offsets>>,
-              Self: Sized {
+        where I: Iterator,
+              I::Item: Borrow<DynamicEntDataRaw<Offsets>> {
         match Self::create_split(buf, ents) {
             Ok((out, _)) => Ok(out),
             Err(err) => Err(err)
@@ -1422,6 +1392,7 @@ impl<'a, B, Offsets> Dynamic<'a, B, Offsets>
     }
 }
 
+
 impl<'a, B, Offsets> TryFrom<DynamicEnt<'a, B, Offsets>>
     for DynamicEntDataRaw<Offsets>
     where Offsets: DynamicOffsets,
@@ -1432,7 +1403,7 @@ impl<'a, B, Offsets> TryFrom<DynamicEnt<'a, B, Offsets>>
     fn try_from(ent: DynamicEnt<'a, B, Offsets>) ->
         Result<DynamicEntData<Offsets::Offset, Offsets::Offset, Offsets>,
                Self::Error> {
-        project(ent.data, ent.byteorder, ent.offsets)
+        project::<B, Offsets>(ent.data)
     }
 }
 
@@ -1446,7 +1417,7 @@ impl<'a, B, Offsets> WithStrtab<'a> for DynamicEnt<'a, B, Offsets>
     #[inline]
     fn with_strtab(self, strtab: Strtab<'a>) ->
         Result<Self::Result, Self::Error> {
-        match project(self.data, self.byteorder, self.offsets) {
+        match project::<B, Offsets>(self.data) {
             Ok(DynamicEntData::None) =>
                 Ok(DynamicEntData::None),
             Ok(DynamicEntData::Needed { name }) => match strtab.idx(name) {
@@ -1753,7 +1724,7 @@ impl<'a, B, Offsets: DynamicOffsets> ExactSizeIterator
     where B: ByteOrder {
     #[inline]
     fn len(&self) -> usize {
-        self.data.len() / Offsets::DYNAMIC_SIZE
+        (self.data.len() / Offsets::DYNAMIC_SIZE) - self.idx
     }
 }
 

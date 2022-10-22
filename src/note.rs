@@ -126,7 +126,7 @@
 //!
 //! let mut buf = [0; 72];
 //! let notes: Result<Notes<'_, LittleEndian>, ()> =
-//!     Notes::create(&mut buf[0..], ELF_NOTES_CONTENTS.iter().map(|x| *x));
+//!     Notes::create(&mut buf[0..], ELF_NOTES_CONTENTS.iter());
 //!
 //! assert!(notes.is_ok());
 //! ```
@@ -167,7 +167,7 @@
 //!     NoteData { kind: 2, name: &ELF_NOTE_3_NAME, desc: &ELF_NOTE_3_DESC },
 //! ];
 //!
-//! assert_eq!(required_bytes(ELF_NOTES_CONTENTS.iter().map(|x| *x)), 72)
+//! assert_eq!(required_bytes(ELF_NOTES_CONTENTS.iter()), 72)
 //! ```
 //!
 //! The [create_split](Notes::create_split) variant returns a
@@ -209,13 +209,14 @@
 //! let mut buf = [0; 80];
 //! let res: Result<(Notes<'_, LittleEndian>, &'_ mut [u8]), ()> =
 //!     Notes::create_split(&mut buf[0..],
-//!                         ELF_NOTES_CONTENTS.iter().map(|x| *x));
+//!                         ELF_NOTES_CONTENTS.iter());
 //! let (notes, buf) = res.unwrap();
 //!
 //! assert_eq!(buf.len(), 8);
 //! ```
 
 use byteorder::ByteOrder;
+use core::borrow::Borrow;
 use core::convert::TryFrom;
 use core::fmt::Display;
 use core::fmt::Formatter;
@@ -388,7 +389,7 @@ pub enum NotesError {
 
 /// Calculate the size of a single ELF note.
 #[inline]
-fn get_size<'a, B>(data: &'a [u8], _byteorder: PhantomData<B>) -> Option<usize>
+fn get_size<'a, B>(data: &'a [u8]) -> Option<usize>
     where B: ByteOrder {
     if data.len() >= ELF_NOTE_WORD_SIZE * 2 {
         let namesize = B::read_u32(&data[ELF_NOTE_NAME_SIZE_START ..
@@ -409,14 +410,14 @@ fn get_size<'a, B>(data: &'a [u8], _byteorder: PhantomData<B>) -> Option<usize>
 
 /// Check the internal formatting of an ELF note section.
 #[inline]
-fn check<'a, B>(data: &'a [u8], byteorder: PhantomData<B>) -> bool
+fn check<'a, B>(data: &'a [u8]) -> bool
     where B: ByteOrder {
     let mut idx = 0;
 
     while idx < data.len() {
         let buf = &data[idx..];
 
-        match get_size(buf, byteorder) {
+        match get_size::<B>(buf) {
             Some(size) => idx += size,
             None => return false
         }
@@ -443,16 +444,17 @@ fn project<'a, B>(data: &'a [u8], _byteorder: PhantomData<B>) -> NoteData<'a>
     NoteData { kind: kind, name: name, desc: desc }
 }
 
-fn create_split_raw<'a, B, I>(buf: &'a mut [u8], notes: I,
-                              _byteorder: PhantomData<B>) ->
-    Result<(&'a mut [u8], &'a mut [u8]), ()>
-    where I: Iterator<Item = NoteData<'a>>,
+fn create_split_raw<'a, 'b, B, I>(buf: &'b mut [u8], notes: I) ->
+    Result<(&'b mut [u8], &'b mut [u8]), ()>
+    where I: Iterator,
+          I::Item: Borrow<NoteData<'a>>,
           B: ByteOrder {
     let mut idx = 0;
 
-    for NoteData { kind, name, desc } in notes {
-        let namesize = name.len();
-        let descsize = desc.len();
+    for note in notes {
+        let note = note.borrow();
+        let namesize = note.name.len();
+        let descsize = note.desc.len();
         let size = namesize + descsize + (ELF_NOTE_WORD_SIZE * 3);
 
         if buf.len() >= size + idx {
@@ -469,11 +471,11 @@ fn create_split_raw<'a, B, I>(buf: &'a mut [u8], notes: I,
                          descsize as u32);
             B::write_u32(&mut buf[idx + ELF_NOTE_TYPE_START ..
                                   idx + ELF_NOTE_TYPE_END],
-                         kind);
+                         note.kind);
             (&mut buf[idx + name_start .. idx + name_end])
-                .clone_from_slice(&name[0..]);
+                .clone_from_slice(&note.name[0..]);
             (&mut buf[idx + desc_start .. idx + desc_end])
-                .clone_from_slice(&desc[0..]);
+                .clone_from_slice(&note.desc[0..]);
 
             idx += size
         } else {
@@ -489,7 +491,7 @@ fn create_split_raw<'a, B, I>(buf: &'a mut [u8], notes: I,
 /// note objects in `notes`.
 #[inline]
 pub fn required_bytes<'a, I>(notes: I) -> usize
-    where I: Iterator<Item = NoteData<'a>> {
+    where I: Iterator<Item = &'a NoteData<'a>> {
     let mut size = 0;
 
     for NoteData { name, desc, .. } in notes {
@@ -552,8 +554,7 @@ impl<'a, B> Notes<'a, B>
     ///
     /// let mut buf = [0; 80];
     /// let res: Result<(Notes<'_, LittleEndian>, &'_ mut [u8]), ()> =
-    ///     Notes::create_split(&mut buf[0..],
-    ///                         NOTES_CONTENTS.iter().map(|x| *x));
+    ///     Notes::create_split(&mut buf[0..], NOTES_CONTENTS.iter());
     /// let (notes, buf) = res.unwrap();
     ///
     /// assert_eq!(buf.len(), 8);
@@ -569,13 +570,14 @@ impl<'a, B> Notes<'a, B>
     /// assert_eq!(iter.next(), None);
     /// ```
     #[inline]
-    pub fn create_split<I>(buf: &'a mut [u8], notes: I) ->
-        Result<(Notes<'a, B>, &'a mut [u8]), ()>
-        where I: Iterator<Item = NoteData<'a>>,
+    pub fn create_split<'b, I>(buf: &'b mut [u8], notes: I) ->
+        Result<(Notes<'b, B>, &'b mut [u8]), ()>
+        where I: Iterator,
+              I::Item: Borrow<NoteData<'a>>,
               B: ByteOrder {
         let byteorder: PhantomData<B> = PhantomData;
 
-        match create_split_raw(buf, notes, byteorder) {
+        match create_split_raw::<B, I>(buf, notes) {
             Ok((note, rest)) => Ok((Notes { byteorder: byteorder,
                                             data: note }, rest)),
             Err(err) => Err(err)
@@ -629,7 +631,7 @@ impl<'a, B> Notes<'a, B>
     ///
     /// let mut buf = [0; 80];
     /// let notes: Notes<'_, LittleEndian> =
-    ///     Notes::create(&mut buf[0..], NOTES_CONTENTS.iter().map(|x| *x))
+    ///     Notes::create(&mut buf[0..], NOTES_CONTENTS.iter())
     ///     .unwrap();
     /// let mut iter = notes.iter();
     ///
@@ -642,8 +644,10 @@ impl<'a, B> Notes<'a, B>
     /// assert_eq!(iter.next(), None);
     /// ```
     #[inline]
-    pub fn create<I>(buf: &'a mut [u8], notes: I) -> Result<Notes<'a, B>, ()>
-        where I: Iterator<Item = NoteData<'a>>,
+    pub fn create<'b, I>(buf: &'b mut [u8], notes: I) ->
+        Result<Notes<'b, B>, ()>
+        where I: Iterator,
+              I::Item: Borrow<NoteData<'a>>,
               B: ByteOrder {
         match Self::create_split(buf, notes) {
             Ok((notes, _)) => Ok(notes),
@@ -671,11 +675,11 @@ impl<'a, B> NotesMut<'a, B>
     #[inline]
     pub fn create_split<I>(buf: &'a mut [u8], notes: I) ->
         Result<(NotesMut<'a, B>, &'a mut [u8]), ()>
-        where I: Iterator<Item = NoteData<'a>>,
+        where I: Iterator<Item = &'a NoteData<'a>>,
               B: ByteOrder {
         let byteorder: PhantomData<B> = PhantomData;
 
-        match create_split_raw(buf, notes, byteorder) {
+        match create_split_raw::<B, I>(buf, notes) {
             Ok((note, rest)) => Ok((NotesMut { byteorder: byteorder,
                                                   data: note }, rest)),
             Err(err) => Err(err)
@@ -687,7 +691,7 @@ impl<'a, B> NotesMut<'a, B>
     #[inline]
     pub fn create<I>(buf: &'a mut [u8], notes: I) ->
         Result<NotesMut<'a, B>, ()>
-        where I: Iterator<Item = NoteData<'a>>,
+        where I: Iterator<Item = &'a NoteData<'a>>,
               B: ByteOrder {
         match Self::create_split(buf, notes) {
             Ok((notes, _)) => Ok(notes),
@@ -710,7 +714,7 @@ impl<'a, B> TryFrom<&'a [u8]> for Notes<'a, B>
     fn try_from(data: &'a [u8]) -> Result<Notes<'a, B>, Self::Error> {
         let byteorder: PhantomData<B> = PhantomData;
 
-        if check(data, byteorder) {
+        if check::<B>(data) {
             Ok(Notes { byteorder: byteorder, data: data })
         } else {
             Err(NotesError::TooShort)
@@ -726,7 +730,7 @@ impl<'a, B> TryFrom<&'a mut [u8]> for Notes<'a, B>
     fn try_from(data: &'a mut [u8]) -> Result<Notes<'a, B>, Self::Error> {
         let byteorder: PhantomData<B> = PhantomData;
 
-        if check(data, byteorder) {
+        if check::<B>(data) {
             Ok(Notes { byteorder: byteorder, data: data })
         } else {
             Err(NotesError::TooShort)
@@ -742,7 +746,7 @@ impl<'a, B> TryFrom<&'a mut [u8]> for NotesMut<'a, B>
     fn try_from(data: &'a mut [u8]) -> Result<NotesMut<'a, B>, Self::Error> {
         let byteorder: PhantomData<B> = PhantomData;
 
-        if check(data, byteorder) {
+        if check::<B>(data) {
             Ok(NotesMut { byteorder: byteorder, data: data })
         } else {
             Err(NotesError::TooShort)
@@ -757,7 +761,7 @@ impl<'a, B> Iterator for NotesIter<'a, B>
     fn next(&mut self) -> Option<NoteData<'a>> {
         let start = self.idx;
 
-        match get_size(&self.data[start..], self.byteorder) {
+        match get_size::<B>(&self.data[start..]) {
             Some(size) => {
                 let buf = &self.data[start .. start + size];
 

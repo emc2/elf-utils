@@ -720,9 +720,14 @@ fn test_Symtab_from_bytes_num_syms() {
 fn test_Symtab_from_bytes_iter_len() {
     let symtab: Symtab<'_, LittleEndian, Elf32> =
         Symtab::try_from(&ELF32_SYMTAB[0..]).expect("Expected success");
-    let iter = symtab.iter();
+    let mut iter = symtab.iter();
 
-    assert_eq!(iter.len(), 101);
+    for i in 0 .. 101 {
+        assert_eq!(iter.len(), 101 - i);
+        assert!(iter.next().is_some());
+    }
+
+    assert!(iter.next().is_none());
 }
 
 #[test]

@@ -95,9 +95,14 @@ fn test_Rels_from_bytes_num_syms() {
 fn test_Rels_from_bytes_iter_len() {
     let rels: Rels<'_, LittleEndian, Elf32> =
         Rels::try_from(&ELF32_RELS[0..]).expect("Expected success");
-    let iter = rels.iter();
+    let mut iter = rels.iter();
 
-    assert_eq!(iter.len(), ELF32_NUM_RELS);
+    for i in 0 .. ELF32_NUM_RELS {
+        assert_eq!(iter.len(), ELF32_NUM_RELS - i);
+        assert!(iter.next().is_some());
+    }
+
+    assert!(iter.next().is_none());
 }
 
 #[test]

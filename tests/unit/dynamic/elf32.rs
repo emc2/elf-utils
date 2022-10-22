@@ -117,9 +117,14 @@ fn test_Dynamic_from_bytes_iter_len_mut() {
     let mut buf = ELF32_DYNAMIC.clone();
     let dynamic: Dynamic<'_, LittleEndian, Elf32> =
         Dynamic::try_from(&mut buf[0..]).expect("Expected success");
-    let iter = dynamic.iter();
+    let mut iter = dynamic.iter();
 
-    assert_eq!(iter.len(), ELF32_NUM_DYNAMIC_ENTS);
+    for i in 0 .. ELF32_NUM_DYNAMIC_ENTS {
+        assert_eq!(iter.len(), ELF32_NUM_DYNAMIC_ENTS - i);
+        assert!(iter.next().is_some());
+    }
+
+    assert!(iter.next().is_none());
 }
 
 #[test]
