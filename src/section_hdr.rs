@@ -2594,18 +2594,18 @@ impl<'a, B, Offsets> TryFrom<&'a mut [u8]> for SectionHdrs<'a, B, Offsets>
 }
 
 impl<'a, B, Str, Offsets> WithElfData<'a>
-        for SectionHdrData<Offsets, Str, SectionHdr<'a, B, Offsets>,
-                           SymsStrs<SectionHdr<'a, B, Offsets>,
-                                    SectionHdr<'a, B, Offsets>>,
-                           SectionHdr<'a, B, Offsets>,
-                           SectionPos<Offsets::Offset>,
-                           SectionPos<Offsets::Offset>,
-                           SectionPos<Offsets::Offset>,
-                           SectionPos<Offsets::Offset>,
-                           SectionPos<Offsets::Offset>,
-                           SectionPos<Offsets::Offset>,
-                           SectionPos<Offsets::Offset>,
-                           SectionPos<Offsets::Offset>>
+    for SectionHdrData<Offsets, Str, SectionHdr<'a, B, Offsets>,
+                       SymsStrs<SectionHdr<'a, B, Offsets>,
+                                SectionHdr<'a, B, Offsets>>,
+                       SectionHdr<'a, B, Offsets>,
+                       SectionPos<Offsets::Offset>,
+                       SectionPos<Offsets::Offset>,
+                       SectionPos<Offsets::Offset>,
+                       SectionPos<Offsets::Offset>,
+                       SectionPos<Offsets::Offset>,
+                       SectionPos<Offsets::Offset>,
+                       SectionPos<Offsets::Offset>,
+                       SectionPos<Offsets::Offset>>
     where Offsets: SectionHdrOffsets,
           B: ByteOrder {
     type Result = SectionHdrData<Offsets, Str, SectionHdr<'a, B, Offsets>,
@@ -2622,7 +2622,7 @@ impl<'a, B, Str, Offsets> WithElfData<'a>
             SectionHdrData::ProgBits { data: SectionPos { offset, size },
                                        name, addr, align, alloc,
                                        write, exec } => {
-                match (offset.try_into(), size.try_into()) {
+                match ((offset).try_into(), (size).try_into()) {
                     (Ok(offset), Ok(size)) if offset + size <= data.len() =>
                         Ok(SectionHdrData::ProgBits {
                             name: name, addr: addr, align: align,
@@ -2637,7 +2637,7 @@ impl<'a, B, Str, Offsets> WithElfData<'a>
                                      name, local_end, addr, align, write,
                                      alloc, exec, strtab } => {
                 // Convert the strtab into data first.
-                let strtab = match strtab.try_into() {
+                let strtab = match (strtab).try_into() {
                     Ok(SectionHdrData::Strtab {
                         strs: SectionPos { offset, size }, ..
                     }) => match (offset.try_into(), size.try_into()) {
@@ -2651,12 +2651,13 @@ impl<'a, B, Str, Offsets> WithElfData<'a>
                     Err(err) => Err(err)
                 };
 
-                match (offset.try_into(), size.try_into()) {
+                match ((offset).try_into(), (size).try_into()) {
                     (Ok(offset), Ok(size)) if offset + size <= data.len() =>
                         Ok(SectionHdrData::Symtab {
-                            name: name, addr: addr, align: align, write: write,
                             strtab: strtab?, exec: exec, local_end: local_end,
-                            alloc: alloc, syms: &data[offset .. offset + size]
+                            alloc: alloc, syms: &data[offset .. offset + size],
+                            name: name, addr: addr, align: align,
+                            write: write,
                         }),
                     _ => Err(SectionHdrError::DataOutOfBounds { offset: offset,
                                                                 size: size })
@@ -2664,7 +2665,7 @@ impl<'a, B, Str, Offsets> WithElfData<'a>
             },
             SectionHdrData::Strtab { strs: SectionPos { offset, size },
                                      name, addr, align } => {
-                match (offset.try_into(), size.try_into()) {
+                match ((offset).try_into(), (size).try_into()) {
                     (Ok(offset), Ok(size)) if offset + size <= data.len() =>
                         Ok(SectionHdrData::Strtab {
                             name: name, addr: addr, align: align,
@@ -2678,7 +2679,7 @@ impl<'a, B, Str, Offsets> WithElfData<'a>
                                    symtab: SymsStrs { syms, strs },
                                    name, addr, align, write, alloc,
                                    exec, target } => {
-                let symtab = match syms.try_into() {
+                let symtab = match (syms).try_into() {
                     Ok(SectionHdrData::Symtab {
                         syms: SectionPos { offset, size }, ..
                     }) => match (offset.try_into(), size.try_into()) {
@@ -2701,7 +2702,7 @@ impl<'a, B, Str, Offsets> WithElfData<'a>
                     Err(err) => Err(err)
                 };
 
-                let strtab = match strs.try_into() {
+                let strtab = match (strs).try_into() {
                     Ok(SectionHdrData::Strtab {
                         strs: SectionPos { offset, size }, ..
                     }) => match (offset.try_into(), size.try_into()) {
@@ -2717,7 +2718,7 @@ impl<'a, B, Str, Offsets> WithElfData<'a>
 
                 let symtab = SymsStrs { syms: symtab?, strs: strtab? };
 
-                match (offset.try_into(), size.try_into()) {
+                match ((offset).try_into(), (size).try_into()) {
                     (Ok(offset), Ok(size)) if offset + size <= data.len() =>
                         Ok(SectionHdrData::Rela {
                             name: name, align: align, addr: addr,
@@ -2732,7 +2733,7 @@ impl<'a, B, Str, Offsets> WithElfData<'a>
             SectionHdrData::Hash { hash: SectionPos { offset, size },
                                    symtab: SymsStrs { syms, strs },
                                    name, addr, align, write, alloc, exec } => {
-                let symtab = match syms.try_into() {
+                let symtab = match (syms).try_into() {
                     Ok(SectionHdrData::Symtab {
                         syms: SectionPos { offset, size }, ..
                     }) => match (offset.try_into(), size.try_into()) {
@@ -2755,7 +2756,7 @@ impl<'a, B, Str, Offsets> WithElfData<'a>
                     Err(err) => Err(err)
                 };
 
-                let strtab = match strs.try_into() {
+                let strtab = match (strs).try_into() {
                     Ok(SectionHdrData::Strtab {
                         strs: SectionPos { offset, size }, ..
                     }) => match (offset.try_into(), size.try_into()) {
@@ -2771,12 +2772,13 @@ impl<'a, B, Str, Offsets> WithElfData<'a>
 
                 let symtab = SymsStrs { syms: symtab?, strs: strtab? };
 
-                match (offset.try_into(), size.try_into()) {
+                match ((offset).try_into(), (size).try_into()) {
                     (Ok(offset), Ok(size)) if offset + size <= data.len() =>
                         Ok(SectionHdrData::Hash {
-                            name: name, addr: addr, align: align, write: write,
                             exec: exec, alloc: alloc, symtab: symtab,
-                            hash: &data[offset .. offset + size]
+                            hash: &data[offset .. offset + size],
+                            name: name, addr: addr, align: align,
+                            write: write
                         }),
                     _ => Err(SectionHdrError::DataOutOfBounds { offset: offset,
                                                                 size: size })
@@ -2786,7 +2788,7 @@ impl<'a, B, Str, Offsets> WithElfData<'a>
                                       name, align, addr, write, alloc,
                                       exec, strtab } => {
                 // Convert the strtab into data first.
-                let strtab = match strtab.try_into() {
+                let strtab = match (strtab).try_into() {
                     Ok(SectionHdrData::Strtab {
                         strs: SectionPos { offset, size }, ..
                     }) => match (offset.try_into(), size.try_into()) {
@@ -2800,12 +2802,13 @@ impl<'a, B, Str, Offsets> WithElfData<'a>
                     Err(err) => Err(err)
                 };
 
-                match (offset.try_into(), size.try_into()) {
+                match ((offset).try_into(), (size).try_into()) {
                     (Ok(offset), Ok(size)) if offset + size <= data.len() =>
                         Ok(SectionHdrData::Dynamic {
-                            name: name, align: align, addr: addr, write: write,
                             alloc: alloc, exec: exec, strtab: strtab?,
-                            dynamic: &data[offset .. offset + size]
+                            dynamic: &data[offset .. offset + size],
+                            name: name, align: align, addr: addr,
+                            write: write
                         }),
                     _ => Err(SectionHdrError::DataOutOfBounds { offset: offset,
                                                                 size: size })
@@ -2813,7 +2816,7 @@ impl<'a, B, Str, Offsets> WithElfData<'a>
             },
             SectionHdrData::Note { note: SectionPos { offset, size },
                                    name, addr, align, write, alloc, exec } => {
-                match (offset.try_into(), size.try_into()) {
+                match ((offset).try_into(), (size).try_into()) {
                     (Ok(offset), Ok(size)) if offset + size <= data.len() =>
                         Ok(SectionHdrData::Note {
                             name: name, addr: addr, align: align,
@@ -2827,15 +2830,16 @@ impl<'a, B, Str, Offsets> WithElfData<'a>
             SectionHdrData::Nobits { name, addr, align, offset, size,
                                      write, alloc, exec } => {
                 Ok(SectionHdrData::Nobits {
-                    name: name, addr: addr, size: size, offset: offset,
-                    align: align, write: write, alloc: alloc, exec: exec
+                    name: name, addr: addr, size: size,
+                    offset: offset, align: align, write: write,
+                    alloc: alloc, exec: exec
                 })
             },
             SectionHdrData::Rel { rels: SectionPos { offset, size },
                                   symtab: SymsStrs { syms, strs },
                                   name, addr, align, write, alloc,
                                   exec, target } => {
-                let symtab = match syms.try_into() {
+                let symtab = match (syms).try_into() {
                     Ok(SectionHdrData::Symtab {
                         syms: SectionPos { offset, size }, ..
                     }) => match (offset.try_into(), size.try_into()) {
@@ -2858,7 +2862,7 @@ impl<'a, B, Str, Offsets> WithElfData<'a>
                     Err(err) => Err(err)
                 };
 
-                let strtab = match strs.try_into() {
+                let strtab = match (strs).try_into() {
                     Ok(SectionHdrData::Strtab {
                         strs: SectionPos { offset, size }, ..
                     }) => match (offset.try_into(), size.try_into()) {
@@ -2874,7 +2878,7 @@ impl<'a, B, Str, Offsets> WithElfData<'a>
 
                 let symtab = SymsStrs { syms: symtab?, strs: strtab? };
 
-                match (offset.try_into(), size.try_into()) {
+                match ((offset).try_into(), (size).try_into()) {
                     (Ok(offset), Ok(size)) if offset + size <= data.len() =>
                         Ok(SectionHdrData::Rel {
                             name: name, align: align, addr: addr,
@@ -2890,7 +2894,7 @@ impl<'a, B, Str, Offsets> WithElfData<'a>
                                      name, local_end, addr, align, write,
                                      alloc, exec, strtab } => {
                 // Convert the strtab into data first.
-                let strtab = match strtab.try_into() {
+                let strtab = match (strtab).try_into() {
                     Ok(SectionHdrData::Strtab {
                         strs: SectionPos { offset, size }, ..
                     }) => match (offset.try_into(), size.try_into()) {
@@ -2904,12 +2908,13 @@ impl<'a, B, Str, Offsets> WithElfData<'a>
                     Err(err) => Err(err)
                 };
 
-                match (offset.try_into(), size.try_into()) {
+                match ((offset).try_into(), (size).try_into()) {
                     (Ok(offset), Ok(size)) if offset + size <= data.len() =>
                         Ok(SectionHdrData::Dynsym {
-                            name: name, addr: addr, align: align, write: write,
                             strtab: strtab?, exec: exec, local_end: local_end,
-                            alloc: alloc, syms: &data[offset .. offset + size]
+                            alloc: alloc, syms: &data[offset .. offset + size],
+                            name: name, addr: addr, align: align,
+                            write: write,
                         }),
                     _ => Err(SectionHdrError::DataOutOfBounds { offset: offset,
                                                                 size: size })
@@ -2917,12 +2922,72 @@ impl<'a, B, Str, Offsets> WithElfData<'a>
             },
             SectionHdrData::Unknown { name, tag, addr, align, offset, size,
                                       link, info, ent_size, flags } => {
-                Ok(SectionHdrData::Unknown { name: name, tag: tag, addr: addr,
+                Ok(SectionHdrData::Unknown { name: name, tag: tag,
+                                             addr: addr, info: info,
                                              align: align, offset: offset,
-                                             size: size, link: link, info: info,
-                                             ent_size: ent_size, flags: flags })
+                                             size: size, link: link,
+                                             ent_size: ent_size,
+                                             flags: flags })
             }
         }
+    }
+}
+
+impl<'a, B, Str, Offsets> WithElfData<'a>
+    for &'_ SectionHdrData<Offsets, Str, SectionHdr<'a, B, Offsets>,
+                           SymsStrs<SectionHdr<'a, B, Offsets>,
+                                    SectionHdr<'a, B, Offsets>>,
+                           SectionHdr<'a, B, Offsets>,
+                           SectionPos<Offsets::Offset>,
+                           SectionPos<Offsets::Offset>,
+                           SectionPos<Offsets::Offset>,
+                           SectionPos<Offsets::Offset>,
+                           SectionPos<Offsets::Offset>,
+                           SectionPos<Offsets::Offset>,
+                           SectionPos<Offsets::Offset>,
+                           SectionPos<Offsets::Offset>>
+    where Offsets: SectionHdrOffsets,
+          B: ByteOrder,
+          Str: Clone {
+    type Result = SectionHdrData<Offsets, Str, SectionHdr<'a, B, Offsets>,
+                                 SymsStrs<&'a [u8], &'a [u8]>, &'a [u8],
+                                 &'a [u8], &'a [u8], &'a [u8], &'a [u8],
+                                 &'a [u8], &'a [u8], &'a [u8], &'a [u8]>;
+    type Error = SectionHdrError<Offsets>;
+
+    #[inline]
+    fn with_elf_data(self, data: &'a [u8]) ->
+        Result<Self::Result, Self::Error> {
+        self.clone().with_elf_data(data)
+    }
+}
+
+impl<'a, B, Str, Offsets> WithElfData<'a>
+    for &'_ mut SectionHdrData<Offsets, Str, SectionHdr<'a, B, Offsets>,
+                               SymsStrs<SectionHdr<'a, B, Offsets>,
+                                        SectionHdr<'a, B, Offsets>>,
+                               SectionHdr<'a, B, Offsets>,
+                               SectionPos<Offsets::Offset>,
+                               SectionPos<Offsets::Offset>,
+                               SectionPos<Offsets::Offset>,
+                               SectionPos<Offsets::Offset>,
+                               SectionPos<Offsets::Offset>,
+                               SectionPos<Offsets::Offset>,
+                               SectionPos<Offsets::Offset>,
+                               SectionPos<Offsets::Offset>>
+    where Offsets: SectionHdrOffsets,
+          B: ByteOrder,
+          Str: Clone {
+    type Result = SectionHdrData<Offsets, Str, SectionHdr<'a, B, Offsets>,
+                                 SymsStrs<&'a [u8], &'a [u8]>, &'a [u8],
+                                 &'a [u8], &'a [u8], &'a [u8], &'a [u8],
+                                 &'a [u8], &'a [u8], &'a [u8], &'a [u8]>;
+    type Error = SectionHdrError<Offsets>;
+
+    #[inline]
+    fn with_elf_data(self, data: &'a [u8]) ->
+        Result<Self::Result, Self::Error> {
+        self.clone().with_elf_data(data)
     }
 }
 
@@ -2941,6 +3006,32 @@ impl<'a, B, Offsets> WithElfData<'a> for SectionHdrs<'a, B, Offsets>
     }
 }
 
+impl<'a, B, Offsets> WithElfData<'a> for &'_ SectionHdrs<'a, B, Offsets>
+    where Offsets: SectionHdrOffsets,
+          B: ByteOrder {
+    type Result = SectionHdrsWithData<'a, B, Offsets>;
+    type Error = SectionHdrError<Offsets>;
+
+    #[inline]
+    fn with_elf_data(self, data: &'a [u8]) ->
+        Result<Self::Result, Self::Error> {
+        self.clone().with_elf_data(data)
+    }
+}
+
+impl<'a, B, Offsets> WithElfData<'a> for &'_ mut SectionHdrs<'a, B, Offsets>
+    where Offsets: SectionHdrOffsets,
+          B: ByteOrder {
+    type Result = SectionHdrsWithData<'a, B, Offsets>;
+    type Error = SectionHdrError<Offsets>;
+
+    #[inline]
+    fn with_elf_data(self, data: &'a [u8]) ->
+        Result<Self::Result, Self::Error> {
+        self.clone().with_elf_data(data)
+    }
+}
+
 impl<'a, B, Offsets> WithElfData<'a> for SectionHdrIter<'a, B, Offsets>
     where Offsets: SectionHdrOffsets,
           B: ByteOrder {
@@ -2954,6 +3045,32 @@ impl<'a, B, Offsets> WithElfData<'a> for SectionHdrIter<'a, B, Offsets>
                                     offsets: PhantomData,
                                     data: data, hdrs: self.hdrs,
                                     idx: 0 })
+    }
+}
+
+impl<'a, B, Offsets> WithElfData<'a> for &'_ SectionHdrIter<'a, B, Offsets>
+    where Offsets: SectionHdrOffsets,
+          B: ByteOrder {
+    type Result = SectionHdrWithDataIter<'a, B, Offsets>;
+    type Error = SectionHdrError<Offsets>;
+
+    #[inline]
+    fn with_elf_data(self, data: &'a [u8]) ->
+        Result<Self::Result, Self::Error> {
+        self.clone().with_elf_data(data)
+    }
+}
+
+impl<'a, B, Offsets> WithElfData<'a> for &'_ mut SectionHdrIter<'a, B, Offsets>
+    where Offsets: SectionHdrOffsets,
+          B: ByteOrder {
+    type Result = SectionHdrWithDataIter<'a, B, Offsets>;
+    type Error = SectionHdrError<Offsets>;
+
+    #[inline]
+    fn with_elf_data(self, data: &'a [u8]) ->
+        Result<Self::Result, Self::Error> {
+        self.clone().with_elf_data(data)
     }
 }
 
@@ -2977,21 +3094,22 @@ impl<'a, B, Str, Offsets>
     fn try_from(data: SectionHdrData<Offsets, Str, SectionHdr<'a, B, Offsets>,
                                      SymsStrs<&'a [u8], &'a [u8]>, &'a [u8],
                                      &'a [u8], &'a [u8], &'a [u8], &'a [u8],
-                                     &'a [u8], &'a [u8], &'a [u8], &'a [u8]>) ->
+                                     &'a [u8], &'a [u8], &'a [u8],
+                                     &'a [u8]>) ->
         Result<SectionHdrData<Offsets, Str, SectionHdr<'a, B, Offsets>,
-                       SymsStrs<Symtab<'a, B, Offsets>, Strtab<'a>>,
-                       Strtab<'a>, &'a [u8],
-                       Symtab<'a, B, Offsets>, Strtab<'a>,
-                       Rels<'a, B, Offsets>, Relas<'a, B, Offsets>,
-                       Hashtab<'a, B, Offsets>, Dynamic<'a, B, Offsets>,
-                       Notes<'a, B>>,
+                              SymsStrs<Symtab<'a, B, Offsets>, Strtab<'a>>,
+                              Strtab<'a>, &'a [u8],
+                              Symtab<'a, B, Offsets>, Strtab<'a>,
+                              Rels<'a, B, Offsets>, Relas<'a, B, Offsets>,
+                              Hashtab<'a, B, Offsets>, Dynamic<'a, B, Offsets>,
+                              Notes<'a, B>>,
                SectionHdrError<Offsets>> {
         match data {
             SectionHdrData::Null => Ok(SectionHdrData::Null),
             SectionHdrData::ProgBits { name, addr, align, alloc,
                                        write, exec, data } => {
                 Ok(SectionHdrData::ProgBits {
-                    name: name, addr: addr, align: align,  alloc: alloc,
+                    name: name, addr: addr, align: align, alloc: alloc,
                     write: write, exec: exec, data: data
                 })
             },
@@ -3000,9 +3118,9 @@ impl<'a, B, Str, Offsets>
                 match (Symtab::try_from(syms), Strtab::try_from(strtab)) {
                     (Ok(syms), Ok(strtab)) =>
                         Ok(SectionHdrData::Symtab {
-                            name: name, addr: addr, align: align, write: write,
                             strtab: strtab, exec: exec, local_end: local_end,
-                            alloc: alloc, syms: syms
+                            name: name, addr: addr, align: align,
+                            write: write, alloc: alloc, syms: syms
                         }),
                     (_, Err(err)) => Err(SectionHdrError::StrtabErr(err)),
                     (Err(err), _) => Err(SectionHdrError::SymtabErr(err))
@@ -3012,7 +3130,8 @@ impl<'a, B, Str, Offsets>
                 match Strtab::try_from(strs) {
                     Ok(strs) =>
                         Ok(SectionHdrData::Strtab { name: name, addr: addr,
-                                                    align: align, strs: strs }),
+                                                    align: align,
+                                                    strs: strs }),
                     Err(err) => Err(SectionHdrError::StrtabErr(err))
                 }
             },
@@ -3041,9 +3160,9 @@ impl<'a, B, Str, Offsets>
                             Ok(hash) =>
                                 Ok(SectionHdrData::Hash {
                                     name: name, addr: addr, align: align,
-                                    write: write, exec: exec, alloc: alloc,
+                                    write: write, exec: exec, hash: hash,
                                     symtab: SymsStrs { syms: syms, strs: strs },
-                                    hash: hash
+                                    alloc: alloc
                                 }),
                             Err(err) => Err(SectionHdrError::HashErr(err))
                         },
@@ -3056,9 +3175,9 @@ impl<'a, B, Str, Offsets>
                 match (Dynamic::try_from(dynamic), Strtab::try_from(strtab)) {
                     (Ok(dynamic), Ok(strtab)) =>
                         Ok(SectionHdrData::Dynamic {
-                            name: name, align: align, addr: addr, write: write,
                             alloc: alloc, exec: exec, strtab: strtab,
-                            dynamic: dynamic,
+                            name: name, align: align, addr: addr,
+                            write: write, dynamic: dynamic
                         }),
                     (Err(err), _) => Err(SectionHdrError::DynamicErr(err)),
                     (_, Err(err)) => Err(SectionHdrError::StrtabErr(err))
@@ -3069,8 +3188,9 @@ impl<'a, B, Str, Offsets>
                 match Notes::try_from(note) {
                     Ok(note) =>
                         Ok(SectionHdrData::Note {
-                            name: name, addr: addr, align: align, write: write,
-                            alloc: alloc, exec: exec, note: note
+                            name: name, addr: addr, align: align,
+                            write: write, alloc: alloc, exec: exec,
+                            note: note
                         }),
                     Err(err) => Err(SectionHdrError::NoteErr(err))
                 }
@@ -3078,8 +3198,9 @@ impl<'a, B, Str, Offsets>
             SectionHdrData::Nobits { name, addr, align, offset, size,
                                      write, alloc, exec } => {
                 Ok(SectionHdrData::Nobits {
-                    name: name, addr: addr, size: size, offset: offset,
-                    align: align, write: write, alloc: alloc, exec: exec
+                    name: name, addr: addr, size: size,
+                    offset: offset, align: align, write: write,
+                    alloc: alloc, exec: exec
                 })
             },
             SectionHdrData::Rel { symtab: SymsStrs { syms, strs },
@@ -3104,9 +3225,9 @@ impl<'a, B, Str, Offsets>
                 match (Symtab::try_from(syms), Strtab::try_from(strtab)) {
                     (Ok(syms), Ok(strtab)) =>
                         Ok(SectionHdrData::Dynsym {
-                            name: name, addr: addr, align: align, write: write,
                             strtab: strtab, exec: exec, local_end: local_end,
-                            alloc: alloc, syms: syms
+                            name: name, addr: addr, align: align,
+                            write: write, alloc: alloc, syms: syms
                         }),
                     (_, Err(err)) => Err(SectionHdrError::StrtabErr(err)),
                     (Err(err), _) => Err(SectionHdrError::SymtabErr(err))
@@ -3114,12 +3235,86 @@ impl<'a, B, Str, Offsets>
             },
             SectionHdrData::Unknown { name, tag, addr, align, offset, size,
                                       link, info, ent_size, flags } => {
-                Ok(SectionHdrData::Unknown { name: name, tag: tag, addr: addr,
-                                             align: align, offset: offset,
-                                             size: size, link: link, info: info,
-                                             ent_size: ent_size, flags: flags })
+                Ok(SectionHdrData::Unknown { name: name, tag: tag,
+                                             addr: addr, align: align,
+                                             offset: offset, size: size,
+                                             link: link, info: info,
+                                             ent_size: ent_size,
+                                             flags: flags })
             }
         }
+    }
+}
+
+impl<'a, B, Str, Offsets>
+    TryFrom<&'_ SectionHdrData<Offsets, Str, SectionHdr<'a, B, Offsets>,
+                               SymsStrs<&'a [u8], &'a [u8]>, &'a [u8],
+                               &'a [u8], &'a [u8], &'a [u8], &'a [u8],
+                               &'a [u8], &'a [u8], &'a [u8], &'a [u8]>>
+    for SectionHdrData<Offsets, Str, SectionHdr<'a, B, Offsets>,
+                       SymsStrs<Symtab<'a, B, Offsets>, Strtab<'a>>,
+                       Strtab<'a>, &'a [u8],
+                       Symtab<'a, B, Offsets>, Strtab<'a>,
+                       Rels<'a, B, Offsets>, Relas<'a, B, Offsets>,
+                       Hashtab<'a, B, Offsets>, Dynamic<'a, B, Offsets>,
+                       Notes<'a, B>>
+    where Offsets: 'a + SectionHdrOffsets,
+          B: 'a + ByteOrder,
+          Str: Clone {
+    type Error = SectionHdrError<Offsets>;
+
+    #[inline]
+    fn try_from(data: &'_ SectionHdrData<Offsets, Str,
+                                         SectionHdr<'a, B, Offsets>,
+                                         SymsStrs<&'a [u8], &'a [u8]>,
+                                         &'a [u8], &'a [u8], &'a [u8],
+                                         &'a [u8], &'a [u8], &'a [u8],
+                                         &'a [u8], &'a [u8], &'a [u8]>) ->
+        Result<SectionHdrData<Offsets, Str, SectionHdr<'a, B, Offsets>,
+                              SymsStrs<Symtab<'a, B, Offsets>, Strtab<'a>>,
+                              Strtab<'a>, &'a [u8],
+                              Symtab<'a, B, Offsets>, Strtab<'a>,
+                              Rels<'a, B, Offsets>, Relas<'a, B, Offsets>,
+                              Hashtab<'a, B, Offsets>, Dynamic<'a, B, Offsets>,
+                              Notes<'a, B>>,
+               SectionHdrError<Offsets>> {
+        SectionHdrData::try_from(data.clone())
+    }
+}
+
+impl<'a, B, Str, Offsets>
+    TryFrom<&'_ mut SectionHdrData<Offsets, Str, SectionHdr<'a, B, Offsets>,
+                                   SymsStrs<&'a [u8], &'a [u8]>, &'a [u8],
+                                   &'a [u8], &'a [u8], &'a [u8], &'a [u8],
+                                   &'a [u8], &'a [u8], &'a [u8], &'a [u8]>>
+    for SectionHdrData<Offsets, Str, SectionHdr<'a, B, Offsets>,
+                       SymsStrs<Symtab<'a, B, Offsets>, Strtab<'a>>,
+                       Strtab<'a>, &'a [u8],
+                       Symtab<'a, B, Offsets>, Strtab<'a>,
+                       Rels<'a, B, Offsets>, Relas<'a, B, Offsets>,
+                       Hashtab<'a, B, Offsets>, Dynamic<'a, B, Offsets>,
+                       Notes<'a, B>>
+    where Offsets: 'a + SectionHdrOffsets,
+          B: 'a + ByteOrder,
+          Str: Clone {
+    type Error = SectionHdrError<Offsets>;
+
+    #[inline]
+    fn try_from(data: &'_ mut SectionHdrData<Offsets, Str,
+                                             SectionHdr<'a, B, Offsets>,
+                                             SymsStrs<&'a [u8], &'a [u8]>,
+                                             &'a [u8], &'a [u8], &'a [u8],
+                                             &'a [u8], &'a [u8], &'a [u8],
+                                             &'a [u8], &'a [u8], &'a [u8]>) ->
+        Result<SectionHdrData<Offsets, Str, SectionHdr<'a, B, Offsets>,
+                              SymsStrs<Symtab<'a, B, Offsets>, Strtab<'a>>,
+                              Strtab<'a>, &'a [u8],
+                              Symtab<'a, B, Offsets>, Strtab<'a>,
+                              Rels<'a, B, Offsets>, Relas<'a, B, Offsets>,
+                              Hashtab<'a, B, Offsets>, Dynamic<'a, B, Offsets>,
+                              Notes<'a, B>>,
+               SectionHdrError<Offsets>> {
+        SectionHdrData::try_from(data.clone())
     }
 }
 
@@ -3134,9 +3329,10 @@ impl<'a, Offsets, HdrRef, SymsRef, StrsRef, Data,
     type Error = &'a [u8];
 
     #[inline]
-    fn try_from(data: SectionHdrData<Offsets, Result<&'a str, &'a [u8]>, HdrRef,
-                                     SymsRef, StrsRef, Data, Syms, Strs, Rels,
-                                     Relas, Hash, Dynamic, Note>) ->
+    fn try_from(data: SectionHdrData<Offsets, Result<&'a str, &'a [u8]>,
+                                     HdrRef, SymsRef, StrsRef, Data, Syms,
+                                     Strs, Rels, Relas, Hash, Dynamic,
+                                     Note>) ->
         Result<SectionHdrData<Offsets, &'a str, HdrRef, SymsRef, StrsRef, Data,
                               Syms, Strs, Rels, Relas, Hash, Dynamic, Note>,
                &'a [u8]> {
@@ -3145,7 +3341,7 @@ impl<'a, Offsets, HdrRef, SymsRef, StrsRef, Data,
             SectionHdrData::ProgBits { name: Ok(name), addr, align, alloc,
                                        write, exec, data } => {
                 Ok(SectionHdrData::ProgBits {
-                    name: name, addr: addr, align: align,  alloc: alloc,
+                    name: name, addr: addr, align: align, alloc: alloc,
                     write: write, exec: exec, data: data
                 })
             },
@@ -3188,7 +3384,7 @@ impl<'a, Offsets, HdrRef, SymsRef, StrsRef, Data,
                 Ok(SectionHdrData::Dynamic {
                     name: name, align: align, addr: addr, write: write,
                     alloc: alloc, exec: exec, strtab: strtab,
-                    dynamic: dynamic,
+                    dynamic: dynamic
                 })
             },
             SectionHdrData::Dynamic { name: Err(err), .. } => Err(err),
@@ -3230,11 +3426,78 @@ impl<'a, Offsets, HdrRef, SymsRef, StrsRef, Data,
                                       size, link, info, ent_size, flags } => {
                 Ok(SectionHdrData::Unknown { name: name, tag: tag, addr: addr,
                                              align: align, offset: offset,
-                                             size: size, link: link, info: info,
-                                             ent_size: ent_size, flags: flags })
+                                             size: size, link: link,
+                                             info: info, ent_size: ent_size,
+                                             flags: flags })
             },
             SectionHdrData::Unknown { name: Err(err), .. } => Err(err)
         }
+    }
+}
+
+impl<'a, Offsets, HdrRef, SymsRef, StrsRef, Data,
+     Syms, Strs, Rels, Relas, Hash, Dynamic, Note>
+    TryFrom<&'_ SectionHdrData<Offsets, Result<&'a str, &'a [u8]>, HdrRef,
+                               SymsRef, StrsRef, Data, Syms, Strs, Rels,
+                               Relas, Hash, Dynamic, Note>>
+    for SectionHdrData<Offsets, &'a str, HdrRef, SymsRef, StrsRef, Data,
+                       Syms, Strs, Rels, Relas, Hash, Dynamic, Note>
+    where Offsets: 'a + SectionHdrOffsets,
+          StrsRef: Clone,
+          SymsRef: Clone,
+          HdrRef: Clone,
+          Data: Clone,
+          Strs: Clone,
+          Syms: Clone,
+          Note: Clone,
+          Hash: Clone,
+          Rels: Clone,
+          Relas: Clone,
+          Dynamic: Clone {
+    type Error = &'a [u8];
+
+    #[inline]
+    fn try_from(data: &'_ SectionHdrData<Offsets, Result<&'a str, &'a [u8]>,
+                                         HdrRef, SymsRef, StrsRef, Data,
+                                         Syms, Strs, Rels, Relas, Hash,
+                                         Dynamic, Note>) ->
+        Result<SectionHdrData<Offsets, &'a str, HdrRef, SymsRef, StrsRef, Data,
+                              Syms, Strs, Rels, Relas, Hash, Dynamic, Note>,
+               &'a [u8]> {
+        SectionHdrData::try_from(data.clone())
+    }
+}
+
+impl<'a, Offsets, HdrRef, SymsRef, StrsRef, Data,
+     Syms, Strs, Rels, Relas, Hash, Dynamic, Note>
+    TryFrom<&'_ mut SectionHdrData<Offsets, Result<&'a str, &'a [u8]>, HdrRef,
+                                   SymsRef, StrsRef, Data, Syms, Strs, Rels,
+                                   Relas, Hash, Dynamic, Note>>
+    for SectionHdrData<Offsets, &'a str, HdrRef, SymsRef, StrsRef, Data,
+                       Syms, Strs, Rels, Relas, Hash, Dynamic, Note>
+    where Offsets: 'a + SectionHdrOffsets,
+          StrsRef: Clone,
+          SymsRef: Clone,
+          HdrRef: Clone,
+          Data: Clone,
+          Strs: Clone,
+          Syms: Clone,
+          Note: Clone,
+          Hash: Clone,
+          Rels: Clone,
+          Relas: Clone,
+          Dynamic: Clone {
+    type Error = &'a [u8];
+
+    #[inline]
+    fn try_from(data: &'_ mut SectionHdrData<Offsets, Result<&'a str, &'a [u8]>,
+                                             HdrRef, SymsRef, StrsRef, Data,
+                                             Syms, Strs, Rels, Relas, Hash,
+                                             Dynamic, Note>) ->
+        Result<SectionHdrData<Offsets, &'a str, HdrRef, SymsRef, StrsRef, Data,
+                              Syms, Strs, Rels, Relas, Hash, Dynamic, Note>,
+               &'a [u8]> {
+        SectionHdrData::try_from(data.clone())
     }
 }
 
@@ -3260,12 +3523,14 @@ impl<'a, Offsets, HdrRef, SymsRef, StrsRef, Data,
                     Ok(name) =>
                         Ok(SectionHdrData::ProgBits {
                             name: Ok(name), addr: addr, align: align,
-                            alloc: alloc, write: write, exec: exec, data: data
+                            alloc: alloc, write: write, exec: exec,
+                            data: data
                         }),
                     Err(StrtabIdxError::UTF8Decode(name)) =>
                         Ok(SectionHdrData::ProgBits {
                             name: Err(name), addr: addr, align: align,
-                            alloc: alloc, write: write, exec: exec, data: data
+                            alloc: alloc, write: write, exec: exec,
+                            data: data
                         }),
                     Err(StrtabIdxError::OutOfBounds(idx)) => Err(idx)
                 }
@@ -3276,14 +3541,14 @@ impl<'a, Offsets, HdrRef, SymsRef, StrsRef, Data,
                     Ok(name) =>
                         Ok(SectionHdrData::Symtab {
                             name: Ok(name), addr: addr, align: align,
-                            write: write, strtab: strtab, exec: exec,
-                            local_end: local_end, alloc: alloc, syms: syms
+                            write: write, exec: exec, local_end: local_end,
+                            strtab: strtab, syms: syms, alloc: alloc
                         }),
                     Err(StrtabIdxError::UTF8Decode(name)) =>
                         Ok(SectionHdrData::Symtab {
                             name: Err(name), addr: addr, align: align,
-                            write: write, strtab: strtab, exec: exec,
-                            local_end: local_end, alloc: alloc, syms: syms
+                            write: write, exec: exec, local_end: local_end,
+                            strtab: strtab, syms: syms, alloc: alloc
                         }),
                     Err(StrtabIdxError::OutOfBounds(idx)) => Err(idx)
                 }
@@ -3292,10 +3557,12 @@ impl<'a, Offsets, HdrRef, SymsRef, StrsRef, Data,
                 match tab.idx(name) {
                     Ok(name) =>
                         Ok(SectionHdrData::Strtab { name: Ok(name), addr: addr,
-                                                    align: align, strs: strs }),
+                                                    strs: strs,
+                                                    align: align }),
                     Err(StrtabIdxError::UTF8Decode(name)) =>
-                        Ok(SectionHdrData::Strtab { name: Err(name), addr: addr,
-                                                    align: align, strs: strs }),
+                        Ok(SectionHdrData::Strtab { name: Err(name),
+                                                    addr: addr, align: align,
+                                                    strs: strs }),
                     Err(StrtabIdxError::OutOfBounds(idx)) => Err(idx)
                 }
             },
@@ -3342,13 +3609,13 @@ impl<'a, Offsets, HdrRef, SymsRef, StrsRef, Data,
                         Ok(SectionHdrData::Dynamic {
                             name: Ok(name), align: align, addr: addr,
                             write: write, alloc: alloc, exec: exec,
-                            strtab: strtab, dynamic: dynamic,
+                            strtab: strtab, dynamic: dynamic
                         }),
                     Err(StrtabIdxError::UTF8Decode(name)) =>
                         Ok(SectionHdrData::Dynamic {
                             name: Err(name), align: align, addr: addr,
                             write: write, alloc: alloc, exec: exec,
-                            strtab: strtab, dynamic: dynamic,
+                            strtab: strtab, dynamic: dynamic
                         }),
                     Err(StrtabIdxError::OutOfBounds(idx)) => Err(idx)
                 }
@@ -3359,12 +3626,14 @@ impl<'a, Offsets, HdrRef, SymsRef, StrsRef, Data,
                     Ok(name) =>
                         Ok(SectionHdrData::Note {
                             name: Ok(name), addr: addr, align: align,
-                            write: write, alloc: alloc, exec: exec, note: note
+                            write: write, alloc: alloc, exec: exec,
+                            note: note
                         }),
                     Err(StrtabIdxError::UTF8Decode(name)) =>
                         Ok(SectionHdrData::Note {
                             name: Err(name), addr: addr, align: align,
-                            write: write, alloc: alloc, exec: exec, note: note
+                            write: write, alloc: alloc, exec: exec,
+                            note: note
                         }),
                     Err(StrtabIdxError::OutOfBounds(idx)) => Err(idx)
                 }
@@ -3412,13 +3681,15 @@ impl<'a, Offsets, HdrRef, SymsRef, StrsRef, Data,
                         Ok(SectionHdrData::Dynsym {
                             name: Ok(name), addr: addr, align: align,
                             write: write, strtab: strtab, exec: exec,
-                            local_end: local_end, alloc: alloc, syms: syms
+                            local_end: local_end, alloc: alloc,
+                            syms: syms
                         }),
                     Err(StrtabIdxError::UTF8Decode(name)) =>
                         Ok(SectionHdrData::Dynsym {
                             name: Err(name), addr: addr, align: align,
                             write: write, strtab: strtab, exec: exec,
-                            local_end: local_end, alloc: alloc, syms: syms
+                            local_end: local_end, alloc: alloc,
+                            syms: syms
                         }),
                     Err(StrtabIdxError::OutOfBounds(idx)) => Err(idx)
                 }
@@ -3428,18 +3699,78 @@ impl<'a, Offsets, HdrRef, SymsRef, StrsRef, Data,
                 match tab.idx(name) {
                     Ok(name) =>
                         Ok(SectionHdrData::Unknown {
-                            name: Ok(name), tag: tag, addr: addr, align: align,
-                            offset: offset, size: size, link: link, info: info,
-                            ent_size: ent_size, flags: flags }),
+                            name: Ok(name), tag: tag, addr: addr,
+                            align: align, offset: offset, size: size,
+                            link: link, info: info, ent_size: ent_size,
+                            flags: flags }),
                     Err(StrtabIdxError::UTF8Decode(name)) =>
                         Ok(SectionHdrData::Unknown {
-                            name: Err(name), tag: tag, addr: addr, align: align,
-                            offset: offset, size: size, link: link, info: info,
-                            ent_size: ent_size, flags: flags }),
+                            name: Err(name), tag: tag, addr: addr,
+                            align: align, offset: offset, size: size,
+                            link: link, info: info, ent_size: ent_size,
+                            flags: flags }),
                     Err(StrtabIdxError::OutOfBounds(idx)) => Err(idx)
                 }
             }
         }
+    }
+}
+
+impl<'a, Offsets, HdrRef, SymsRef, StrsRef, Data,
+     Syms, Strs, Rels, Relas, Hash, Dynamic, Note> WithStrtab<'a>
+    for &'_ SectionHdrData<Offsets, Offsets::Word, HdrRef, SymsRef,
+                           StrsRef, Data, Syms, Strs, Rels, Relas, Hash,
+                           Dynamic, Note>
+    where Offsets: 'a + SectionHdrOffsets,
+          StrsRef: Clone,
+          SymsRef: Clone,
+          HdrRef: Clone,
+          Data: Clone,
+          Strs: Clone,
+          Syms: Clone,
+          Note: Clone,
+          Hash: Clone,
+          Rels: Clone,
+          Relas: Clone,
+          Dynamic: Clone {
+    type Result = SectionHdrData<Offsets, Result<&'a str, &'a [u8]>, HdrRef,
+                                 SymsRef, StrsRef, Data, Syms, Strs, Rels,
+                                 Relas, Hash, Dynamic, Note>;
+    type Error = Offsets::Word;
+
+    #[inline]
+    fn with_strtab(self, tab: Strtab<'a>) ->
+        Result<Self::Result, Self::Error> {
+        self.clone().with_strtab(tab)
+    }
+}
+
+impl<'a, Offsets, HdrRef, SymsRef, StrsRef, Data,
+     Syms, Strs, Rels, Relas, Hash, Dynamic, Note> WithStrtab<'a>
+    for &'_ mut SectionHdrData<Offsets, Offsets::Word, HdrRef, SymsRef,
+                               StrsRef, Data, Syms, Strs, Rels, Relas, Hash,
+                               Dynamic, Note>
+    where Offsets: 'a + SectionHdrOffsets,
+          StrsRef: Clone,
+          SymsRef: Clone,
+          HdrRef: Clone,
+          Data: Clone,
+          Strs: Clone,
+          Syms: Clone,
+          Note: Clone,
+          Hash: Clone,
+          Rels: Clone,
+          Relas: Clone,
+          Dynamic: Clone {
+    type Result = SectionHdrData<Offsets, Result<&'a str, &'a [u8]>, HdrRef,
+                                 SymsRef, StrsRef, Data, Syms, Strs, Rels,
+                                 Relas, Hash, Dynamic, Note>;
+    type Error = Offsets::Word;
+
+    #[inline]
+    fn with_strtab(self, tab: Strtab<'a>) ->
+        Result<Self::Result, Self::Error> {
+        self.clone().with_strtab(tab)
     }
 }
 
@@ -3457,6 +3788,34 @@ impl<'a, B, Offsets> TryFrom<SectionHdr<'a, B, Offsets>>
     }
 }
 
+impl<'a, B, Offsets> TryFrom<&'_ SectionHdr<'a, B, Offsets>>
+    for SectionHdrDataRaw<Offsets>
+    where Offsets: SectionHdrOffsets,
+          B: ByteOrder {
+    type Error = SectionHdrError<Offsets>;
+
+    #[inline]
+    fn try_from(ent: &'_ SectionHdr<'a, B, Offsets>) ->
+        Result<SectionHdrDataRaw<Offsets>,
+               SectionHdrError<Offsets>> {
+        project::<B, Offsets>(ent.ent)
+    }
+}
+
+impl<'a, B, Offsets> TryFrom<&'_ mut SectionHdr<'a, B, Offsets>>
+    for SectionHdrDataRaw<Offsets>
+    where Offsets: SectionHdrOffsets,
+          B: ByteOrder {
+    type Error = SectionHdrError<Offsets>;
+
+    #[inline]
+    fn try_from(ent: &'_ mut SectionHdr<'a, B, Offsets>) ->
+        Result<SectionHdrDataRaw<Offsets>,
+               SectionHdrError<Offsets>> {
+        project::<B, Offsets>(ent.ent)
+    }
+}
+
 impl<'a, B, Offsets> TryFrom<SectionHdrMut<'a, B, Offsets>>
     for SectionHdrDataRaw<Offsets>
     where Offsets: SectionHdrOffsets,
@@ -3465,6 +3824,34 @@ impl<'a, B, Offsets> TryFrom<SectionHdrMut<'a, B, Offsets>>
 
     #[inline]
     fn try_from(ent: SectionHdrMut<'a, B, Offsets>) ->
+        Result<SectionHdrDataRaw<Offsets>,
+               SectionHdrError<Offsets>> {
+        project::<B, Offsets>(ent.ent)
+    }
+}
+
+impl<'a, B, Offsets> TryFrom<&'_ SectionHdrMut<'a, B, Offsets>>
+    for SectionHdrDataRaw<Offsets>
+    where Offsets: SectionHdrOffsets,
+          B: ByteOrder {
+    type Error = SectionHdrError<Offsets>;
+
+    #[inline]
+    fn try_from(ent: &'_ SectionHdrMut<'a, B, Offsets>) ->
+        Result<SectionHdrDataRaw<Offsets>,
+               SectionHdrError<Offsets>> {
+        project::<B, Offsets>(ent.ent)
+    }
+}
+
+impl<'a, B, Offsets> TryFrom<&'_ mut SectionHdrMut<'a, B, Offsets>>
+    for SectionHdrDataRaw<Offsets>
+    where Offsets: SectionHdrOffsets,
+          B: ByteOrder {
+    type Error = SectionHdrError<Offsets>;
+
+    #[inline]
+    fn try_from(ent: &'_ mut SectionHdrMut<'a, B, Offsets>) ->
         Result<SectionHdrDataRaw<Offsets>,
                SectionHdrError<Offsets>> {
         project::<B, Offsets>(ent.ent)
