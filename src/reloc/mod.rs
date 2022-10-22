@@ -1249,23 +1249,6 @@ impl<'a, B, Offsets: RelaOffsets> TryFrom<&'a mut [u8]>
     }
 }
 
-impl<'a, B, Offsets> From<Rel<'a, B, Offsets>>
-    for RelData<Offsets::Word, Offsets>
-    where Offsets: RelOffsets,
-          B: ByteOrder {
-    #[inline]
-    fn from(rel: Rel<'a, B, Offsets>) -> RelData<Offsets::Word, Offsets> {
-        let offset = Offsets::read_offset::<B>(
-            &rel.data[Offsets::R_OFFSET_START .. Offsets::R_OFFSET_END],
-        );
-        let (kind, sym) = Offsets::read_info::<B>(
-            &rel.data[Offsets::R_INFO_START .. Offsets::R_INFO_END],
-        );
-
-        RelData { offset: offset, sym: sym, kind: kind }
-    }
-}
-
 impl<Name: Display, Class> Display for RelData<Name, Class>
     where Class: RelClass {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
@@ -1276,8 +1259,7 @@ impl<Name: Display, Class> Display for RelData<Name, Class>
     }
 }
 
-impl<'a, B, Offsets> WithSymtab<'a, B, Offsets>
-    for Rel<'a, B, Offsets>
+impl<'a, B, Offsets> WithSymtab<'a, B, Offsets> for Rel<'a, B, Offsets>
     where Offsets: SymOffsets + RelOffsets,
           B: ByteOrder {
     type Result = RelDataRawSym<Offsets>;
@@ -1292,8 +1274,33 @@ impl<'a, B, Offsets> WithSymtab<'a, B, Offsets>
     }
 }
 
-impl<'a, B, Offsets> WithSymtab<'a, B, Offsets>
-    for Rela<'a, B, Offsets>
+impl<'a, B, Offsets> WithSymtab<'a, B, Offsets> for &'_ Rel<'a, B, Offsets>
+    where Offsets: SymOffsets + RelOffsets,
+          B: ByteOrder {
+    type Result = RelDataRawSym<Offsets>;
+    type Error = RelocSymtabError<Offsets>;
+
+    #[inline]
+    fn with_symtab(self, symtab: Symtab<'a, B, Offsets>) ->
+        Result<Self::Result, Self::Error> {
+        self.clone().with_symtab(symtab)
+    }
+}
+
+impl<'a, B, Offsets> WithSymtab<'a, B, Offsets> for &'_ mut Rel<'a, B, Offsets>
+    where Offsets: SymOffsets + RelOffsets,
+          B: ByteOrder {
+    type Result = RelDataRawSym<Offsets>;
+    type Error = RelocSymtabError<Offsets>;
+
+    #[inline]
+    fn with_symtab(self, symtab: Symtab<'a, B, Offsets>) ->
+        Result<Self::Result, Self::Error> {
+        self.clone().with_symtab(symtab)
+    }
+}
+
+impl<'a, B, Offsets> WithSymtab<'a, B, Offsets> for Rela<'a, B, Offsets>
     where Offsets: SymOffsets + RelaOffsets,
           B: ByteOrder {
     type Result = RelaDataRawSym<Offsets>;
@@ -1305,6 +1312,32 @@ impl<'a, B, Offsets> WithSymtab<'a, B, Offsets>
         let sym: RelaDataRaw<Offsets> = self.into();
 
         sym.with_symtab(symtab)
+    }
+}
+
+impl<'a, B, Offsets> WithSymtab<'a, B, Offsets> for &'_ Rela<'a, B, Offsets>
+    where Offsets: SymOffsets + RelaOffsets,
+          B: ByteOrder {
+    type Result = RelaDataRawSym<Offsets>;
+    type Error = RelocSymtabError<Offsets>;
+
+    #[inline]
+    fn with_symtab(self, symtab: Symtab<'a, B, Offsets>) ->
+        Result<Self::Result, Self::Error> {
+        self.clone().with_symtab(symtab)
+    }
+}
+
+impl<'a, B, Offsets> WithSymtab<'a, B, Offsets> for &'_ mut Rela<'a, B, Offsets>
+    where Offsets: SymOffsets + RelaOffsets,
+          B: ByteOrder {
+    type Result = RelaDataRawSym<Offsets>;
+    type Error = RelocSymtabError<Offsets>;
+
+    #[inline]
+    fn with_symtab(self, symtab: Symtab<'a, B, Offsets>) ->
+        Result<Self::Result, Self::Error> {
+        self.clone().with_symtab(symtab)
     }
 }
 
@@ -1336,7 +1369,34 @@ impl<'a, B, Offsets> WithSymtab<'a, B, Offsets>
 }
 
 impl<'a, B, Offsets> WithSymtab<'a, B, Offsets>
-    for RelaDataRaw<Offsets>
+    for &'_ RelData<Offsets::Word, Offsets>
+    where Offsets: SymOffsets + RelOffsets,
+          B: ByteOrder {
+    type Result = RelDataRawSym<Offsets>;
+    type Error = RelocSymtabError<Offsets>;
+
+    #[inline]
+    fn with_symtab(self, symtab: Symtab<'a, B, Offsets>) ->
+        Result<Self::Result, Self::Error> {
+        self.clone().with_symtab(symtab)
+    }
+}
+
+impl<'a, B, Offsets> WithSymtab<'a, B, Offsets>
+    for &'_ mut RelData<Offsets::Word, Offsets>
+    where Offsets: SymOffsets + RelOffsets,
+          B: ByteOrder {
+    type Result = RelDataRawSym<Offsets>;
+    type Error = RelocSymtabError<Offsets>;
+
+    #[inline]
+    fn with_symtab(self, symtab: Symtab<'a, B, Offsets>) ->
+        Result<Self::Result, Self::Error> {
+        self.clone().with_symtab(symtab)
+    }
+}
+
+impl<'a, B, Offsets> WithSymtab<'a, B, Offsets> for RelaDataRaw<Offsets>
     where Offsets: SymOffsets + RelaOffsets,
           B: ByteOrder {
     type Result = RelaDataRawSym<Offsets>;
@@ -1363,8 +1423,33 @@ impl<'a, B, Offsets> WithSymtab<'a, B, Offsets>
     }
 }
 
-impl<'a, Offsets> WithStrtab<'a>
-    for RelDataRawSym<Offsets>
+impl<'a, B, Offsets> WithSymtab<'a, B, Offsets> for &'_ RelaDataRaw<Offsets>
+    where Offsets: SymOffsets + RelaOffsets,
+          B: ByteOrder {
+    type Result = RelaDataRawSym<Offsets>;
+    type Error = RelocSymtabError<Offsets>;
+
+    #[inline]
+    fn with_symtab(self, symtab: Symtab<'a, B, Offsets>) ->
+        Result<Self::Result, Self::Error> {
+        self.clone().with_symtab(symtab)
+    }
+}
+
+impl<'a, B, Offsets> WithSymtab<'a, B, Offsets> for &'_ mut RelaDataRaw<Offsets>
+    where Offsets: SymOffsets + RelaOffsets,
+          B: ByteOrder {
+    type Result = RelaDataRawSym<Offsets>;
+    type Error = RelocSymtabError<Offsets>;
+
+    #[inline]
+    fn with_symtab(self, symtab: Symtab<'a, B, Offsets>) ->
+        Result<Self::Result, Self::Error> {
+        self.clone().with_symtab(symtab)
+    }
+}
+
+impl<'a, Offsets> WithStrtab<'a> for RelDataRawSym<Offsets>
     where Offsets: SymOffsets + RelOffsets {
     type Result = RelDataStrDataSym<'a, Offsets>;
     type Error = Offsets::Word;
@@ -1381,8 +1466,31 @@ impl<'a, Offsets> WithStrtab<'a>
     }
 }
 
-impl<'a, Offsets> WithStrtab<'a>
-    for RelaDataRawSym<Offsets>
+impl<'a, Offsets> WithStrtab<'a> for &'_ RelDataRawSym<Offsets>
+    where Offsets: SymOffsets + RelOffsets {
+    type Result = RelDataStrDataSym<'a, Offsets>;
+    type Error = Offsets::Word;
+
+    #[inline]
+    fn with_strtab(self, strtab: Strtab<'a>) ->
+        Result<Self::Result, Self::Error> {
+        self.clone().with_strtab(strtab)
+    }
+}
+
+impl<'a, Offsets> WithStrtab<'a> for &'_ mut RelDataRawSym<Offsets>
+    where Offsets: SymOffsets + RelOffsets {
+    type Result = RelDataStrDataSym<'a, Offsets>;
+    type Error = Offsets::Word;
+
+    #[inline]
+    fn with_strtab(self, strtab: Strtab<'a>) ->
+        Result<Self::Result, Self::Error> {
+        self.clone().with_strtab(strtab)
+    }
+}
+
+impl<'a, Offsets> WithStrtab<'a> for RelaDataRawSym<Offsets>
     where Offsets: SymOffsets + RelOffsets {
     type Result = RelaDataStrDataSym<'a, Offsets>;
     type Error = Offsets::Word;
@@ -1397,6 +1505,30 @@ impl<'a, Offsets> WithStrtab<'a>
                                      sym: sym, addend: addend }),
             Err(err) => Err(err)
         }
+    }
+}
+
+impl<'a, Offsets> WithStrtab<'a> for &'_ RelaDataRawSym<Offsets>
+    where Offsets: SymOffsets + RelOffsets {
+    type Result = RelaDataStrDataSym<'a, Offsets>;
+    type Error = Offsets::Word;
+
+    #[inline]
+    fn with_strtab(self, strtab: Strtab<'a>) ->
+        Result<Self::Result, Self::Error> {
+        self.clone().with_strtab(strtab)
+    }
+}
+
+impl<'a, Offsets> WithStrtab<'a> for &'_ mut RelaDataRawSym<Offsets>
+    where Offsets: SymOffsets + RelOffsets {
+    type Result = RelaDataStrDataSym<'a, Offsets>;
+    type Error = Offsets::Word;
+
+    #[inline]
+    fn with_strtab(self, strtab: Strtab<'a>) ->
+        Result<Self::Result, Self::Error> {
+        self.clone().with_strtab(strtab)
     }
 }
 
@@ -1418,6 +1550,30 @@ impl<'a, Offsets> TryFrom<RelaDataStrDataSym<'a, Offsets>>
     }
 }
 
+impl<'a, Offsets> TryFrom<&'_ RelaDataStrDataSym<'a, Offsets>>
+    for RelaDataStrSym<'a, Offsets>
+    where Offsets: SymOffsets + RelaOffsets {
+    type Error = &'a [u8];
+
+    #[inline]
+    fn try_from(sym: &'_ RelaDataStrDataSym<'a, Offsets>) ->
+        Result<RelaDataStrSym<'a, Offsets>, Self::Error> {
+        RelaDataStrSym::try_from(sym.clone())
+    }
+}
+
+impl<'a, Offsets> TryFrom<&'_ mut RelaDataStrDataSym<'a, Offsets>>
+    for RelaDataStrSym<'a, Offsets>
+    where Offsets: SymOffsets + RelaOffsets {
+    type Error = &'a [u8];
+
+    #[inline]
+    fn try_from(sym: &'_ mut RelaDataStrDataSym<'a, Offsets>) ->
+        Result<RelaDataStrSym<'a, Offsets>, Self::Error> {
+        RelaDataStrSym::try_from(sym as &'_ RelaDataStrDataSym<'a, Offsets>)
+    }
+}
+
 impl<'a, Offsets> TryFrom<RelDataStrDataSym<'a, Offsets>>
     for RelDataStrSym<'a, Offsets>
     where Offsets: SymOffsets + RelOffsets {
@@ -1435,6 +1591,30 @@ impl<'a, Offsets> TryFrom<RelDataStrDataSym<'a, Offsets>>
     }
 }
 
+impl<'a, Offsets> TryFrom<&'_ RelDataStrDataSym<'a, Offsets>>
+    for RelDataStrSym<'a, Offsets>
+    where Offsets: SymOffsets + RelOffsets {
+    type Error = &'a [u8];
+
+    #[inline]
+    fn try_from(sym: &'_ RelDataStrDataSym<'a, Offsets>) ->
+        Result<RelDataStrSym<'a, Offsets>, Self::Error> {
+        RelDataStrSym::try_from(sym.clone())
+    }
+}
+
+impl<'a, Offsets> TryFrom<&'_ mut RelDataStrDataSym<'a, Offsets>>
+    for RelDataStrSym<'a, Offsets>
+    where Offsets: SymOffsets + RelOffsets {
+    type Error = &'a [u8];
+
+    #[inline]
+    fn try_from(sym: &'_ mut RelDataStrDataSym<'a, Offsets>) ->
+        Result<RelDataStrSym<'a, Offsets>, Self::Error> {
+        RelDataStrSym::try_from(sym.clone())
+    }
+}
+
 impl<'a, Offsets> From<RelaDataStrDataSym<'a, Offsets>>
     for RelaDataStrData<'a, Offsets>
     where Offsets: SymOffsets + RelaOffsets {
@@ -1445,6 +1625,28 @@ impl<'a, Offsets> From<RelaDataStrDataSym<'a, Offsets>>
         let RelaData { offset, sym, kind, addend } = reloc;
 
         RelaData { offset: offset, sym: sym.name, kind: kind, addend: addend }
+    }
+}
+
+impl<'a, Offsets> From<&'_ RelaDataStrDataSym<'a, Offsets>>
+    for RelaDataStrData<'a, Offsets>
+    where Offsets: SymOffsets + RelaOffsets {
+
+    #[inline]
+    fn from(reloc: &'_ RelaDataStrDataSym<'a, Offsets>) ->
+        RelaDataStrData<'a, Offsets> {
+        RelaDataStrData::from(reloc.clone())
+    }
+}
+
+impl<'a, Offsets> From<&'_ mut RelaDataStrDataSym<'a, Offsets>>
+    for RelaDataStrData<'a, Offsets>
+    where Offsets: SymOffsets + RelaOffsets {
+
+    #[inline]
+    fn from(reloc: &'_ mut RelaDataStrDataSym<'a, Offsets>) ->
+        RelaDataStrData<'a, Offsets> {
+        RelaDataStrData::from(reloc.clone())
     }
 }
 
@@ -1461,20 +1663,63 @@ impl<'a, Offsets> From<RelDataStrDataSym<'a, Offsets>>
     }
 }
 
-impl<'a, Offsets> From<RelaDataStrSym<'a, Offsets>>
-    for RelaDataStr<'a, Offsets>
+impl<'a, Offsets> From<&'_ RelDataStrDataSym<'a, Offsets>>
+    for RelDataStrData<'a, Offsets>
     where Offsets: SymOffsets + RelaOffsets {
 
     #[inline]
-    fn from(reloc: RelaDataStrSym<'a, Offsets>) -> RelaDataStr<'a, Offsets> {
+    fn from(reloc: &'_ RelDataStrDataSym<'a, Offsets>) ->
+        RelDataStrData<'a, Offsets> {
+            RelDataStrData::from(reloc.clone())
+    }
+}
+
+impl<'a, Offsets> From<&'_ mut RelDataStrDataSym<'a, Offsets>>
+    for RelDataStrData<'a, Offsets>
+    where Offsets: SymOffsets + RelaOffsets {
+
+    #[inline]
+    fn from(reloc: &'_ mut RelDataStrDataSym<'a, Offsets>) ->
+        RelDataStrData<'a, Offsets> {
+            RelDataStrData::from(reloc.clone())
+    }
+}
+
+impl<'a, Offsets> From<RelaDataStrSym<'a, Offsets>> for RelaDataStr<'a, Offsets>
+    where Offsets: SymOffsets + RelaOffsets {
+
+    #[inline]
+    fn from(reloc: RelaDataStrSym<'a, Offsets>) ->
+        RelaDataStr<'a, Offsets> {
         let RelaData { offset, sym, kind, addend } = reloc;
 
         RelaData { offset: offset, sym: sym.name, kind: kind, addend: addend }
     }
 }
 
-impl<'a, Offsets> From<RelDataStrSym<'a, Offsets>>
-    for RelDataStr<'a, Offsets>
+impl<'a, Offsets> From<&'_ RelaDataStrSym<'a, Offsets>>
+    for RelaDataStr<'a, Offsets>
+    where Offsets: SymOffsets + RelaOffsets {
+
+    #[inline]
+    fn from(reloc: &'_ RelaDataStrSym<'a, Offsets>) ->
+        RelaDataStr<'a, Offsets> {
+        RelaDataStr::from(reloc.clone())
+    }
+}
+
+impl<'a, Offsets> From<&'_ mut RelaDataStrSym<'a, Offsets>>
+    for RelaDataStr<'a, Offsets>
+    where Offsets: SymOffsets + RelaOffsets {
+
+    #[inline]
+    fn from(reloc: &'_ mut RelaDataStrSym<'a, Offsets>) ->
+        RelaDataStr<'a, Offsets> {
+        RelaDataStr::from(reloc.clone())
+    }
+}
+
+impl<'a, Offsets> From<RelDataStrSym<'a, Offsets>> for RelDataStr<'a, Offsets>
     where Offsets: SymOffsets + RelaOffsets {
 
     #[inline]
@@ -1485,8 +1730,29 @@ impl<'a, Offsets> From<RelDataStrSym<'a, Offsets>>
     }
 }
 
-impl<'a, B, Offsets> From<Rela<'a, B, Offsets>>
-    for RelaDataRaw<Offsets>
+impl<'a, Offsets> From<&'_ RelDataStrSym<'a, Offsets>>
+    for RelDataStr<'a, Offsets>
+    where Offsets: SymOffsets + RelaOffsets {
+
+    #[inline]
+    fn from(reloc: &'_ RelDataStrSym<'a, Offsets>) ->
+        RelDataStr<'a, Offsets> {
+        RelDataStr::from(reloc.clone())
+    }
+}
+
+impl<'a, Offsets> From<&'_ mut RelDataStrSym<'a, Offsets>>
+    for RelDataStr<'a, Offsets>
+    where Offsets: SymOffsets + RelaOffsets {
+
+    #[inline]
+    fn from(reloc: &'_ mut RelDataStrSym<'a, Offsets>) ->
+        RelDataStr<'a, Offsets> {
+        RelDataStr::from(reloc.clone())
+    }
+}
+
+impl<'a, B, Offsets> From<Rela<'a, B, Offsets>> for RelaDataRaw<Offsets>
     where Offsets: RelaOffsets,
           B: ByteOrder {
     #[inline]
@@ -1502,6 +1768,62 @@ impl<'a, B, Offsets> From<Rela<'a, B, Offsets>>
         );
 
         RelaData { offset: offset, sym: sym, kind: kind, addend: addend }
+    }
+}
+
+impl<'a, B, Offsets> From<&'_ Rela<'a, B, Offsets>>
+    for RelaDataRaw<Offsets>
+    where Offsets: RelaOffsets,
+          B: ByteOrder {
+    #[inline]
+    fn from(rel: &'_ Rela<'a, B, Offsets>) -> RelaDataRaw<Offsets> {
+        RelaDataRaw::from(rel.clone())
+    }
+}
+
+impl<'a, B, Offsets> From<&'_ mut Rela<'a, B, Offsets>>
+    for RelaDataRaw<Offsets>
+    where Offsets: RelaOffsets,
+          B: ByteOrder {
+    #[inline]
+    fn from(rel: &'_ mut Rela<'a, B, Offsets>) -> RelaDataRaw<Offsets> {
+        RelaDataRaw::from(rel.clone())
+    }
+}
+
+impl<'a, B, Offsets> From<Rel<'a, B, Offsets>> for RelDataRaw<Offsets>
+    where Offsets: RelOffsets,
+          B: ByteOrder {
+    #[inline]
+    fn from(rel: Rel<'a, B, Offsets>) -> RelDataRaw<Offsets> {
+        let offset = Offsets::read_offset::<B>(
+            &rel.data[Offsets::R_OFFSET_START .. Offsets::R_OFFSET_END],
+        );
+        let (kind, sym) = Offsets::read_info::<B>(
+            &rel.data[Offsets::R_INFO_START .. Offsets::R_INFO_END],
+        );
+
+        RelData { offset: offset, sym: sym, kind: kind }
+    }
+}
+
+impl<'a, B, Offsets> From<&'_ Rel<'a, B, Offsets>>
+    for RelDataRaw<Offsets>
+    where Offsets: RelOffsets,
+          B: ByteOrder {
+    #[inline]
+    fn from(rel: &'_ Rel<'a, B, Offsets>) -> RelDataRaw<Offsets> {
+        RelDataRaw::from(rel.clone())
+    }
+}
+
+impl<'a, B, Offsets> From<&'_ mut Rel<'a, B, Offsets>>
+    for RelDataRaw<Offsets>
+    where Offsets: RelOffsets,
+          B: ByteOrder {
+    #[inline]
+    fn from(rel: &'_ mut Rel<'a, B, Offsets>) -> RelDataRaw<Offsets> {
+        RelDataRaw::from(rel.clone())
     }
 }
 
