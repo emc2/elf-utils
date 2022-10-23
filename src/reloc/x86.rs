@@ -12,9 +12,7 @@ use core::convert::TryFrom;
 use core::convert::TryInto;
 use core::fmt::Display;
 use core::fmt::Formatter;
-use crate::elf::ElfClass;
 use crate::elf::Elf32;
-use crate::reloc::Reloc;
 use crate::reloc::RelData;
 use crate::reloc::RelaData;
 use crate::reloc::RelocSymtabError;
@@ -27,8 +25,6 @@ use crate::symtab::SymDataRaw;
 use crate::symtab::SymDataStr;
 use crate::symtab::SymDataStrData;
 use crate::symtab::WithSymtab;
-
-use core::marker::PhantomData;
 
 /// Relocation entries for 32-bit x86 architectures (aka. IA-32, i386).
 ///

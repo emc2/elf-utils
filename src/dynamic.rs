@@ -511,12 +511,12 @@ pub enum DynamicEntData<Name, Idx, Class: ElfClass> {
         /// Address of the debugging information.
         tab: Class::Addr
     },
-    /// If present, indicates that relocation entries my modify a
+    /// If present, indicates that relocation entries may modify a
     /// non-writable segment.
     TextRel,
     /// Provides the relocation table associated with the PLT.
     JumpRel {
-        /// Address of the relacation table associated with the PLT.
+        /// Address of the relocation table associated with the PLT.
         tab: Class::Addr
     },
     /// Indicates that relocations should be processed eagerly.
