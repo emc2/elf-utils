@@ -116,9 +116,12 @@ use core::fmt::Display;
 use core::fmt::Formatter;
 use core::iter::FusedIterator;
 use core::marker::PhantomData;
+use crate::dynamic::Dynamic;
+use crate::dynamic::DynamicOffsets;
 use crate::elf::Elf32;
 use crate::elf::Elf64;
 use crate::elf::ElfClass;
+use crate::section_hdr::SectionHdrOffsets;
 use crate::strtab::Strtab;
 use crate::strtab::WithStrtab;
 use crate::symtab::SymDataRaw;
@@ -186,13 +189,50 @@ pub trait RelaOffsets: RelOffsets {
     const RELA_SIZE_OFFSET: Self::Offset;
 }
 
-pub trait Reloc<Class: ElfClass> {
+pub trait RelocParams<Class: ElfClass> {
+    /*
+    fn create<'a, B>(base: Class::Addr, dynamic: Dynamic<'a, B, Class>) -> Self
+    where Class: DynamicOffsets,
+          B: ByteOrder;
+     */
+    /// Get the base address of the entire image.
+    fn img_base(&self) -> Class::Addr;
+
+    /// Get the address of the PLT.
+    fn plt(&self) -> Option<Class::Addr>;
+
+    /// Get the address of the GOT.
+    fn got(&self) -> Option<Class::Addr>;
+}
+
+pub trait Reloc<B: ByteOrder, Class: SectionHdrOffsets> {
+    /// Type of relocation parameters needed by this `Reloc` instance.
+    type Params: RelocParams<Class>;
+
     /// Type of errors from applying relocations.
     type Error;
 
     /// Perform the relocation.
-    fn reloc(&self, mem: &mut [u8], base: Class::Addr) ->
-        Result<(), Self::Error>;
+    ///
+    /// The target section for relocations is given by `target`.  The
+    /// function `section_base` provides the base address of sections,
+    /// and is used to interpret symbol values.
+    fn reloc<'a, F>(&self, target: &mut [u8], params: &Self::Params,
+                    target_base: Class::Addr, section_base: F) ->
+        Result<(), Self::Error>
+        where F: FnOnce(Class::Half) -> Option<Class::Addr>;
+
+    /// Perform a dynamic executable relocation.
+    ///
+    /// This is equivalent to [reloc], with a `section_base` argument
+    /// of `0`, reflecting the fact that symbol values in a dynamic
+    /// executable are virtual addresses, and symbol values in a
+    /// shared object are relative to the start of the image.
+    #[inline]
+    fn reloc_dynamic<'a>(&self, target: &mut [u8], params: &Self::Params,
+                         target_base: Class::Addr) -> Result<(), Self::Error> {
+        self.reloc(target, params, target_base, |_| Some(Class::Addr::from(0)))
+    }
 }
 
 /// In-place read-only ELF relocation table.
@@ -552,6 +592,16 @@ pub struct RelData<Name, Class: RelClass> {
     pub sym: Name,
     /// Type of relocation.
     pub kind: Class::RelKind
+}
+
+pub struct BasicRelocParams<Class: ElfClass> {
+    class: PhantomData<Class>,
+    /// Base address of the image.
+    base: Class::Addr,
+    /// Address of the PLT, if available.
+    plt: Option<Class::Addr>,
+    /// Address of the GOT, if available.
+    got: Option<Class::Addr>
 }
 
 /// Type synonym for [RelData] as projected from a [Rel].
@@ -1824,6 +1874,24 @@ impl<'a, B, Offsets> From<&'_ mut Rel<'a, B, Offsets>>
     #[inline]
     fn from(rel: &'_ mut Rel<'a, B, Offsets>) -> RelDataRaw<Offsets> {
         RelDataRaw::from(rel.clone())
+    }
+}
+
+impl<Class> RelocParams<Class> for BasicRelocParams<Class>
+    where Class: ElfClass {
+    #[inline]
+    fn img_base(&self) -> Class::Addr {
+        self.base
+    }
+
+    #[inline]
+    fn plt(&self) -> Option<Class::Addr> {
+        self.plt
+    }
+
+    #[inline]
+    fn got(&self) -> Option<Class::Addr> {
+        self.got
     }
 }
 

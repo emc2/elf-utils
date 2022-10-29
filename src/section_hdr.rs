@@ -2032,6 +2032,29 @@ fn create<'a, B, I, Offsets>(buf: &'a mut [u8], hdrs: I) ->
     Ok(buf.split_at_mut(idx))
 }
 
+impl<Class, Str, HdrRef, SymsRef, StrsRef, Data, Syms,
+     Strs, Rels, Relas, Hash, Dynamic, Note>
+     SectionHdrData<Class, Str, HdrRef, SymsRef, StrsRef, Data, Syms,
+                    Strs, Rels, Relas, Hash, Dynamic, Note>
+    where Class: ElfClass {
+    pub fn addr(&self) -> Option<Class::Addr> {
+        match self {
+            SectionHdrData::Null => None,
+            SectionHdrData::ProgBits { addr, .. } => Some(*addr),
+            SectionHdrData::Symtab { addr, .. } => Some(*addr),
+            SectionHdrData::Strtab { addr, .. } => Some(*addr),
+            SectionHdrData::Rela { addr, .. } => Some(*addr),
+            SectionHdrData::Hash { addr, .. } => Some(*addr),
+            SectionHdrData::Dynamic { addr, .. } => Some(*addr),
+            SectionHdrData::Note { addr, .. } => Some(*addr),
+            SectionHdrData::Nobits { addr, .. } => Some(*addr),
+            SectionHdrData::Rel { addr, .. } => Some(*addr),
+            SectionHdrData::Dynsym { addr, .. } => Some(*addr),
+            SectionHdrData::Unknown { addr, .. } => Some(*addr)
+        }
+    }
+}
+
 impl SectionHdrOffsets for Elf32 {
     const SECTION_HDR_SIZE_HALF: Self::Half = Self::SECTION_HDR_SIZE as u16;
 }
