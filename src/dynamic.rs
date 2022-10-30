@@ -121,11 +121,20 @@ use crate::elf::Elf32;
 use crate::elf::Elf64;
 use crate::elf::ElfClass;
 use crate::elf::WithElfData;
+use crate::hash::Hashtab;
+use crate::hash::HashtabError;
+use crate::reloc::Rels;
+use crate::reloc::RelsError;
+use crate::reloc::Relas;
+use crate::reloc::RelasError;
 use crate::reloc::RelOffsets;
 use crate::reloc::RelaOffsets;
 use crate::strtab::Strtab;
+use crate::strtab::StrtabError;
 use crate::strtab::StrtabIdxError;
 use crate::strtab::WithStrtab;
+use crate::symtab::Symtab;
+use crate::symtab::SymtabError;
 use crate::symtab::SymOffsets;
 
 /// Offsets for ELF dynamic linking table entries.
@@ -626,6 +635,40 @@ pub struct DynamicInfo<Name, Flags, Strs, Syms, Hash,
     pub symtab_idx: Option<Offsets::Offset>
 }
 
+/// Errors that can occur when converting a [`DynamicInfoRaw`] with
+/// using the [WithElfData] instance.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum DynamicInfoWithDataError<Offsets: ElfClass> {
+    /// Offset is out of bounds.
+    OutOfBounds(usize),
+    /// Offset can't be converted to `usize`.
+    BadOffset(Offsets::Offset),
+    /// Address can't be converted to `usize`.
+    BadAddr(Offsets::Addr)
+}
+
+/// Errors that can occur when converting a [`DynamicInfoData`] with
+/// using the [TryFrom] instance.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum DynamicInfoFullStrDataError<Offsets: ElfClass> {
+    /// Errors parsing a [Strtab].
+    Strtab(StrtabError),
+    /// Errors parsing a [Symtab].
+    Symtab(SymtabError),
+    /// Errors parsing a [Hashtab].
+    Hash(HashtabError),
+    /// Errors parsing a [Relas].
+    Rela(RelasError),
+    /// Errors parsing a [Rela].
+    Rel(RelsError),
+    /// Missing [Strtab] or [Symtab] when parsing a [Hashtab].
+    IncompleteHash,
+    /// Missing [Strtab] when looking up a name or rpath.
+    NoStrtab,
+    /// Index out of bounds when looking up a name or rpath.
+    StrtabOutOfBounds(Offsets::Offset)
+}
+
 /// [DynamicInfo] as projected from a [Dynamic] using the [TryFrom]
 /// instance.
 pub type DynamicInfoRaw<B, Offsets> =
@@ -634,9 +677,21 @@ pub type DynamicInfoRaw<B, Offsets> =
                 <Offsets as ElfClass>::Addr, AddrRange<Offsets>,
                 AddrRange<Offsets>, B, Offsets>;
 
+/// [DynamicInfo] as projected from a [DynamicInfoRaw] using the [WithElfData]
+/// instance.
 pub type DynamicInfoData<'a, B, Offsets> =
     DynamicInfo<<Offsets as ElfClass>::Offset, <Offsets as ElfClass>::Offset,
                 &'a [u8], &'a [u8], &'a [u8], &'a [u8], &'a [u8], B, Offsets>;
+
+pub type DynamicInfoFullStrData<'a, B, Offsets> =
+    DynamicInfo<Result<&'a str, &'a [u8]>, <Offsets as ElfClass>::Offset,
+                Strtab<'a>, Symtab<'a, B, Offsets>, Hashtab<'a, B, Offsets>,
+                Rels<'a, B, Offsets>, Relas<'a, B, Offsets>, B, Offsets>;
+
+pub type DynamicInfoFullStrs<'a, B, Offsets> =
+    DynamicInfo<&'a str, <Offsets as ElfClass>::Offset, Strtab<'a>,
+                Symtab<'a, B, Offsets>, Hashtab<'a, B, Offsets>,
+                Rels<'a, B, Offsets>, Relas<'a, B, Offsets>, B, Offsets>;
 
 /// Enum for relocations.
 ///
@@ -1916,15 +1971,6 @@ impl<'a, B, Offsets> TryFrom<&'_ mut DynamicEnt<'a, B, Offsets>>
     }
 }
 
-/// Errors that can occur when converting an [`DynamicInfo`] with raw
-/// offsets to one with slices.
-pub enum DynamicInfoWithDataError<Offsets: ElfClass> {
-    /// Offset is out of bounds.
-    OutOfBounds(usize),
-    BadOffset(Offsets::Offset),
-    BadAddr(Offsets::Addr)
-}
-
 impl<'a, B, Offsets> WithElfData<'a> for DynamicInfoRaw<B, Offsets>
     where Offsets: ElfClass + SymOffsets,
           B: ByteOrder {
@@ -2088,6 +2134,103 @@ impl<'a, B, Offsets> WithElfData<'a> for DynamicInfoRaw<B, Offsets>
                 let end = start + size;
 
                 Ok(Some(&data[start .. end]))
+            },
+            None => Ok(None)
+        }?;
+
+        Ok(DynamicInfo { name, rpath, bind_now, text_rel, symbolic,
+                         hash, symtab, strtab, reloc, debug,
+                         jump_reloc, flags, init, fini, pre_init_arr,
+                         init_arr, fini_arr, symtab_idx,
+                         byteorder: PhantomData })
+    }
+}
+
+impl<'a, B, Offsets> TryFrom<DynamicInfoData<'a, B, Offsets>>
+    for DynamicInfoFullStrData<'a, B, Offsets>
+    where Offsets: 'a + DynamicOffsets + RelaOffsets + RelOffsets + SymOffsets,
+          B: 'a + ByteOrder {
+    type Error = DynamicInfoFullStrDataError<Offsets>;
+
+    #[inline]
+    fn try_from(data: DynamicInfoData<'a, B, Offsets>) ->
+        Result<DynamicInfoFullStrData<'a, B, Offsets>, Self::Error> {
+        let DynamicInfo { name, rpath, bind_now, text_rel, symbolic,
+                          hash, symtab, strtab, reloc, debug,
+                          jump_reloc, flags, init, fini, pre_init_arr,
+                          init_arr, fini_arr, symtab_idx, .. } = data;
+        let strtab: Option<Strtab<'a>> = match strtab {
+            Some(strtab) => match strtab.try_into() {
+                Ok(strtab) => Ok(Some(strtab)),
+                Err(err) => Err(DynamicInfoFullStrDataError::Strtab(err))
+            },
+            None => Ok(None)
+        }?;
+        let symtab: Option<Symtab<'a, B, Offsets>> = match symtab {
+            Some(symtab) => match symtab.try_into() {
+                Ok(symtab) => Ok(Some(symtab)),
+                Err(err) => Err(DynamicInfoFullStrDataError::Symtab(err))
+            },
+            None => Ok(None)
+        }?;
+        let hash: Option<Hashtab<'a, B, Offsets>> = match hash {
+            Some(hash) => match (strtab, symtab) {
+                (Some(strtab), Some(symtab)) =>
+                    match Hashtab::from_slice(hash, strtab, symtab) {
+                        Ok(hash) => Ok(Some(hash)),
+                        Err(err) => Err(DynamicInfoFullStrDataError::Hash(err))
+                    },
+                _ => Err(DynamicInfoFullStrDataError::IncompleteHash)
+            },
+            None => Ok(None)
+        }?;
+        let reloc = match reloc {
+            Some(Relocs::Rela(reloc)) => match reloc.try_into() {
+                Ok(reloc) => Ok(Some(Relocs::Rela(reloc))),
+                Err(err) => Err(DynamicInfoFullStrDataError::Rela(err))
+            },
+            Some(Relocs::Rel(reloc)) => match reloc.try_into() {
+                Ok(reloc) => Ok(Some(Relocs::Rel(reloc))),
+                Err(err) => Err(DynamicInfoFullStrDataError::Rel(err))
+            },
+            None => Ok(None)
+        }?;
+        let jump_reloc = match jump_reloc {
+            Some(Relocs::Rela(reloc)) => match reloc.try_into() {
+                Ok(reloc) => Ok(Some(Relocs::Rela(reloc))),
+                Err(err) => Err(DynamicInfoFullStrDataError::Rela(err))
+            },
+            Some(Relocs::Rel(reloc)) => match reloc.try_into() {
+                Ok(reloc) => Ok(Some(Relocs::Rel(reloc))),
+                Err(err) => Err(DynamicInfoFullStrDataError::Rel(err))
+            },
+            None => Ok(None)
+        }?;
+        let name = match name {
+            Some(name) => match strtab {
+                Some(strtab) => match strtab.idx(name) {
+                    Ok(str) => Ok(Some(Ok(str))),
+                    Err(StrtabIdxError::OutOfBounds(idx)) =>
+                        Err(DynamicInfoFullStrDataError
+                            ::StrtabOutOfBounds(idx)),
+                    Err(StrtabIdxError::UTF8Decode(data)) =>
+                        Ok(Some(Err(data)))
+                },
+                None => Err(DynamicInfoFullStrDataError::NoStrtab)
+            },
+            None => Ok(None)
+        }?;
+        let rpath = match rpath {
+            Some(path) => match strtab {
+                Some(strtab) => match strtab.idx(path) {
+                    Ok(str) => Ok(Some(Ok(str))),
+                    Err(StrtabIdxError::OutOfBounds(idx)) =>
+                        Err(DynamicInfoFullStrDataError
+                            ::StrtabOutOfBounds(idx)),
+                    Err(StrtabIdxError::UTF8Decode(data)) =>
+                        Ok(Some(Err(data)))
+                },
+                None => Err(DynamicInfoFullStrDataError::NoStrtab)
             },
             None => Ok(None)
         }?;
@@ -2550,6 +2693,40 @@ impl Display for DynamicError {
         match self {
             DynamicError::BadSize(size) =>
                 write!(f, "bad dynamic table size {}", size)
+        }
+    }
+}
+
+impl<Offsets: ElfClass> Display for DynamicInfoWithDataError<Offsets> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
+        match self {
+            DynamicInfoWithDataError::OutOfBounds(offset) =>
+                write!(f, "offset out of bounds {}", offset),
+            DynamicInfoWithDataError::BadOffset(offset) =>
+                write!(f, "offset out of bounds {}", offset),
+            DynamicInfoWithDataError::BadAddr(addr) =>
+                write!(f, "offset out of bounds {}", addr)
+        }
+    }
+}
+
+impl<Offsets: ElfClass> Display for DynamicInfoFullStrDataError<Offsets> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
+        match self {
+            DynamicInfoFullStrDataError::Strtab(err) => err.fmt(f),
+            DynamicInfoFullStrDataError::Symtab(err) => err.fmt(f),
+            DynamicInfoFullStrDataError::Hash(err) => err.fmt(f),
+            DynamicInfoFullStrDataError::Rela(err) => err.fmt(f),
+            DynamicInfoFullStrDataError::Rel(err) => err.fmt(f),
+            DynamicInfoFullStrDataError::IncompleteHash => {
+                write!(f, "missing strtab or symtab for hash")
+            },
+            DynamicInfoFullStrDataError::NoStrtab => {
+                write!(f, "missing strtab for converting string")
+            },
+            DynamicInfoFullStrDataError::StrtabOutOfBounds(offset) => {
+                write!(f, "offset {} out of strtab bounds", offset)
+            }
         }
     }
 }

@@ -186,6 +186,8 @@
 //! ```
 use byteorder::ByteOrder;
 use core::convert::TryInto;
+use core::fmt::Display;
+use core::fmt::Formatter;
 use crate::strtab::Strtab;
 use crate::strtab::WithStrtab;
 use crate::symtab::Sym;
@@ -944,5 +946,18 @@ impl<'a> ElfName for Result<&'a str, &'a [u8]> {
     #[inline]
     fn cmp_name(&self, other: &Result<&str, &[u8]>) -> bool {
         self == other
+    }
+}
+
+impl Display for HashtabError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
+        match self {
+            HashtabError::TooShort => write!(f, "buffer too short"),
+            HashtabError::BadChains { expected, actual } => {
+                write!(f, "chain table is wrong size, expected: {}, actual: {}",
+                       expected, actual)
+            }
+            HashtabError::BadHashes => write!(f, "wrong number of hash buckets")
+        }
     }
 }
