@@ -116,8 +116,6 @@ use core::fmt::Display;
 use core::fmt::Formatter;
 use core::iter::FusedIterator;
 use core::marker::PhantomData;
-use crate::dynamic::Dynamic;
-use crate::dynamic::DynamicOffsets;
 use crate::elf::Elf32;
 use crate::elf::Elf64;
 use crate::elf::ElfClass;

@@ -120,9 +120,13 @@ use core::marker::PhantomData;
 use crate::elf::Elf32;
 use crate::elf::Elf64;
 use crate::elf::ElfClass;
+use crate::elf::WithElfData;
+use crate::reloc::RelOffsets;
+use crate::reloc::RelaOffsets;
 use crate::strtab::Strtab;
 use crate::strtab::StrtabIdxError;
 use crate::strtab::WithStrtab;
+use crate::symtab::SymOffsets;
 
 /// Offsets for ELF dynamic linking table entries.
 ///
@@ -354,6 +358,12 @@ pub struct DynamicIter<'a, B: ByteOrder, Offsets: DynamicOffsets> {
     idx: usize
 }
 
+/// Iterator for dependencies expressed in a dynamic setting.
+#[derive(Clone)]
+pub struct DynamicNeededIter<'a, B: ByteOrder, Offsets: DynamicOffsets> {
+    inner: DynamicIter<'a, B, Offsets>
+}
+
 /// Errors that can occur creating a [Dynamic].
 ///
 /// The only error that can occur is if the data is not a multiple of
@@ -407,9 +417,9 @@ pub enum DynamicEntData<Name, Idx, Class: ElfClass> {
         /// Name of the required library.
         name: Name
     },
-    /// Indicates the relocation entry size for the PLT relocation table.
+    /// Indicates the size of the PLT/GOT relocation table.
     PLTRelSize {
-        /// Size of relocation entries for the PLT.
+        /// Size of the relocation table for the PLT/GOT.
         size: Class::Offset
     },
     /// Provides the PLT or GOT.
@@ -568,6 +578,147 @@ pub enum DynamicEntData<Name, Idx, Class: ElfClass> {
         /// Information field as word.
         info: Class::Offset
     }
+}
+
+/// Summary of the dynamic section.
+///
+/// This summarizes most of the dynamic section entries.  It does not,
+/// however, include `Needed` entries.
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+pub struct DynamicInfo<Name, Flags, Strs, Syms, Hash,
+                       Rel, Rela, B, Offsets: ElfClass> {
+    byteorder: PhantomData<B>,
+    /// Name of the shared object.
+    pub name: Option<Name>,
+    /// Run path of the shared object.
+    pub rpath: Option<Name>,
+    /// Whether or not to bind immediately.
+    pub bind_now: bool,
+    /// Whether relocations can modify the `.text` section.
+    pub text_rel: bool,
+    /// Whether symbols should be resolved from the shared object first.
+    pub symbolic: bool,
+    /// Pointer to the hash section associated with the dynamic symbol table.
+    pub hash: Option<Hash>,
+    /// Pointer to the dynamic symbol table.
+    pub symtab: Option<Syms>,
+    /// Pointer to the string table for the dynamic symbol table.
+    pub strtab: Option<Strs>,
+    /// Dynamic relocation information.
+    pub reloc: Option<Relocs<Rel, Rela>>,
+    /// Pointer to debugging information.
+    pub debug: Option<Offsets::Addr>,
+    /// Relocation information for the PLT/GOT.
+    pub jump_reloc: Option<Relocs<Rel, Rela>>,
+    /// Relocation flags.
+    pub flags: Option<Flags>,
+    /// Pointer to the initialization function.
+    pub init: Option<Offsets::Addr>,
+    /// Pointer to the finalizer function.
+    pub fini: Option<Offsets::Addr>,
+    /// The pre-initialization function array.
+    pub pre_init_arr: Option<AddrRange<Offsets>>,
+    /// The initialization function array.
+    pub init_arr: Option<AddrRange<Offsets>>,
+    /// The finalizer function array.
+    pub fini_arr: Option<AddrRange<Offsets>>,
+    /// Section header index of the symbol table.
+    pub symtab_idx: Option<Offsets::Offset>
+}
+
+/// [DynamicInfo] as projected from a [Dynamic] using the [TryFrom]
+/// instance.
+pub type DynamicInfoRaw<B, Offsets> =
+    DynamicInfo<<Offsets as ElfClass>::Offset, <Offsets as ElfClass>::Offset,
+                AddrRange<Offsets>, <Offsets as ElfClass>::Addr,
+                <Offsets as ElfClass>::Addr, AddrRange<Offsets>,
+                AddrRange<Offsets>, B, Offsets>;
+
+pub type DynamicInfoData<'a, B, Offsets> =
+    DynamicInfo<<Offsets as ElfClass>::Offset, <Offsets as ElfClass>::Offset,
+                &'a [u8], &'a [u8], &'a [u8], &'a [u8], &'a [u8], B, Offsets>;
+
+/// Enum for relocations.
+///
+/// This can support relocations with or without explicit addends.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+pub enum Relocs<Rel, Rela> {
+    /// Relocations without explicit addends.
+    Rel(Rel),
+    /// Relocations with explicit addends.
+    Rela(Rela)
+}
+
+/// Address range, with a size.
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+pub struct AddrRange<Offsets: ElfClass> {
+    /// Starting address.
+    pub addr: Offsets::Addr,
+    /// Address range size.
+    pub size: Offsets::Offset
+}
+
+/// Errors that can occur collecting dynamic entries.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+pub enum DynamicInfoError<Offsets: ElfClass> {
+    /// Errors projecting a [DynamicEntDataRaw].
+    EntDataError(DynamicEntDataError<Offsets>),
+    /// PLT/GOT relocation information is incomplete.
+    IncompleteJumpRelocs,
+    /// Pre-initialization array information is incomplete.
+    IncompletePreInitArr,
+    /// Initialization array information is incomplete.
+    IncompleteInitArr,
+    /// Finalization array information is incomplete.
+    IncompleteFiniArr,
+    /// Dynamic relocation information is incomplete.
+    IncompleteRelas,
+    /// Dynamic relocation information is incomplete.
+    IncompleteRels,
+    /// Multiple entries of type [DynamicEntData::PLTRelSize](PLTRelSize).
+    MultiplePLTRelSize,
+    /// Multiple entries of type [DynamicEntData::JumpRel](JumpRel).
+    MultipleJumpRel,
+    /// Multiple entries of type [DynamicEntData::PLTRela](PLTRela).
+    MultiplePLTRela,
+    /// Multiple entries of type [DynamicEntData::PLTGOT](PLTGOT).
+    MultiplePLTGOT,
+    /// Multiple entries of type [DynamicEntData::Symtab](Symtab).
+    MultipleSymtab,
+    /// Multiple entries of type [DynamicEntData::Strtab](Strtab).
+    MultipleStrtab,
+    /// Multiple entries of type [DynamicEntData::Flags](Flags).
+    MultipleFlags,
+    /// Multiple entries of type [DynamicEntData::Relas](Relas).
+    MultipleRelas,
+    /// Multiple entries of type [DynamicEntData::RPath](RPath).
+    MultipleRPath,
+    /// Multiple entries of type [DynamicEntData::Debug](Debug).
+    MultipleDebug,
+    /// Multiple entries of type [DynamicEntData::Name](Name).
+    MultipleName,
+    /// Multiple entries of type [DynamicEntData::Hash](Hash).
+    MultipleHash,
+    /// Multiple entries of type [DynamicEntData::Rels](Rels).
+    MultipleRels,
+    /// Multiple entries of type [DynamicEntData::Fini](Fini).
+    MultipleFini,
+    /// Multiple entries of type [DynamicEntData::Init](Init).
+    MultipleInit,
+    /// Multiple entries of type [DynamicEntData::PreInitArr](PreInitArr).
+    MultiplePreInitArr,
+    /// Multiple entries of type [DynamicEntData::InitArr](InitArr).
+    MultipleInitArr,
+    /// Multiple entries of type [DynamicEntData::FiniArr](FiniArr).
+    MultipleFiniArr,
+    /// Multiple entries of type [DynamicEntData::SymtabIdx](SymtabIdx).
+    MultipleSymtabIdx,
+    /// Relocation entry size has the wrong value.
+    BadRelEntSize,
+    /// Relocation entry size has the wrong value.
+    BadRelaEntSize,
+    /// Symbol table entry size has the wrong value.
+    BadSymtabEntSize,
 }
 
 /// Type synonym for [DynamicEntData] as projected from a [DynamicEnt].
@@ -1392,6 +1543,337 @@ impl<'a, B, Offsets> Dynamic<'a, B, Offsets>
     }
 }
 
+impl<'a, B, Offsets> TryFrom<Dynamic<'a, B, Offsets>>
+    for DynamicInfoRaw<B, Offsets>
+    where Offsets: DynamicOffsets + RelOffsets + RelaOffsets + SymOffsets,
+          B: ByteOrder {
+    type Error = DynamicInfoError<Offsets>;
+
+    fn try_from(dynamic: Dynamic<'a, B, Offsets>) -> Result<Self, Self::Error> {
+        let mut pltgot = None;
+        let mut hash = None;
+        let mut symtab = None;
+        let mut strtab = None;
+        let mut strtab_size = None;
+        let mut name = None;
+        let mut rpath = None;
+        let mut relas = None;
+        let mut relas_size = None;
+        let mut rels = None;
+        let mut rels_size = None;
+        let mut init = None;
+        let mut fini = None;
+        let mut pre_init_arr = None;
+        let mut pre_init_arr_size = None;
+        let mut init_arr = None;
+        let mut init_arr_size = None;
+        let mut fini_arr = None;
+        let mut fini_arr_size = None;
+        let mut debug = None;
+        let mut jump_rel = None;
+        let mut jump_rel_size = None;
+        let mut bind_now = false;
+        let mut text_rel = false;
+        let mut symbolic = false;
+        let mut jump_rela = None;
+        let mut flags = None;
+        let mut symtab_idx = None;
+
+        for ent in dynamic.iter() {
+            let ent: DynamicEntDataRaw<Offsets> = match ent.try_into() {
+                Ok(ent) => Ok(ent),
+                Err(err) => Err(DynamicInfoError::EntDataError(err))
+            }?;
+
+            match ent {
+                DynamicEntData::PLTRelSize { size } => match jump_rel_size {
+                    Some(_) => {
+                        return Err(DynamicInfoError::MultiplePLTRelSize)
+                    },
+                    None => {
+                        jump_rel_size = Some(size)
+                    }
+                },
+                DynamicEntData::PLTGOT { tab } => match pltgot {
+                    Some(_) => {
+                        return Err(DynamicInfoError::MultiplePLTGOT)
+                    },
+                    None => {
+                        pltgot = Some(tab)
+                    }
+                },
+                DynamicEntData::Hash { tab } => match hash {
+                    Some(_) => {
+                        return Err(DynamicInfoError::MultipleHash)
+                    },
+                    None => {
+                        hash = Some(tab)
+                    }
+                },
+                DynamicEntData::Symtab { tab } => match symtab {
+                    Some(_) => {
+                        return Err(DynamicInfoError::MultipleSymtab)
+                    },
+                    None => {
+                        symtab = Some(tab)
+                    }
+                },
+                DynamicEntData::Strtab { tab } => match strtab {
+                    Some(_) => {
+                        return Err(DynamicInfoError::MultipleStrtab)
+                    },
+                    None => {
+                        strtab = Some(tab)
+                    }
+                },
+                DynamicEntData::Rela { tab } => match relas {
+                    Some(_) => {
+                        return Err(DynamicInfoError::MultipleRelas)
+                    },
+                    None => {
+                        relas = Some(tab)
+                    }
+                },
+                DynamicEntData::RelaSize { size } => match relas_size {
+                    Some(_) => {
+                        return Err(DynamicInfoError::MultipleRelas)
+                    },
+                    None => {
+                        relas_size = Some(size)
+                    }
+                },
+                DynamicEntData::RelaEntSize { size }
+                if size != Offsets::RELA_SIZE_OFFSET => {
+                    return Err(DynamicInfoError::BadRelaEntSize)
+                },
+                DynamicEntData::StrtabSize { size } => match strtab_size {
+                    Some(_) => {
+                        return Err(DynamicInfoError::MultipleStrtab)
+                    },
+                    None => {
+                        strtab_size = Some(size)
+                    }
+                },
+                DynamicEntData::SymtabEntSize { size }
+                if size != Offsets::ST_ENT_SIZE_OFFSET => {
+                    return Err(DynamicInfoError::BadSymtabEntSize)
+                },
+                DynamicEntData::Init { func } => match init {
+                    Some(_) => {
+                        return Err(DynamicInfoError::MultipleInit)
+                    },
+                    None => {
+                        init = Some(func)
+                    }
+                },
+                DynamicEntData::Fini { func } => match fini {
+                    Some(_) => {
+                        return Err(DynamicInfoError::MultipleFini)
+                    },
+                    None => {
+                        fini = Some(func)
+                    }
+                },
+                DynamicEntData::Name { name: addr } => match name {
+                    Some(_) => {
+                        return Err(DynamicInfoError::MultipleName)
+                    },
+                    None => {
+                        name = Some(addr)
+                    }
+                },
+                DynamicEntData::RPath { path: addr } => match rpath {
+                    Some(_) => {
+                        return Err(DynamicInfoError::MultipleRPath)
+                    },
+                    None => {
+                        rpath = Some(addr)
+                    }
+                },
+                DynamicEntData::Symbolic => {
+                    symbolic = true
+                },
+                DynamicEntData::Rel { tab } => match rels {
+                    Some(_) => {
+                        return Err(DynamicInfoError::MultipleRels)
+                    },
+                    None => {
+                        rels = Some(tab)
+                    }
+                },
+                DynamicEntData::RelSize { size } => match rels_size {
+                    Some(_) => {
+                        return Err(DynamicInfoError::MultipleRels)
+                    },
+                    None => {
+                        rels_size = Some(size)
+                    }
+                },
+                DynamicEntData::RelEntSize { size }
+                if size != Offsets::REL_SIZE_OFFSET => {
+                    return Err(DynamicInfoError::BadRelEntSize)
+                },
+                DynamicEntData::PLTRela { rela } => match jump_rela {
+                    Some(_) => {
+                        return Err(DynamicInfoError::MultiplePLTRela)
+                    },
+                    None => {
+                        jump_rela = Some(rela)
+                    }
+                },
+                DynamicEntData::Debug { tab } => match debug {
+                    Some(_) => {
+                        return Err(DynamicInfoError::MultipleDebug)
+                    },
+                    None => {
+                        debug = Some(tab)
+                    }
+                },
+                DynamicEntData::TextRel => {
+                    text_rel = true
+                },
+                DynamicEntData::JumpRel { tab } => match jump_rel {
+                    Some(_) => {
+                        return Err(DynamicInfoError::MultipleJumpRel)
+                    },
+                    None => {
+                        jump_rel = Some(tab)
+                    }
+                },
+                DynamicEntData::BindNow => {
+                    bind_now = true
+                },
+                DynamicEntData::InitArray { arr } => match init_arr {
+                    Some(_) => {
+                        return Err(DynamicInfoError::MultipleInitArr)
+                    },
+                    None => {
+                        init_arr = Some(arr)
+                    }
+                },
+                DynamicEntData::InitArraySize { size } => match init_arr_size {
+                    Some(_) => {
+                        return Err(DynamicInfoError::MultipleInitArr)
+                    },
+                    None => {
+                        init_arr_size = Some(size)
+                    }
+                },
+                DynamicEntData::FiniArray { arr } => match fini_arr {
+                    Some(_) => {
+                        return Err(DynamicInfoError::MultipleFiniArr)
+                    },
+                    None => {
+                        fini_arr = Some(arr)
+                    }
+                },
+                DynamicEntData::FiniArraySize { size } => match fini_arr_size {
+                    Some(_) => {
+                        return Err(DynamicInfoError::MultipleFiniArr)
+                    },
+                    None => {
+                        fini_arr_size = Some(size)
+                    }
+                },
+                DynamicEntData::PreInitArray { arr } => match pre_init_arr {
+                    Some(_) => {
+                        return Err(DynamicInfoError::MultiplePreInitArr)
+                    },
+                    None => {
+                        pre_init_arr = Some(arr)
+                    }
+                },
+                DynamicEntData::PreInitArraySize { size } =>
+                    match pre_init_arr_size {
+                        Some(_) => {
+                            return Err(DynamicInfoError::MultiplePreInitArr)
+                        },
+                        None => {
+                            pre_init_arr_size = Some(size)
+                        }
+                    },
+                DynamicEntData::Flags { flags: val } => match flags {
+                    Some(_) => {
+                        return Err(DynamicInfoError::MultipleFlags)
+                    },
+                    None => {
+                        flags = Some(val)
+                    }
+                },
+                DynamicEntData::SymtabIdx { idx } => match symtab_idx {
+                    Some(_) => {
+                        return Err(DynamicInfoError::MultipleSymtabIdx)
+                    },
+                    None => {
+                        symtab_idx = Some(idx)
+                    }
+                },
+                _ => {}
+            }
+        }
+
+        let pre_init_arr = match (pre_init_arr, pre_init_arr_size) {
+            (Some(arr), Some(size)) => Ok(Some(AddrRange { addr: arr,
+                                                           size: size })),
+            (None, None) => Ok(None),
+            _ => Err(DynamicInfoError::IncompletePreInitArr)
+        }?;
+        let init_arr = match (init_arr, init_arr_size) {
+            (Some(arr), Some(size)) => Ok(Some(AddrRange { addr: arr,
+                                                           size: size })),
+            (None, None) => Ok(None),
+            _ => Err(DynamicInfoError::IncompleteInitArr)
+        }?;
+        let fini_arr = match (fini_arr, fini_arr_size) {
+            (Some(arr), Some(size)) => Ok(Some(AddrRange { addr: arr,
+                                                           size: size })),
+            (None, None) => Ok(None),
+            _ => Err(DynamicInfoError::IncompleteFiniArr)
+        }?;
+        let strtab = match (strtab, strtab_size) {
+            (Some(tab), Some(size)) => Ok(Some(AddrRange { addr: tab,
+                                                           size: size })),
+            (None, None) => Ok(None),
+            _ => Err(DynamicInfoError::IncompleteFiniArr)
+        }?;
+        let reloc = match (relas, relas_size, rels, rels_size) {
+            (Some(tab), Some(size), None, None) =>
+                Ok(Some(Relocs::Rela(AddrRange { addr: tab, size: size }))),
+            (None, None, Some(tab), Some(size)) =>
+                Ok(Some(Relocs::Rel(AddrRange { addr: tab, size: size }))),
+            (None, None, None, None) => Ok(None),
+            (Some(_), None, None, None) =>
+                Err(DynamicInfoError::IncompleteRelas),
+            (None, Some(_), None, None) =>
+                Err(DynamicInfoError::IncompleteRelas),
+            (None, None, Some(_), None) =>
+                Err(DynamicInfoError::IncompleteRels),
+            (None, None, None, Some(_)) =>
+                Err(DynamicInfoError::IncompleteRels),
+            _ => Err(DynamicInfoError::IncompleteFiniArr)
+        }?;
+        let jump_reloc = match (jump_rel, jump_rel_size, jump_rela) {
+            (Some(tab), Some(size), Some(true)) =>
+                Ok(Some(Relocs::Rela(AddrRange { addr: tab, size: size }))),
+            (Some(tab), Some(size), Some(false)) =>
+                Ok(Some(Relocs::Rel(AddrRange { addr: tab, size: size }))),
+            (None, None, None) => Ok(None),
+            _ => Err(DynamicInfoError::IncompleteJumpRelocs),
+        }?;
+
+        Ok(DynamicInfo { name: name, rpath: rpath, bind_now: bind_now,
+                         hash: hash, symtab: symtab, debug: debug,
+                         jump_reloc: jump_reloc, strtab: strtab,
+                         symtab_idx: symtab_idx, reloc: reloc,
+                         text_rel: text_rel, symbolic: symbolic,
+                         flags: flags, init: init, fini: fini,
+                         fini_arr: fini_arr, init_arr: init_arr,
+                         pre_init_arr: pre_init_arr,
+                         byteorder: PhantomData })
+
+    }
+}
+
 impl<'a, B, Offsets> TryFrom<DynamicEnt<'a, B, Offsets>>
     for DynamicEntDataRaw<Offsets>
     where Offsets: DynamicOffsets,
@@ -1431,6 +1913,190 @@ impl<'a, B, Offsets> TryFrom<&'_ mut DynamicEnt<'a, B, Offsets>>
         Result<DynamicEntData<Offsets::Offset, Offsets::Offset, Offsets>,
                Self::Error> {
         project::<B, Offsets>(ent.data)
+    }
+}
+
+/// Errors that can occur when converting an [`DynamicInfo`] with raw
+/// offsets to one with slices.
+pub enum DynamicInfoWithDataError<Offsets: ElfClass> {
+    /// Offset is out of bounds.
+    OutOfBounds(usize),
+    BadOffset(Offsets::Offset),
+    BadAddr(Offsets::Addr)
+}
+
+impl<'a, B, Offsets> WithElfData<'a> for DynamicInfoRaw<B, Offsets>
+    where Offsets: ElfClass + SymOffsets,
+          B: ByteOrder {
+    type Result = DynamicInfoData<'a, B, Offsets>;
+    type Error = DynamicInfoWithDataError<Offsets>;
+
+    fn with_elf_data(self, data: &'a [u8]) ->
+        Result<Self::Result, Self::Error> {
+        let DynamicInfo { name, rpath, bind_now, text_rel, symbolic,
+                          hash, symtab, strtab, reloc, debug,
+                          jump_reloc, flags, init, fini, pre_init_arr,
+                          init_arr, fini_arr, symtab_idx, .. } = self;
+        let strtab = match strtab {
+            Some(AddrRange { addr, size }) => {
+                let start: usize = match addr.try_into() {
+                    Ok(addr) => Ok(addr),
+                    Err(_) => Err(DynamicInfoWithDataError::BadAddr(addr))
+                }?;
+                let size: usize = match addr.try_into() {
+                    Ok(size) => Ok(size),
+                    Err(_) => Err(DynamicInfoWithDataError::BadOffset(size))
+                }?;
+                let end = start + size;
+
+                if start > data.len() {
+                    Err(DynamicInfoWithDataError::OutOfBounds(start))
+                } else if end > data.len() {
+                    Err(DynamicInfoWithDataError::OutOfBounds(end))
+                } else {
+                    Ok(Some(&data[start .. end]))
+                }
+            },
+            None => Ok(None)
+        }?;
+        let reloc = match reloc {
+            Some(Relocs::Rel(AddrRange { addr, size })) => {
+                let start: usize = match addr.try_into() {
+                    Ok(addr) => Ok(addr),
+                    Err(_) => Err(DynamicInfoWithDataError::BadAddr(addr))
+                }?;
+                let size: usize = match addr.try_into() {
+                    Ok(size) => Ok(size),
+                    Err(_) => Err(DynamicInfoWithDataError::BadOffset(size))
+                }?;
+                let end = start + size;
+
+                if start > data.len() {
+                    Err(DynamicInfoWithDataError::OutOfBounds(start))
+                } else if end > data.len() {
+                    Err(DynamicInfoWithDataError::OutOfBounds(end))
+                } else {
+                    Ok(Some(Relocs::Rel(&data[start .. end])))
+                }
+            },
+            Some(Relocs::Rela(AddrRange { addr, size })) => {
+                let start: usize = match addr.try_into() {
+                    Ok(addr) => Ok(addr),
+                    Err(_) => Err(DynamicInfoWithDataError::BadAddr(addr))
+                }?;
+                let size: usize = match addr.try_into() {
+                    Ok(size) => Ok(size),
+                    Err(_) => Err(DynamicInfoWithDataError::BadOffset(size))
+                }?;
+                let end = start + size;
+
+                if start > data.len() {
+                    Err(DynamicInfoWithDataError::OutOfBounds(start))
+                } else if end > data.len() {
+                    Err(DynamicInfoWithDataError::OutOfBounds(end))
+                } else {
+                    Ok(Some(Relocs::Rela(&data[start .. end])))
+                }
+            },
+            None => Ok(None)
+        }?;
+        let jump_reloc = match jump_reloc {
+            Some(Relocs::Rel(AddrRange { addr, size })) => {
+                let start: usize = match addr.try_into() {
+                    Ok(addr) => Ok(addr),
+                    Err(_) => Err(DynamicInfoWithDataError::BadAddr(addr))
+                }?;
+                let size: usize = match addr.try_into() {
+                    Ok(size) => Ok(size),
+                    Err(_) => Err(DynamicInfoWithDataError::BadOffset(size))
+                }?;
+                let end = start + size;
+
+                if start > data.len() {
+                    Err(DynamicInfoWithDataError::OutOfBounds(start))
+                } else if end > data.len() {
+                    Err(DynamicInfoWithDataError::OutOfBounds(end))
+                } else {
+                    Ok(Some(Relocs::Rel(&data[start .. end])))
+                }
+            },
+            Some(Relocs::Rela(AddrRange { addr, size })) => {
+                let start: usize = match addr.try_into() {
+                    Ok(addr) => Ok(addr),
+                    Err(_) => Err(DynamicInfoWithDataError::BadAddr(addr))
+                }?;
+                let size: usize = match addr.try_into() {
+                    Ok(size) => Ok(size),
+                    Err(_) => Err(DynamicInfoWithDataError::BadOffset(size))
+                }?;
+                let end = start + size;
+
+                if start > data.len() {
+                    Err(DynamicInfoWithDataError::OutOfBounds(start))
+                } else if end > data.len() {
+                    Err(DynamicInfoWithDataError::OutOfBounds(end))
+                } else {
+                    Ok(Some(Relocs::Rela(&data[start .. end])))
+                }
+            },
+            None => Ok(None)
+        }?;
+        // We have to peek at the hash table to get its size.
+        let symtab = match symtab {
+            Some(addr) => {
+                let start: usize = match addr.try_into() {
+                    Ok(addr) => Ok(addr),
+                    Err(_) => Err(DynamicInfoWithDataError::BadAddr(addr))
+                }?;
+                let mut stop = false;
+                let mut nsyms = 0;
+
+                while !stop {
+                    let end = start + Offsets::ST_ENT_SIZE;
+
+                    if start > data.len() {
+                        return Err(DynamicInfoWithDataError::OutOfBounds(start))
+                    } else if end > data.len() {
+                        return Err(DynamicInfoWithDataError::OutOfBounds(end))
+                    } else {
+                        let symdata = &data[start .. end];
+
+                        nsyms += 1;
+                        stop = symdata.iter().all(|x| *x == 0);
+                    }
+                }
+
+                let size = nsyms * Offsets::ST_ENT_SIZE;
+                let end = start + size;
+
+                Ok(Some(&data[start .. end]))
+            },
+            None => Ok(None)
+        }?;
+        // We have to peek at the hash table to get its size.
+        let hash = match hash {
+            Some(addr) => {
+                let start: usize = match addr.try_into() {
+                    Ok(addr) => Ok(addr),
+                    Err(_) => Err(DynamicInfoWithDataError::BadAddr(addr))
+                }?;
+                let peek_end = start + 8;
+                let peek = &data[start .. peek_end];
+                let nhashes = B::read_u32(&peek[0 .. 4]) as usize;
+                let nchains = B::read_u32(&peek[4 .. 8]) as usize;
+                let size = 4 * (nhashes + nchains + 2);
+                let end = start + size;
+
+                Ok(Some(&data[start .. end]))
+            },
+            None => Ok(None)
+        }?;
+
+        Ok(DynamicInfo { name, rpath, bind_now, text_rel, symbolic,
+                         hash, symtab, strtab, reloc, debug,
+                         jump_reloc, flags, init, fini, pre_init_arr,
+                         init_arr, fini_arr, symtab_idx,
+                         byteorder: PhantomData })
     }
 }
 
@@ -1846,6 +2512,39 @@ impl<'a, B, Offsets: DynamicOffsets> ExactSizeIterator
 impl<'a, B, Offsets: DynamicOffsets> FusedIterator
     for DynamicIter<'a, B, Offsets> where B: ByteOrder {}
 
+impl<'a, B, Offsets: DynamicOffsets> Iterator
+    for DynamicNeededIter<'a, B, Offsets>
+    where B: ByteOrder {
+    type Item = Offsets::Offset;
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let size = self.inner.len();
+
+        (size, None)
+    }
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.inner.next() {
+            Some(ent) => {
+                let ent: DynamicEntDataRaw<Offsets> = match ent.try_into() {
+                    Ok(ent) => ent,
+                    Err(_) => return self.next()
+                };
+
+                match ent {
+                    DynamicEntData::Needed { name } => Some(name),
+                    _ => self.next()
+                }
+            },
+            None => None
+        }
+    }
+}
+
+impl<'a, B, Offsets: DynamicOffsets> FusedIterator
+    for DynamicNeededIter<'a, B, Offsets> where B: ByteOrder {}
+
 impl Display for DynamicError {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
         match self {
@@ -1878,6 +2577,24 @@ impl<Offsets> Display for DynamicEntStrsError<Offsets>
             DynamicEntStrsError::BadName(idx) =>
                 write!(f, "bad name index {:x}", idx),
         }
+    }
+}
+
+impl<Rel, Rela> Display for Relocs<Rel, Rela>
+    where Rela: Display,
+          Rel: Display {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
+        match self {
+            Relocs::Rel(rel) => rel.fmt(f),
+            Relocs::Rela(rela) => rela.fmt(f)
+        }
+    }
+}
+
+impl<Offsets> Display for AddrRange<Offsets>
+    where Offsets: ElfClass {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
+        write!(f, "addr: {}, size: {}", self.addr, self.size)
     }
 }
 
@@ -1984,6 +2701,183 @@ impl<Name, Idx, Offsets> Display for DynamicEntData<Name, Idx, Offsets>
             },
             DynamicEntData::Unknown { tag, info } => {
                 write!(f, "Unknown type 0x{:x}: 0x{:x}", tag, info)
+            }
+        }
+    }
+}
+
+impl<Name, Flags, Strs, Syms, Hash, Rel, Rela, B, Offsets> Display
+    for DynamicInfo<Name, Flags, Strs, Syms, Hash, Rel, Rela, B, Offsets>
+    where Offsets: DynamicOffsets,
+          Flags: Display,
+          Name: Display,
+          Strs: Display,
+          Syms: Display,
+          Hash: Display,
+          Rela: Display,
+          Rel: Display {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
+        match &self.name {
+            Some(name) => write!(f, "Dynamic object name: {}\n", name)?,
+            None => {}
+        };
+        match &self.rpath {
+            Some(path) => write!(f, "Dynamic linking path: {}\n", path)?,
+            None => {}
+        };
+
+        write!(f, "Eager relocation processing: {}\n", self.bind_now)?;
+        write!(f, "Relocations modify non-writable segments: {}\n",
+               self.text_rel)?;
+        write!(f, "Symbolic linking: {}\n", self.symbolic)?;
+
+        match &self.symtab_idx {
+            Some(arr) => write!(f, "Symbol table index: {}\n", arr)?,
+            None => {}
+        };
+        match &self.hash {
+            Some(tab) => write!(f, "Symbol hash table: {}\n", tab)?,
+            None => {}
+        };
+        match &self.symtab {
+            Some(tab) => write!(f, "Symbol table: {}\n", tab)?,
+            None => {}
+        };
+        match &self.strtab {
+            Some(tab) => write!(f, "String table: {}\n", tab)?,
+            None => {}
+        };
+        match &self.reloc {
+            Some(tab) => write!(f, "Dynamic relocation table: {}\n", tab)?,
+            None => {}
+        };
+        match &self.debug {
+            Some(addr) => write!(f, "Debugging information: {}\n", addr)?,
+            None => {}
+        };
+        match &self.jump_reloc {
+            Some(tab) => write!(f, "PLT/GOT relocation table: {}\n", tab)?,
+            None => {}
+        };
+        match &self.flags {
+            Some(flags) => write!(f, "Flags: {}\n", flags)?,
+            None => {}
+        };
+        match &self.init {
+            Some(func) => write!(f, "Initializer: {}\n", func)?,
+            None => {}
+        };
+        match &self.fini {
+            Some(func) => write!(f, "Finalizer: {}\n", func)?,
+            None => {}
+        };
+        match &self.pre_init_arr {
+            Some(arr) => write!(f, "Pre-initializer array: {}\n", arr)?,
+            None => {}
+        };
+        match &self.init_arr {
+            Some(arr) => write!(f, "Initializer array: {}\n", arr)?,
+            None => {}
+        };
+        match &self.fini_arr {
+            Some(arr) => write!(f, "Finalizer array: {}\n", arr)?,
+            None => {}
+        };
+
+        Ok(())
+    }
+}
+
+impl<Offsets> Display for DynamicInfoError<Offsets>
+    where Offsets: DynamicOffsets {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
+        match self {
+            DynamicInfoError::EntDataError(ent) => {
+                ent.fmt(f)
+            },
+            DynamicInfoError::IncompleteJumpRelocs => {
+                write!(f, "PLT/GOT relocation information is incomplete")
+            },
+            DynamicInfoError::IncompletePreInitArr => {
+                write!(f, "pre-initialization array information is incomplete")
+            },
+            DynamicInfoError::IncompleteInitArr => {
+                write!(f, "initialization array information is incomplete")
+            },
+            DynamicInfoError::IncompleteFiniArr => {
+                write!(f, "finalization array information is incomplete")
+            },
+            DynamicInfoError::IncompleteRelas => {
+                write!(f, "dynamic relocation information is incomplete")
+            },
+            DynamicInfoError::IncompleteRels => {
+                write!(f, "dynamic relocation information is incomplete")
+            },
+            DynamicInfoError::MultiplePLTRelSize => {
+                write!(f, "multiple dynamic entries for PLT/GOT relocations")
+            },
+            DynamicInfoError::MultipleJumpRel => {
+                write!(f, "multiple dynamic entries for PLT/GOT relocations")
+            },
+            DynamicInfoError::MultiplePLTRela => {
+                write!(f, "multiple dynamic entries for PLT/GOT relocations")
+            },
+            DynamicInfoError::MultiplePLTGOT => {
+                write!(f, "multiple dynamic entries for PLT/GOT")
+            },
+            DynamicInfoError::MultipleSymtab => {
+                write!(f, "multiple dynamic entries for dynamic symtab")
+            },
+            DynamicInfoError::MultipleStrtab => {
+                write!(f, "multiple dynamic entries for dynamic strtab")
+            },
+            DynamicInfoError::MultipleFlags => {
+                write!(f, "multiple dynamic entries for flags")
+            },
+            DynamicInfoError::MultipleRelas => {
+                write!(f, "multiple dynamic entries for dynamic relocations")
+            },
+            DynamicInfoError::MultipleRPath => {
+                write!(f, "multiple dynamic entries for run path")
+            },
+            DynamicInfoError::MultipleDebug => {
+                write!(f, "multiple dynamic entries for debug info")
+            },
+            DynamicInfoError::MultipleName => {
+                write!(f, "multiple dynamic entries for name")
+            },
+            DynamicInfoError::MultipleHash => {
+                write!(f, "multiple dynamic entries for dynamic hash")
+            },
+            DynamicInfoError::MultipleRels => {
+                write!(f, "multiple dynamic entries for dynamic relocations")
+            },
+            DynamicInfoError::MultipleFini => {
+                write!(f, "multiple dynamic entries for finializer function")
+            },
+            DynamicInfoError::MultipleInit => {
+                write!(f, "multiple dynamic entries for initializer function")
+            },
+            DynamicInfoError::MultiplePreInitArr => {
+                write!(f, "multiple dynamic entries for pre-initializer array")
+            },
+            DynamicInfoError::MultipleInitArr => {
+                write!(f, "multiple dynamic entries for initializer array")
+            },
+            DynamicInfoError::MultipleFiniArr => {
+                write!(f, "multiple dynamic entries for finalizer array")
+            },
+            DynamicInfoError::MultipleSymtabIdx => {
+                write!(f, "multiple dynamic entries for dynamic symtab index")
+            },
+            DynamicInfoError::BadRelEntSize => {
+                write!(f, "bad relocation entry size")
+            },
+            DynamicInfoError::BadRelaEntSize => {
+                write!(f, "bad relocation entry size")
+            },
+            DynamicInfoError::BadSymtabEntSize => {
+                write!(f, "bad symtab entry size")
             }
         }
     }
