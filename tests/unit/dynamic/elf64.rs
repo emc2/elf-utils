@@ -1,4 +1,3 @@
-use byteorder::ByteOrder;
 use byteorder::LittleEndian;
 use core::convert::TryFrom;
 use core::convert::TryInto;

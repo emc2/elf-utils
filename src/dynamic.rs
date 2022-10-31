@@ -597,6 +597,12 @@ pub enum DynamicEntData<Name, Idx, Class: ElfClass> {
 pub struct DynamicInfo<Name, Flags, Strs, Syms, Hash,
                        Rel, Rela, B, Offsets: ElfClass> {
     byteorder: PhantomData<B>,
+    /// Pointer to the string table for the dynamic symbol table.
+    pub strtab: Strs,
+    /// Pointer to the dynamic symbol table.
+    pub symtab: Syms,
+    /// Pointer to the hash section associated with the dynamic symbol table.
+    pub hash: Hash,
     /// Name of the shared object.
     pub name: Option<Name>,
     /// Run path of the shared object.
@@ -607,12 +613,6 @@ pub struct DynamicInfo<Name, Flags, Strs, Syms, Hash,
     pub text_rel: bool,
     /// Whether symbols should be resolved from the shared object first.
     pub symbolic: bool,
-    /// Pointer to the hash section associated with the dynamic symbol table.
-    pub hash: Option<Hash>,
-    /// Pointer to the dynamic symbol table.
-    pub symtab: Option<Syms>,
-    /// Pointer to the string table for the dynamic symbol table.
-    pub strtab: Option<Strs>,
     /// Dynamic relocation information.
     pub reloc: Option<Relocs<Rel, Rela>>,
     /// Pointer to debugging information.
@@ -661,10 +661,6 @@ pub enum DynamicInfoFullStrDataError<Offsets: ElfClass> {
     Rela(RelasError),
     /// Errors parsing a [Rela].
     Rel(RelsError),
-    /// Missing [Strtab] or [Symtab] when parsing a [Hashtab].
-    IncompleteHash,
-    /// Missing [Strtab] when looking up a name or rpath.
-    NoStrtab,
     /// Index out of bounds when looking up a name or rpath.
     StrtabOutOfBounds(Offsets::Offset)
 }
@@ -726,6 +722,8 @@ pub enum DynamicInfoError<Offsets: ElfClass> {
     IncompleteInitArr,
     /// Finalization array information is incomplete.
     IncompleteFiniArr,
+    /// String table information is incomplete
+    IncompleteStrtab,
     /// Dynamic relocation information is incomplete.
     IncompleteRelas,
     /// Dynamic relocation information is incomplete.
@@ -768,6 +766,12 @@ pub enum DynamicInfoError<Offsets: ElfClass> {
     MultipleFiniArr,
     /// Multiple entries of type [DynamicEntData::SymtabIdx](SymtabIdx).
     MultipleSymtabIdx,
+    /// Missing string table information.
+    NoStrtab,
+    /// Missing symbol table information.
+    NoSymtab,
+    /// Missing hash table information.
+    NoHash,
     /// Relocation entry size has the wrong value.
     BadRelEntSize,
     /// Relocation entry size has the wrong value.
@@ -1886,10 +1890,17 @@ impl<'a, B, Offsets> TryFrom<Dynamic<'a, B, Offsets>>
             _ => Err(DynamicInfoError::IncompleteFiniArr)
         }?;
         let strtab = match (strtab, strtab_size) {
-            (Some(tab), Some(size)) => Ok(Some(AddrRange { addr: tab,
-                                                           size: size })),
-            (None, None) => Ok(None),
-            _ => Err(DynamicInfoError::IncompleteFiniArr)
+            (Some(tab), Some(size)) => Ok(AddrRange { addr: tab, size: size }),
+            (None, None) => Err(DynamicInfoError::NoStrtab),
+            _ => Err(DynamicInfoError::IncompleteStrtab)
+        }?;
+        let symtab = match symtab {
+            Some(tab) => Ok(tab),
+            None => Err(DynamicInfoError::NoSymtab)
+        }?;
+        let hash = match hash {
+            Some(tab) => Ok(tab),
+            None => Err(DynamicInfoError::NoSymtab)
         }?;
         let reloc = match (relas, relas_size, rels, rels_size) {
             (Some(tab), Some(size), None, None) =>
@@ -1926,6 +1937,30 @@ impl<'a, B, Offsets> TryFrom<Dynamic<'a, B, Offsets>>
                          pre_init_arr: pre_init_arr,
                          byteorder: PhantomData })
 
+    }
+}
+
+impl<'a, B, Offsets> TryFrom<&'_ Dynamic<'a, B, Offsets>>
+    for DynamicInfoRaw<B, Offsets>
+    where Offsets: DynamicOffsets + RelOffsets + RelaOffsets + SymOffsets,
+          B: ByteOrder {
+    type Error = DynamicInfoError<Offsets>;
+
+    fn try_from(dynamic: &'_ Dynamic<'a, B, Offsets>) ->
+        Result<Self, Self::Error> {
+        DynamicInfo::try_from(dynamic.clone())
+    }
+}
+
+impl<'a, B, Offsets> TryFrom<&'_ mut Dynamic<'a, B, Offsets>>
+    for DynamicInfoRaw<B, Offsets>
+    where Offsets: DynamicOffsets + RelOffsets + RelaOffsets + SymOffsets,
+          B: ByteOrder {
+    type Error = DynamicInfoError<Offsets>;
+
+    fn try_from(dynamic: &'_ mut Dynamic<'a, B, Offsets>) ->
+        Result<Self, Self::Error> {
+        DynamicInfo::try_from(dynamic.clone())
     }
 }
 
@@ -1983,35 +2018,52 @@ impl<'a, B, Offsets> WithElfData<'a> for DynamicInfoRaw<B, Offsets>
                           hash, symtab, strtab, reloc, debug,
                           jump_reloc, flags, init, fini, pre_init_arr,
                           init_arr, fini_arr, symtab_idx, .. } = self;
-        let strtab = match strtab {
-            Some(AddrRange { addr, size }) => {
-                let start: usize = match addr.try_into() {
-                    Ok(addr) => Ok(addr),
-                    Err(_) => Err(DynamicInfoWithDataError::BadAddr(addr))
-                }?;
-                let size: usize = match addr.try_into() {
-                    Ok(size) => Ok(size),
-                    Err(_) => Err(DynamicInfoWithDataError::BadOffset(size))
-                }?;
-                let end = start + size;
-
-                if start > data.len() {
-                    Err(DynamicInfoWithDataError::OutOfBounds(start))
-                } else if end > data.len() {
-                    Err(DynamicInfoWithDataError::OutOfBounds(end))
-                } else {
-                    Ok(Some(&data[start .. end]))
-                }
-            },
-            None => Ok(None)
+        // Convert strtab.
+        let AddrRange { addr: strtab_addr, size: strtab_size } = strtab;
+        let strtab_start: usize = match strtab_addr.try_into() {
+            Ok(addr) => Ok(addr),
+            Err(_) => Err(DynamicInfoWithDataError::BadAddr(strtab_addr))
         }?;
+        let strtab_size: usize = match strtab_addr.try_into() {
+            Ok(size) => Ok(size),
+            Err(_) => Err(DynamicInfoWithDataError::BadOffset(strtab_size))
+        }?;
+        let strtab_end = strtab_start + strtab_size;
+
+        let strtab = if strtab_start > data.len() {
+            Err(DynamicInfoWithDataError::OutOfBounds(strtab_start))
+        } else if strtab_end > data.len() {
+            Err(DynamicInfoWithDataError::OutOfBounds(strtab_end))
+        } else {
+            Ok(&data[strtab_start .. strtab_end])
+        }?;
+        // We have to peek at the hash table to get its size.
+        let hash_start: usize = match hash.try_into() {
+            Ok(addr) => Ok(addr),
+            Err(_) => Err(DynamicInfoWithDataError::BadAddr(hash))
+        }?;
+        let hash_peek_end = hash_start + 8;
+        let hash_peek = &data[hash_start .. hash_peek_end];
+        let nhashes = B::read_u32(&hash_peek[0 .. 4]) as usize;
+        let nchains = B::read_u32(&hash_peek[4 .. 8]) as usize;
+        let hash_size = 4 * (nhashes + nchains + 2);
+        let hash_end = hash_start + hash_size;
+        let hash = &data[hash_start .. hash_end];
+        // The nchains value also gives us the size of the symbol table.
+        let symtab_start: usize = match symtab.try_into() {
+            Ok(addr) => Ok(addr),
+            Err(_) => Err(DynamicInfoWithDataError::BadAddr(symtab))
+        }?;
+        let symtab_size = nchains * Offsets::ST_ENT_SIZE;
+        let symtab_end = symtab_start + symtab_size;
+        let symtab = &data[symtab_start .. symtab_end];
         let reloc = match reloc {
             Some(Relocs::Rel(AddrRange { addr, size })) => {
                 let start: usize = match addr.try_into() {
                     Ok(addr) => Ok(addr),
                     Err(_) => Err(DynamicInfoWithDataError::BadAddr(addr))
                 }?;
-                let size: usize = match addr.try_into() {
+                let size: usize = match size.try_into() {
                     Ok(size) => Ok(size),
                     Err(_) => Err(DynamicInfoWithDataError::BadOffset(size))
                 }?;
@@ -2030,7 +2082,7 @@ impl<'a, B, Offsets> WithElfData<'a> for DynamicInfoRaw<B, Offsets>
                     Ok(addr) => Ok(addr),
                     Err(_) => Err(DynamicInfoWithDataError::BadAddr(addr))
                 }?;
-                let size: usize = match addr.try_into() {
+                let size: usize = match size.try_into() {
                     Ok(size) => Ok(size),
                     Err(_) => Err(DynamicInfoWithDataError::BadOffset(size))
                 }?;
@@ -2052,7 +2104,7 @@ impl<'a, B, Offsets> WithElfData<'a> for DynamicInfoRaw<B, Offsets>
                     Ok(addr) => Ok(addr),
                     Err(_) => Err(DynamicInfoWithDataError::BadAddr(addr))
                 }?;
-                let size: usize = match addr.try_into() {
+                let size: usize = match size.try_into() {
                     Ok(size) => Ok(size),
                     Err(_) => Err(DynamicInfoWithDataError::BadOffset(size))
                 }?;
@@ -2071,7 +2123,7 @@ impl<'a, B, Offsets> WithElfData<'a> for DynamicInfoRaw<B, Offsets>
                     Ok(addr) => Ok(addr),
                     Err(_) => Err(DynamicInfoWithDataError::BadAddr(addr))
                 }?;
-                let size: usize = match addr.try_into() {
+                let size: usize = match size.try_into() {
                     Ok(size) => Ok(size),
                     Err(_) => Err(DynamicInfoWithDataError::BadOffset(size))
                 }?;
@@ -2084,56 +2136,6 @@ impl<'a, B, Offsets> WithElfData<'a> for DynamicInfoRaw<B, Offsets>
                 } else {
                     Ok(Some(Relocs::Rela(&data[start .. end])))
                 }
-            },
-            None => Ok(None)
-        }?;
-        // We have to peek at the hash table to get its size.
-        let symtab = match symtab {
-            Some(addr) => {
-                let start: usize = match addr.try_into() {
-                    Ok(addr) => Ok(addr),
-                    Err(_) => Err(DynamicInfoWithDataError::BadAddr(addr))
-                }?;
-                let mut stop = false;
-                let mut nsyms = 0;
-
-                while !stop {
-                    let end = start + Offsets::ST_ENT_SIZE;
-
-                    if start > data.len() {
-                        return Err(DynamicInfoWithDataError::OutOfBounds(start))
-                    } else if end > data.len() {
-                        return Err(DynamicInfoWithDataError::OutOfBounds(end))
-                    } else {
-                        let symdata = &data[start .. end];
-
-                        nsyms += 1;
-                        stop = symdata.iter().all(|x| *x == 0);
-                    }
-                }
-
-                let size = nsyms * Offsets::ST_ENT_SIZE;
-                let end = start + size;
-
-                Ok(Some(&data[start .. end]))
-            },
-            None => Ok(None)
-        }?;
-        // We have to peek at the hash table to get its size.
-        let hash = match hash {
-            Some(addr) => {
-                let start: usize = match addr.try_into() {
-                    Ok(addr) => Ok(addr),
-                    Err(_) => Err(DynamicInfoWithDataError::BadAddr(addr))
-                }?;
-                let peek_end = start + 8;
-                let peek = &data[start .. peek_end];
-                let nhashes = B::read_u32(&peek[0 .. 4]) as usize;
-                let nchains = B::read_u32(&peek[4 .. 8]) as usize;
-                let size = 4 * (nhashes + nchains + 2);
-                let end = start + size;
-
-                Ok(Some(&data[start .. end]))
             },
             None => Ok(None)
         }?;
@@ -2159,31 +2161,19 @@ impl<'a, B, Offsets> TryFrom<DynamicInfoData<'a, B, Offsets>>
                           hash, symtab, strtab, reloc, debug,
                           jump_reloc, flags, init, fini, pre_init_arr,
                           init_arr, fini_arr, symtab_idx, .. } = data;
-        let strtab: Option<Strtab<'a>> = match strtab {
-            Some(strtab) => match strtab.try_into() {
-                Ok(strtab) => Ok(Some(strtab)),
-                Err(err) => Err(DynamicInfoFullStrDataError::Strtab(err))
-            },
-            None => Ok(None)
+        let strtab: Strtab<'a> = match strtab.try_into() {
+            Ok(strtab) => Ok(strtab),
+            Err(err) => Err(DynamicInfoFullStrDataError::Strtab(err))
         }?;
-        let symtab: Option<Symtab<'a, B, Offsets>> = match symtab {
-            Some(symtab) => match symtab.try_into() {
-                Ok(symtab) => Ok(Some(symtab)),
-                Err(err) => Err(DynamicInfoFullStrDataError::Symtab(err))
-            },
-            None => Ok(None)
+        let symtab: Symtab<'a, B, Offsets> = match symtab.try_into() {
+            Ok(symtab) => Ok(symtab),
+            Err(err) => Err(DynamicInfoFullStrDataError::Symtab(err))
         }?;
-        let hash: Option<Hashtab<'a, B, Offsets>> = match hash {
-            Some(hash) => match (strtab, symtab) {
-                (Some(strtab), Some(symtab)) =>
-                    match Hashtab::from_slice(hash, strtab, symtab) {
-                        Ok(hash) => Ok(Some(hash)),
-                        Err(err) => Err(DynamicInfoFullStrDataError::Hash(err))
-                    },
-                _ => Err(DynamicInfoFullStrDataError::IncompleteHash)
-            },
-            None => Ok(None)
-        }?;
+        let hash: Hashtab<'a, B, Offsets> =
+            match Hashtab::from_slice(hash, strtab, symtab) {
+                Ok(hash) => Ok(hash),
+                Err(err) => Err(DynamicInfoFullStrDataError::Hash(err))
+            }?;
         let reloc = match reloc {
             Some(Relocs::Rela(reloc)) => match reloc.try_into() {
                 Ok(reloc) => Ok(Some(Relocs::Rela(reloc))),
@@ -2207,30 +2197,24 @@ impl<'a, B, Offsets> TryFrom<DynamicInfoData<'a, B, Offsets>>
             None => Ok(None)
         }?;
         let name = match name {
-            Some(name) => match strtab {
-                Some(strtab) => match strtab.idx(name) {
-                    Ok(str) => Ok(Some(Ok(str))),
-                    Err(StrtabIdxError::OutOfBounds(idx)) =>
-                        Err(DynamicInfoFullStrDataError
-                            ::StrtabOutOfBounds(idx)),
-                    Err(StrtabIdxError::UTF8Decode(data)) =>
-                        Ok(Some(Err(data)))
-                },
-                None => Err(DynamicInfoFullStrDataError::NoStrtab)
+            Some(name) => match strtab.idx(name) {
+                Ok(str) => Ok(Some(Ok(str))),
+                Err(StrtabIdxError::OutOfBounds(idx)) =>
+                    Err(DynamicInfoFullStrDataError
+                        ::StrtabOutOfBounds(idx)),
+                Err(StrtabIdxError::UTF8Decode(data)) =>
+                    Ok(Some(Err(data)))
             },
             None => Ok(None)
         }?;
         let rpath = match rpath {
-            Some(path) => match strtab {
-                Some(strtab) => match strtab.idx(path) {
-                    Ok(str) => Ok(Some(Ok(str))),
-                    Err(StrtabIdxError::OutOfBounds(idx)) =>
-                        Err(DynamicInfoFullStrDataError
-                            ::StrtabOutOfBounds(idx)),
-                    Err(StrtabIdxError::UTF8Decode(data)) =>
-                        Ok(Some(Err(data)))
-                },
-                None => Err(DynamicInfoFullStrDataError::NoStrtab)
+            Some(path) => match strtab.idx(path) {
+                Ok(str) => Ok(Some(Ok(str))),
+                Err(StrtabIdxError::OutOfBounds(idx)) =>
+                    Err(DynamicInfoFullStrDataError
+                        ::StrtabOutOfBounds(idx)),
+                Err(StrtabIdxError::UTF8Decode(data)) =>
+                    Ok(Some(Err(data)))
             },
             None => Ok(None)
         }?;
@@ -2240,6 +2224,90 @@ impl<'a, B, Offsets> TryFrom<DynamicInfoData<'a, B, Offsets>>
                          jump_reloc, flags, init, fini, pre_init_arr,
                          init_arr, fini_arr, symtab_idx,
                          byteorder: PhantomData })
+    }
+}
+
+impl<'a, B, Offsets> TryFrom<DynamicInfoFullStrData<'a, B, Offsets>>
+    for DynamicInfoFullStrs<'a, B, Offsets>
+    where Offsets: 'a + DynamicOffsets + RelaOffsets + RelOffsets + SymOffsets,
+          B: 'a + ByteOrder {
+    type Error = &'a [u8];
+
+    #[inline]
+    fn try_from(data: DynamicInfoFullStrData<'a, B, Offsets>) ->
+        Result<DynamicInfoFullStrs<'a, B, Offsets>, Self::Error> {
+        let DynamicInfo { name, rpath, bind_now, text_rel, symbolic,
+                          hash, symtab, strtab, reloc, debug,
+                          jump_reloc, flags, init, fini, pre_init_arr,
+                          init_arr, fini_arr, symtab_idx, .. } = data;
+        let name = match name {
+            Some(Ok(str)) => Ok(Some(str)),
+            Some(Err(buf)) => Err(buf),
+            None => Ok(None)
+        }?;
+        let rpath = match rpath {
+            Some(Ok(str)) => Ok(Some(str)),
+            Some(Err(buf)) => Err(buf),
+            None => Ok(None)
+        }?;
+
+        Ok(DynamicInfo { name, rpath, bind_now, text_rel, symbolic,
+                         hash, symtab, strtab, reloc, debug,
+                         jump_reloc, flags, init, fini, pre_init_arr,
+                         init_arr, fini_arr, symtab_idx,
+                         byteorder: PhantomData })
+    }
+}
+
+impl<'a, B, Offsets> TryFrom<&'_ DynamicInfoFullStrData<'a, B, Offsets>>
+    for DynamicInfoFullStrs<'a, B, Offsets>
+    where Offsets: 'a + DynamicOffsets + RelaOffsets + RelOffsets + SymOffsets,
+          B: 'a + ByteOrder {
+    type Error = &'a [u8];
+
+    #[inline]
+    fn try_from(data: &'_ DynamicInfoFullStrData<'a, B, Offsets>) ->
+        Result<DynamicInfoFullStrs<'a, B, Offsets>, Self::Error> {
+        DynamicInfo::try_from(data.clone())
+    }
+}
+
+impl<'a, B, Offsets> TryFrom<&'_ mut DynamicInfoFullStrData<'a, B, Offsets>>
+    for DynamicInfoFullStrs<'a, B, Offsets>
+    where Offsets: 'a + DynamicOffsets + RelaOffsets + RelOffsets + SymOffsets,
+          B: 'a + ByteOrder {
+    type Error = &'a [u8];
+
+    #[inline]
+    fn try_from(data: &'_ mut DynamicInfoFullStrData<'a, B, Offsets>) ->
+        Result<DynamicInfoFullStrs<'a, B, Offsets>, Self::Error> {
+        DynamicInfo::try_from(data.clone())
+    }
+}
+
+impl<'a, B, Offsets> TryFrom<&'_ DynamicInfoData<'a, B, Offsets>>
+    for DynamicInfoFullStrData<'a, B, Offsets>
+    where Offsets: 'a + DynamicOffsets + RelaOffsets + RelOffsets + SymOffsets,
+          B: 'a + ByteOrder {
+    type Error = DynamicInfoFullStrDataError<Offsets>;
+
+    #[inline]
+    fn try_from(data: &'_ DynamicInfoData<'a, B, Offsets>) ->
+        Result<DynamicInfoFullStrData<'a, B, Offsets>, Self::Error> {
+        DynamicInfo::try_from(data.clone())
+    }
+}
+
+impl<'a, B, Offsets> TryFrom<&'_ mut DynamicInfoData<'a, B, Offsets>>
+    for DynamicInfoFullStrData<'a, B, Offsets>
+    where Offsets: 'a + DynamicOffsets + RelaOffsets + RelOffsets + SymOffsets,
+          B: 'a + ByteOrder {
+    type Error = DynamicInfoFullStrDataError<Offsets>;
+
+    #[inline]
+    fn try_from(data: &'_ mut DynamicInfoData<'a, B, Offsets>) ->
+        Result<DynamicInfoFullStrData<'a, B, Offsets>, Self::Error> {
+        DynamicInfo::try_from(data.clone())
     }
 }
 
@@ -2718,12 +2786,6 @@ impl<Offsets: ElfClass> Display for DynamicInfoFullStrDataError<Offsets> {
             DynamicInfoFullStrDataError::Hash(err) => err.fmt(f),
             DynamicInfoFullStrDataError::Rela(err) => err.fmt(f),
             DynamicInfoFullStrDataError::Rel(err) => err.fmt(f),
-            DynamicInfoFullStrDataError::IncompleteHash => {
-                write!(f, "missing strtab or symtab for hash")
-            },
-            DynamicInfoFullStrDataError::NoStrtab => {
-                write!(f, "missing strtab for converting string")
-            },
             DynamicInfoFullStrDataError::StrtabOutOfBounds(offset) => {
                 write!(f, "offset {} out of strtab bounds", offset)
             }
@@ -2912,18 +2974,9 @@ impl<Name, Flags, Strs, Syms, Hash, Rel, Rela, B, Offsets> Display
             Some(arr) => write!(f, "Symbol table index: {}\n", arr)?,
             None => {}
         };
-        match &self.hash {
-            Some(tab) => write!(f, "Symbol hash table: {}\n", tab)?,
-            None => {}
-        };
-        match &self.symtab {
-            Some(tab) => write!(f, "Symbol table: {}\n", tab)?,
-            None => {}
-        };
-        match &self.strtab {
-            Some(tab) => write!(f, "String table: {}\n", tab)?,
-            None => {}
-        };
+        write!(f, "Symbol hash table: {}\n", self.hash)?;
+        write!(f, "Symbol table: {}\n", self.symtab)?;
+        write!(f, "String table: {}\n", self.strtab)?;
         match &self.reloc {
             Some(tab) => write!(f, "Dynamic relocation table: {}\n", tab)?,
             None => {}
@@ -2983,6 +3036,9 @@ impl<Offsets> Display for DynamicInfoError<Offsets>
             },
             DynamicInfoError::IncompleteFiniArr => {
                 write!(f, "finalization array information is incomplete")
+            },
+            DynamicInfoError::IncompleteStrtab => {
+                write!(f, "string table information is incomplete")
             },
             DynamicInfoError::IncompleteRelas => {
                 write!(f, "dynamic relocation information is incomplete")
@@ -3046,6 +3102,15 @@ impl<Offsets> Display for DynamicInfoError<Offsets>
             },
             DynamicInfoError::MultipleSymtabIdx => {
                 write!(f, "multiple dynamic entries for dynamic symtab index")
+            },
+            DynamicInfoError::NoStrtab => {
+                write!(f, "missing string table")
+            },
+            DynamicInfoError::NoSymtab => {
+                write!(f, "missing symbol table")
+            },
+            DynamicInfoError::NoHash => {
+                write!(f, "missing symbol hash table")
             },
             DynamicInfoError::BadRelEntSize => {
                 write!(f, "bad relocation entry size")
