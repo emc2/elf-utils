@@ -9,7 +9,8 @@ use elf_utils::dynamic::DynamicEntData;
 use elf_utils::note::NoteData;
 use elf_utils::prog_hdr::ProgHdrData;
 use elf_utils::prog_hdr::Segment;
-use elf_utils::reloc::x86::X86Reloc;
+use elf_utils::reloc::x86::X86Rel;
+use elf_utils::reloc::x86::X86Rela;
 use elf_utils::section_hdr::SectionHdrData;
 use elf_utils::section_hdr::SectionPos;
 use elf_utils::section_hdr::SymsStrs;
@@ -570,882 +571,882 @@ pub const SYMTAB_CONTENTS: [SymData<&'static str, u16, Elf32>;
 
 const REL_TEXT_NUM_RELS: usize = 26;
 
-const REL_TEXT_RELS_CONTENTS_X86: [X86Reloc<SymData<&'static str, u16, Elf32>>;
+const REL_TEXT_RELS_CONTENTS_X86: [X86Rel<SymData<&'static str, u16, Elf32>>;
                                    REL_TEXT_NUM_RELS] = [
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: Some("environ"), value: 0, size: 4,
                        kind: SymKind::Object, bind: SymBind::Global,
                        section: SymBase::Index(7) },
-        offset: 0x15, addend: 0
+        offset: 0x15
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: Some("environ"), value: 0, size: 4,
                        kind: SymKind::Object, bind: SymBind::Global,
                        section: SymBase::Index(7) },
-        offset: 0x1e, addend: 0
+        offset: 0x1e
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: Some("_DYNAMIC"), value: 0, size: 0,
                        kind: SymKind::None, bind: SymBind::Weak,
                        section: SymBase::Undef },
-        offset: 0x2d, addend: 0
+        offset: 0x2d
 
     },
-    X86Reloc::PC32 {
+    X86Rel::PC32 {
         sym: SymData { name: Some("atexit"), value: 0, size: 0,
                        kind: SymKind::None, bind: SymBind::Global,
                        section: SymBase::Undef },
-        offset: 0x39, addend: 0
+        offset: 0x39
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: Some("__progname"), value: 0, size: 4,
                        kind: SymKind::Object, bind: SymBind::Global,
                        section: SymBase::Index(5) },
-        offset: 0x51, addend: 0
+        offset: 0x51
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: Some("__rel_iplt_start"), value: 0, size: 0,
                        kind: SymKind::None, bind: SymBind::Weak,
                        section: SymBase::Undef },
-        offset: 0x69, addend: 0
+        offset: 0x69
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: Some("__rel_iplt_end"), value: 0, size: 0,
                        kind: SymKind::None, bind: SymBind::Weak,
                        section: SymBase::Undef },
-        offset: 0x6f, addend: 0
+        offset: 0x6f
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: Some("__rel_iplt_end"), value: 0, size: 0,
                        kind: SymKind::None, bind: SymBind::Weak,
                        section: SymBase::Undef },
-        offset: 0xfc, addend: 0
+        offset: 0xfc
     },
-    X86Reloc::PC32 {
+    X86Rel::PC32 {
         sym: SymData { name: Some("_init_tls"), value: 0, size: 0,
                        kind: SymKind::None, bind: SymBind::Global,
                        section: SymBase::Undef },
-        offset: 0x107, addend: 0
+        offset: 0x107
     },
-    X86Reloc::PC32 {
+    X86Rel::PC32 {
         sym: SymData { name: Some("main"), value: 0, size: 0,
                        kind: SymKind::None, bind: SymBind::Global,
                        section: SymBase::Undef },
-        offset: 0x122, addend: 0
+        offset: 0x122
     },
-    X86Reloc::PC32 {
+    X86Rel::PC32 {
         sym: SymData { name: Some("exit"), value: 0, size: 0,
                        kind: SymKind::None, bind: SymBind::Global,
                        section: SymBase::Undef },
-        offset: 0x12b, addend: 0
+        offset: 0x12b
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: Some("_DYNAMIC"), value: 0, size: 0,
                        kind: SymKind::None, bind: SymBind::Weak,
                        section: SymBase::Undef },
-        offset: 0x140, addend: 0
+        offset: 0x140
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(1) },
-        offset: 0x14d, addend: 0
+        offset: 0x14d
     },
-    X86Reloc::PC32 {
+    X86Rel::PC32 {
         sym: SymData { name: Some("atexit"), value: 0, size: 0,
                        kind: SymKind::None, bind: SymBind::Global,
                        section: SymBase::Undef },
-        offset: 0x152, addend: 0
+        offset: 0x152
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: Some("__preinit_array_start"), value: 0, size: 0,
                        kind: SymKind::None, bind: SymBind::Global,
                        section: SymBase::Undef },
-        offset: 0x15a, addend: 0
+        offset: 0x15a
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: Some("__preinit_array_end"), value: 0, size: 0,
                        kind: SymKind::None, bind: SymBind::Global,
                        section: SymBase::Undef },
-        offset: 0x15f, addend: 0
+        offset: 0x15f
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: Some("__preinit_array_start"), value: 0, size: 0,
                        kind: SymKind::None, bind: SymBind::Global,
                        section: SymBase::Undef },
-        offset: 0x198, addend: 0
+        offset: 0x198
     },
-    X86Reloc::PC32 {
+    X86Rel::PC32 {
         sym: SymData { name: Some("_init"), value: 0, size: 0,
                        kind: SymKind::None, bind: SymBind::Global,
                        section: SymBase::Undef },
-        offset: 0x1b7, addend: 0
+        offset: 0x1b7
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: Some("__init_array_start"), value: 0, size: 0,
                        kind: SymKind::None, bind: SymBind::Global,
                        section: SymBase::Undef },
-        offset: 0x1bc, addend: 0
+        offset: 0x1bc
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: Some("__init_array_end"), value: 0, size: 0,
                        kind: SymKind::None, bind: SymBind::Global,
                        section: SymBase::Undef },
-        offset: 0x1c1, addend: 0
+        offset: 0x1c1
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: Some("__init_array_start"), value: 0, size: 0,
                        kind: SymKind::None, bind: SymBind::Global,
                        section: SymBase::Undef },
-        offset: 0x1f8, addend: 0
+        offset: 0x1f8
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: Some("__fini_array_start"), value: 0, size: 0,
                        kind: SymKind::None, bind: SymBind::Global,
                        section: SymBase::Undef },
-        offset: 0x225, addend: 0
+        offset: 0x225
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: Some("__fini_array_end"), value: 0, size: 0,
                        kind: SymKind::None, bind: SymBind::Global,
                        section: SymBase::Undef },
-        offset: 0x22a, addend: 0
+        offset: 0x22a
     },
-    X86Reloc::PC32 {
+    X86Rel::PC32 {
         sym: SymData { name: Some("_fini"), value: 0, size: 0,
                        kind: SymKind::None, bind: SymBind::Global,
                        section: SymBase::Undef },
-        offset: 0x242, addend: 0
+        offset: 0x242
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: Some("__fini_array_start"), value: 0, size: 0,
                        kind: SymKind::None, bind: SymBind::Global,
                        section: SymBase::Undef },
-        offset: 0x257, addend: 0
+        offset: 0x257
     },
-    X86Reloc::PC32 {
+    X86Rel::PC32 {
         sym: SymData { name: Some("_start1"), value: 0, size: 303,
                        kind: SymKind::Function, bind: SymBind::Local,
                        section: SymBase::Index(1) },
-        offset: 0x27c, addend: 0
+        offset: 0x27c
     },
 ];
 
 const REL_DATA_NUM_RELS: usize = 1;
 
-const REL_DATA_RELS_CONTENTS_X86: [X86Reloc<SymData<&'static str, u16, Elf32>>;
+const REL_DATA_RELS_CONTENTS_X86: [X86Rel<SymData<&'static str, u16, Elf32>>;
                                    REL_DATA_NUM_RELS] = [
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: Some(".L.str"), value: 0, size: 1,
                        kind: SymKind::Object, bind: SymBind::Local,
                        section: SymBase::Index(4) },
-        offset: 0, addend: 0
+        offset: 0
     },
 ];
 
 const REL_DEBUG_INFO_NUM_RELS: usize = 123;
 
-const REL_DEBUG_INFO_RELS_CONTENTS_X86: [X86Reloc<SymData<&'static str,
+const REL_DEBUG_INFO_RELS_CONTENTS_X86: [X86Rel<SymData<&'static str,
                                                           u16, Elf32>>;
                                          REL_DEBUG_INFO_NUM_RELS] = [
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(9) },
-        offset: 0x6, addend: 0
+        offset: 0x6
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 512, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0xc, addend: 0
+        offset: 0xc
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 166, size: 0, kind: SymKind::None,
               bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x12, addend: 0
+        offset: 0x12
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(16) },
-        offset: 0x16, addend: 0
+        offset: 0x16
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 16, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x1a, addend: 0
+        offset: 0x1a
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(1) },
-        offset: 0x1e, addend: 0
+        offset: 0x1e
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 155, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x27, addend: 0
+        offset: 0x27
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: Some("__progname"), value: 0, size: 4,
                        kind: SymKind::Object, bind: SymBind::Global,
                        section: SymBase::Index(5) },
-        offset: 0x33, addend: 0
+        offset: 0x33
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 338, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x42, addend: 0
+        offset: 0x42
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 496, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x49, addend: 0
+        offset: 0x49
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: Some("environ"), value: 0, size: 4,
                        kind: SymKind::Object, bind: SymBind::Global,
                        section: SymBase::Index(7) },
-        offset: 0x55, addend: 0
+        offset: 0x55
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 141, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x65, addend: 0
+        offset: 0x65
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 356, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x75, addend: 0
+        offset: 0x75
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 102, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x80, addend: 0
+        offset: 0x80
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 419, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x8b, addend: 0
+        offset: 0x8b
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 317, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x96, addend: 0
+        offset: 0x96
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 343, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x9d, addend: 0
+        offset: 0x9d
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 467, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0xc7, addend: 0
+        offset: 0xc7
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 398, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0xd2, addend: 0
+        offset: 0xd2
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 71, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0xd9, addend: 0
+        offset: 0xd9
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 620, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0xe1, addend: 0
+        offset: 0xe1
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 281, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0xec, addend: 0
+        offset: 0xec
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 286, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0xf7, addend: 0
+        offset: 0xf7
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 197, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x102, addend: 0
+        offset: 0x102
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 235, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x10e, addend: 0
+        offset: 0x10e
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 638, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x115, addend: 0
+        offset: 0x115
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 456, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x11d, addend: 0
+        offset: 0x11d
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 365, size: 0, kind: SymKind::None,
               bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x137, addend: 0
+        offset: 0x137
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 328, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x142, addend: 0
+        offset: 0x142
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 410, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x14d, addend: 0
+        offset: 0x14d
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 113, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x159, addend: 0
+        offset: 0x159
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 428, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x16a, addend: 0
+        offset: 0x16a
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 239, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x171, addend: 0
+        offset: 0x171
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 456, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x179, addend: 0
+        offset: 0x179
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 199, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x184, addend: 0
+        offset: 0x184
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 654, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x18f, addend: 0
+        offset: 0x18f
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 458, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x19a, addend: 0
+        offset: 0x19a
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 625, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x1a5, addend: 0
+        offset: 0x1a5
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 298, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x1b0, addend: 0
+        offset: 0x1b0
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 255, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x1bb, addend: 0
+        offset: 0x1bb
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 614, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x1c6, addend: 0
+        offset: 0x1c6
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 460, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x1d1, addend: 0
+        offset: 0x1d1
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 373, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x1e1, addend: 0
+        offset: 0x1e1
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 215, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x1f4, addend: 0
+        offset: 0x1f4
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 379, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x1fb, addend: 0
+        offset: 0x1fb
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 477, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x203, addend: 0
+        offset: 0x203
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 458, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x20e, addend: 0
+        offset: 0x20e
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 120, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x21f, addend: 0
+        offset: 0x21f
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 477, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x227, addend: 0
+        offset: 0x227
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 439, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x232, addend: 0
+        offset: 0x232
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 458, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x23d, addend: 0
+        offset: 0x23d
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(1) },
-        offset: 0x249, addend: 0
+        offset: 0x249
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 290, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x253, addend: 0
+        offset: 0x253
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 504, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x25d, addend: 0
+        offset: 0x25d
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 620, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x26b, addend: 0
+        offset: 0x26b
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 281, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x279, addend: 0
+        offset: 0x279
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(8) },
-        offset: 0x284, addend: 0
+        offset: 0x284
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 286, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x288, addend: 0
+        offset: 0x288
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(12) },
-        offset: 0x297, addend: 0
+        offset: 0x297
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(8) },
-        offset: 0x29f, addend: 0
+        offset: 0x29f
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(8) },
-        offset: 0x2a8, addend: 0
+        offset: 0x2a8
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(8) },
-        offset: 0x2b1, addend: 0
+        offset: 0x2b1
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(1) },
-        offset: 0x2c4, addend: 0
+        offset: 0x2c4
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(8) },
-        offset: 0x2d0, addend: 0
+        offset: 0x2d0
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(1) },
-        offset: 0x2dd, addend: 0
+        offset: 0x2dd
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(8) },
-        offset: 0x2e9, addend: 0
+        offset: 0x2e9
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(8) },
-        offset: 0x2f2, addend: 0
+        offset: 0x2f2
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(8) },
-        offset: 0x2fb, addend: 0
+        offset: 0x2fb
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(8) },
-        offset: 0x304, addend: 0
+        offset: 0x304
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(8) },
-        offset: 0x30d, addend: 0
+        offset: 0x30d
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(8) },
-        offset: 0x316, addend: 0
+        offset: 0x316
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(8) },
-        offset: 0x31f, addend: 0
+        offset: 0x31f
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(8) },
-        offset: 0x328, addend: 0
+        offset: 0x328
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(8) },
-        offset: 0x331, addend: 0
+        offset: 0x331
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(1) },
-        offset: 0x33e, addend: 0
+        offset: 0x33e
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(1) },
-        offset: 0x35a, addend: 0
+        offset: 0x35a
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(8) },
-        offset: 0x366, addend: 0
+        offset: 0x366
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(12) },
-        offset: 0x379, addend: 0
+        offset: 0x379
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(8) },
-        offset: 0x381, addend: 0
+        offset: 0x381
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(8) },
-        offset: 0x38a, addend: 0
+        offset: 0x38a
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(1) },
-        offset: 0x39f, addend: 0
+        offset: 0x39f
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(1) },
-        offset: 0x3a6, addend: 0
+        offset: 0x3a6
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(1) },
-        offset: 0x3af, addend: 0
+        offset: 0x3af
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(1) },
-        offset: 0x3b8, addend: 0
+        offset: 0x3b8
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(1) },
-        offset: 0x3ce, addend: 0
+        offset: 0x3ce
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 666, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x3d4, addend: 0
+        offset: 0x3d4
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 388, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x3eb, addend: 0
+        offset: 0x3eb
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(1) },
-        offset: 0x3f2, addend: 0
+        offset: 0x3f2
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 83, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x3fc, addend: 0
+        offset: 0x3fc
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(8) },
-        offset: 0x403, addend: 0
+        offset: 0x403
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 620, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x407, addend: 0
+        offset: 0x407
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(8) },
-        offset: 0x412, addend: 0
+        offset: 0x412
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 281, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x416, addend: 0
+        offset: 0x416
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 286, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x424, addend: 0
+        offset: 0x424
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(8) },
-        offset: 0x42f, addend: 0
+        offset: 0x42f
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 454, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x433, addend: 0
+        offset: 0x433
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 485, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x43e, addend: 0
+        offset: 0x43e
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(8) },
-        offset: 0x449, addend: 0
+        offset: 0x449
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 68, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x44d, addend: 0
+        offset: 0x44d
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(1) },
-        offset: 0x45c, addend: 0
+        offset: 0x45c
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(1) },
-        offset: 0x463, addend: 0
+        offset: 0x463
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(1) },
-        offset: 0x46c, addend: 0
+        offset: 0x46c
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(1) },
-        offset: 0x473, addend: 0
+        offset: 0x473
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 480, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x479, addend: 0
+        offset: 0x479
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 275, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x494, addend: 0
+        offset: 0x494
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(1) },
-        offset: 0x49b, addend: 0
+        offset: 0x49b
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 6, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x4a5, addend: 0
+        offset: 0x4a5
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(8) },
-        offset: 0x4ac, addend: 0
+        offset: 0x4ac
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 454, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x4b0, addend: 0
+        offset: 0x4b0
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 485, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x4bb, addend: 0
+        offset: 0x4bb
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(8) },
-        offset: 0x4c6, addend: 0
+        offset: 0x4c6
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 68, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x4ca, addend: 0
+        offset: 0x4ca
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(1) },
-        offset: 0x4d9, addend: 0
+        offset: 0x4d9
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(1) },
-        offset: 0x4e0, addend: 0
+        offset: 0x4e0
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x4e6, addend: 0
+        offset: 0x4e6
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 442, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x4f1, addend: 0
+        offset: 0x4f1
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 447, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x4fc, addend: 0
+        offset: 0x4fc
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 132, size: 0, kind: SymKind::None,
                        bind: SymBind::Local, section: SymBase::Index(13) },
-        offset: 0x507, addend: 0
+        offset: 0x507
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(9) },
-        offset: 0x52a, addend: 0
+        offset: 0x52a
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(16) },
-        offset: 0x530, addend: 0
+        offset: 0x530
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(1) },
-        offset: 0x534, addend: 0
+        offset: 0x534
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(1) },
-        offset: 0x538, addend: 0
+        offset: 0x538
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(1) },
-        offset: 0x606, addend: 0
+        offset: 0x606
     }
 ];
 
 const REL_DEBUG_FRAME_NUM_RELS: usize = 6;
 
-const REL_DEBUG_FRAME_RELS_CONTENTS_X86: [X86Reloc<SymData<&'static str,
+const REL_DEBUG_FRAME_RELS_CONTENTS_X86: [X86Rel<SymData<&'static str,
                                                            u16, Elf32>>;
                                           REL_DEBUG_FRAME_NUM_RELS] = [
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
               bind: SymBind::Local, section: SymBase::Index(14) },
-        offset: 0x18, addend: 0
+        offset: 0x18
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(1) },
-        offset: 0x1c, addend: 0
+        offset: 0x1c
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
               bind: SymBind::Local, section: SymBase::Index(14) },
-        offset: 0x38, addend: 0
+        offset: 0x38
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(1) },
-        offset: 0x3c, addend: 0
+        offset: 0x3c
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
               bind: SymBind::Local, section: SymBase::Index(14) },
-        offset: 0x5c, addend: 0
+        offset: 0x5c
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(1) },
-        offset: 0x60, addend: 0
+        offset: 0x60
     }
 ];
 
 const REL_DEBUG_LINE_NUM_RELS: usize = 2;
 
-const REL_DEBUG_LINE_RELS_CONTENTS_X86: [X86Reloc<SymData<&'static str,
+const REL_DEBUG_LINE_RELS_CONTENTS_X86: [X86Rel<SymData<&'static str,
                                                           u16, Elf32>>;
                                          REL_DEBUG_LINE_NUM_RELS] = [
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(1) },
-        offset: 0x1b8, addend: 0
+        offset: 0x1b8
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(1) },
-        offset: 0x37e, addend: 0
+        offset: 0x37e
     },
 ];
 
 const REL_EH_FRAME_NUM_RELS: usize = 1;
 
-const REL_EH_FRAME_RELS_CONTENTS_X86: [X86Reloc<SymData<&'static str,
+const REL_EH_FRAME_RELS_CONTENTS_X86: [X86Rel<SymData<&'static str,
                                                         u16, Elf32>>;
                                        REL_EH_FRAME_NUM_RELS] = [
-    X86Reloc::PC32 {
+    X86Rel::PC32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(1) },
-        offset: 0x20, addend: 0
+        offset: 0x20
     },
 ];
 
 const REL_DEBUG_ARANGES_NUM_RELS: usize = 2;
 
-const REL_DEBUG_ARANGES_RELS_CONTENTS_X86: [X86Reloc<SymData<&'static str,
+const REL_DEBUG_ARANGES_RELS_CONTENTS_X86: [X86Rel<SymData<&'static str,
                                                              u16, Elf32>>;
                                             REL_DEBUG_ARANGES_NUM_RELS] = [
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(10) },
-        offset: 0x6, addend: 0
+        offset: 0x6
     },
-    X86Reloc::Abs32 {
+    X86Rel::Abs32 {
         sym: SymData { name: None, value: 0, size: 0, kind: SymKind::Section,
                        bind: SymBind::Local, section: SymBase::Index(1) },
-        offset: 0x10, addend: 0
+        offset: 0x10
     },
 ];
 
@@ -1459,10 +1460,10 @@ pub const EXPECTED: [SectionHdrData<Elf32, &'static str,
                                     &'static [SymData<&'static str,
                                                       u16, Elf32>],
                                     &'static [(&'static str, usize)],
-                                    &'static [X86Reloc<SymData<&'static str,
-                                                               u16, Elf32>>],
-                                    &'static [X86Reloc<SymData<&'static str,
-                                                               u16, Elf32>>],
+                                    &'static [X86Rel<SymData<&'static str,
+                                                             u16, Elf32>>],
+                                    &'static [X86Rela<SymData<&'static str,
+                                                              u16, Elf32>>],
                                     SectionPos<u32>,
                                     &'static [DynamicEntData<&'static str,
                                                              u32, Elf32>],

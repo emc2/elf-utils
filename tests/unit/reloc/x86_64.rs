@@ -4,7 +4,7 @@ use core::convert::TryInto;
 use elf_utils::Elf64;
 use elf_utils::reloc::RelaData;
 use elf_utils::reloc::Relas;
-use elf_utils::reloc::x86_64::X86_64Reloc;
+use elf_utils::reloc::x86_64::X86_64Rela;
 use elf_utils::reloc::x86_64::X86_64RelocError;
 
 const X86_64_RELAS_SIZE: usize = 600;
@@ -89,32 +89,32 @@ const X86_64_RELAS: [u8; X86_64_RELAS_SIZE] = [
 
 const X86_64_NUM_RELAS: usize = 25;
 
-const X86_64_RELAS_CONTENTS: [X86_64Reloc<u32>; X86_64_NUM_RELAS] = [
-    X86_64Reloc::PC32 { offset: 0x22, sym: 36, addend: -5 },
-    X86_64Reloc::PC32 { offset: 0x2c, sym: 36, addend: -4 },
-    X86_64Reloc::Abs32 { offset: 0x42, sym: 21, addend: 0 },
-    X86_64Reloc::PLTRel { offset: 0x4f, sym: 35, addend: -4 },
-    X86_64Reloc::PC32 { offset: 0x63, sym: 28, addend: -4 },
-    X86_64Reloc::Abs32 { offset: 0x7a, sym: 29, addend: 0 },
-    X86_64Reloc::Abs32 { offset: 0x80, sym: 30, addend: 0 },
-    X86_64Reloc::Abs32 { offset: 0xca, sym: 29, addend: 0 },
-    X86_64Reloc::PLTRel { offset: 0xdf, sym: 33, addend: -4 },
-    X86_64Reloc::PLTRel { offset: 0xfb, sym: 38, addend: -4 },
-    X86_64Reloc::PLTRel { offset: 0x102, sym: 37, addend: -4 },
-    X86_64Reloc::Abs32 { offset: 0x12a, sym: 21, addend: 0 },
-    X86_64Reloc::Abs32 { offset: 0x13b, sym: 4, addend: 560 },
-    X86_64Reloc::PLTRel { offset: 0x140, sym: 35, addend: -4 },
-    X86_64Reloc::Abs32 { offset: 0x145, sym: 27, addend: 0 },
-    X86_64Reloc::Abs32 { offset: 0x14a, sym: 26, addend: 0 },
-    X86_64Reloc::Abs32Signed { offset: 0x192, sym: 27, addend: 0 },
-    X86_64Reloc::PLTRel { offset: 0x1ac, sym: 32, addend: -4 },
-    X86_64Reloc::Abs32{ offset: 0x1b1, sym: 25, addend: 0 },
-    X86_64Reloc::Abs32 { offset: 0x1b7, sym: 24, addend: 0 },
-    X86_64Reloc::Abs32Signed { offset: 0x202, sym: 25, addend: 0 },
-    X86_64Reloc::Abs32 { offset: 0x237, sym: 23, addend: 0 },
-    X86_64Reloc::Abs32 { offset: 0x23c, sym: 22, addend: 0 },
-    X86_64Reloc::PLTRel { offset: 0x25e, sym: 31, addend: -4 },
-    X86_64Reloc::Abs32Signed { offset: 0x279, sym: 23, addend: -8 }
+const X86_64_RELAS_CONTENTS: [X86_64Rela<u32>; X86_64_NUM_RELAS] = [
+    X86_64Rela::PC32 { offset: 0x22, sym: 36, addend: -5 },
+    X86_64Rela::PC32 { offset: 0x2c, sym: 36, addend: -4 },
+    X86_64Rela::Abs32 { offset: 0x42, sym: 21, addend: 0 },
+    X86_64Rela::PLTRel { offset: 0x4f, sym: 35, addend: -4 },
+    X86_64Rela::PC32 { offset: 0x63, sym: 28, addend: -4 },
+    X86_64Rela::Abs32 { offset: 0x7a, sym: 29, addend: 0 },
+    X86_64Rela::Abs32 { offset: 0x80, sym: 30, addend: 0 },
+    X86_64Rela::Abs32 { offset: 0xca, sym: 29, addend: 0 },
+    X86_64Rela::PLTRel { offset: 0xdf, sym: 33, addend: -4 },
+    X86_64Rela::PLTRel { offset: 0xfb, sym: 38, addend: -4 },
+    X86_64Rela::PLTRel { offset: 0x102, sym: 37, addend: -4 },
+    X86_64Rela::Abs32 { offset: 0x12a, sym: 21, addend: 0 },
+    X86_64Rela::Abs32 { offset: 0x13b, sym: 4, addend: 560 },
+    X86_64Rela::PLTRel { offset: 0x140, sym: 35, addend: -4 },
+    X86_64Rela::Abs32 { offset: 0x145, sym: 27, addend: 0 },
+    X86_64Rela::Abs32 { offset: 0x14a, sym: 26, addend: 0 },
+    X86_64Rela::Abs32Signed { offset: 0x192, sym: 27, addend: 0 },
+    X86_64Rela::PLTRel { offset: 0x1ac, sym: 32, addend: -4 },
+    X86_64Rela::Abs32{ offset: 0x1b1, sym: 25, addend: 0 },
+    X86_64Rela::Abs32 { offset: 0x1b7, sym: 24, addend: 0 },
+    X86_64Rela::Abs32Signed { offset: 0x202, sym: 25, addend: 0 },
+    X86_64Rela::Abs32 { offset: 0x237, sym: 23, addend: 0 },
+    X86_64Rela::Abs32 { offset: 0x23c, sym: 22, addend: 0 },
+    X86_64Rela::PLTRel { offset: 0x25e, sym: 31, addend: -4 },
+    X86_64Rela::Abs32Signed { offset: 0x279, sym: 23, addend: -8 }
 ];
 
 #[test]
@@ -129,7 +129,7 @@ fn test_Relas_from_bytes_iter() {
         assert!(rel.is_some());
 
         let raw: RelaData<u32, Elf64> = rel.unwrap().into();
-        let data: Result<X86_64Reloc<u32>, X86_64RelocError> = raw.try_into();
+        let data: Result<X86_64Rela<u32>, X86_64RelocError> = raw.try_into();
 
         assert!(data.is_ok());
 
@@ -154,7 +154,7 @@ fn test_Relas_from_bytes_idx() {
         assert!(rel.is_some());
 
         let raw: RelaData<u32, Elf64> = rel.unwrap().into();
-        let data: Result<X86_64Reloc<u32>, X86_64RelocError> = raw.try_into();
+        let data: Result<X86_64Rela<u32>, X86_64RelocError> = raw.try_into();
 
         assert!(data.is_ok());
 

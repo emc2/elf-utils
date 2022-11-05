@@ -34,12 +34,176 @@ use crate::symtab::WithSymtab;
 ///
 /// This datatype provides a semantic-level presentation of the x86
 /// relocation entries.  These can be converted to and from
-/// [RelData](crate::reloc::RelData) or
+/// [RelData](crate::reloc::RelData) with [Elf32](crate::Elf32) as
+/// the [ElfClass](crate::ElfClass) type argument using the
+/// [TryFrom](core::convert::TryFrom) instances for easier handling.
+#[derive(Clone, Debug, Hash, Eq, Ord, PartialEq, PartialOrd)]
+pub enum X86Rel<Name> {
+    /// Null relocation.
+    None,
+    /// 32-bit absolute offset.
+    ///
+    /// Sets the 4-byte word at `offset` to `sym + addend`.
+    Abs32 {
+        /// Offset in the section.
+        offset: u32,
+        /// Symbol reference.
+        sym: Name
+    },
+    /// 32-bit PC-relative offset.
+    ///
+    /// Set the 4-byte word at `offset` to the relative address of
+    /// `sym + addend` (computed by subtracting the offset or
+    /// address of the target word from `sym + addend`).
+    PC32 {
+        /// Offset in the section.
+        offset: u32,
+        /// Symbol reference.
+        sym: Name
+    },
+    /// 16-bit absolute offset.
+    ///
+    /// Set the 2-byte word at `offset` to `sym + addend`.
+    Abs16 {
+        /// Offset in the section.
+        offset: u32,
+        /// Symbol reference.
+        sym: Name
+    },
+    /// 16-bit PC-relative offset.
+    ///
+    /// Set the 2-byte word at `offset` to the relative address of
+    /// `sym + addend` (computed by subtracting the offset or
+    /// address of the target word from `sym + addend`).
+    PC16 {
+        /// Offset in the section.
+        offset: u32,
+        /// Symbol reference.
+        sym: Name
+    },
+    /// 8-bit absolute offset.
+    ///
+    /// Set the 1-byte word at `offset` to `sym + addend`.
+    Abs8 {
+        /// Offset in the section.
+        offset: u32,
+        /// Symbol reference.
+        sym: Name
+    },
+    /// 8-bit PC-relative offset.
+    ///
+    /// Set the 1-byte word at `offset` to the relative address of
+    /// `sym + addend` (computed by subtracting the offset or
+    /// address of the target word from `sym + addend`).
+    PC8 {
+        /// Offset in the section.
+        offset: u32,
+        /// Symbol reference.
+        sym: Name
+    },
+    /// 32-bit Global Offset Table index.
+    ///
+    /// Set the 4-byte word at `offset` to the sum of the address of
+    /// the Global Offset Table and `addend`.
+    GOT32 {
+        /// Offset in the section.
+        offset: u32
+    },
+    /// Procedure Linkage Table index.
+    ///
+    /// Set the 4-byte word at `offset` to the relative address of the
+    /// sum of the address of the Procedure Linkage Table and `addend`
+    /// (computed by subtracting the offset or address of the target
+    /// word from the sum of the address of the Procedure Linkage
+    /// Table and `addend`).
+    PLTRel {
+        /// Offset in the section.
+        offset: u32,
+        /// Symbol reference.
+        sym: Name
+    },
+    /// Writable copy.
+    ///
+    /// Create a copy of the symbol `sym` in a writable segment.
+    Copy {
+        /// Symbol reference.
+        sym: Name
+    },
+    /// Global Offset Table entry fill.
+    ///
+    /// Set a Global Offset Table entry to the address of `sym`.
+    GlobalData {
+        /// Offset in the GOT.
+        offset: u32,
+        /// Symbol reference.
+        sym: Name
+    },
+    /// Procedure Linkage Table jump-slot fill.
+    ///
+    /// Set a Procedure Linkage Table entry to the address of `sym`.
+    JumpSlot {
+        /// Offset in the PLT.
+        offset: u32,
+        /// Symbol reference.
+        sym: Name
+    },
+    /// 32-bit offset relative to the image base.
+    ///
+    /// Set the 4-byte word at `offset` to the sum of the base address
+    /// and `addend`.
+    Relative {
+        /// Offset in the section.
+        offset: u32
+    },
+    /// 32-bit absolute offset to a Global Offset Table entry.
+    ///
+    /// Set the 4-byte word at `offset` to the relative
+    /// address of `sym + addend` from the Global Offset Table.
+    GOTRel {
+        /// Offset in the section.
+        offset: u32,
+        /// Symbol reference.
+        sym: Name
+    },
+    /// 32-bit PC-relative offset to a Global Offset Table entry.
+    ///
+    /// Set the 4-byte word at `offset` relative address of Global
+    /// Offset Table address added to `addend` from the address of the
+    /// word at `offset`.
+    GOTPC {
+        /// Offset in the section.
+        offset: u32
+    },
+    /// 32-bit absolute offset to a Procedure Linkage Table entry.
+    ///
+    /// Set the 4-byte word at `offset` to the sum of the address of
+    /// the Procedure Linkage Table and `addend`.
+    PLTAbs {
+        /// Offset in the section.
+        offset: u32
+    },
+    /// Symbol size.
+    ///
+    /// Set the 4-byte word at `offset` to the sum of the size of the
+    /// symbol and `addend`.
+    Size {
+        /// Offset in the section.
+        offset: u32,
+        /// Symbol reference.
+        sym: Name
+    }
+}
+
+/// Relocation entries for 32-bit x86 architectures (aka. IA-32,
+/// i386), with explicit addends.
+///
+/// This datatype provides a semantic-level presentation of the x86
+/// relocation entries.  These can be converted to and from
 /// [RelaData](crate::reloc::RelaData) with [Elf32](crate::Elf32) as
 /// the [ElfClass](crate::ElfClass) type argument using the
 /// [TryFrom](core::convert::TryFrom) instances for easier handling.
 #[derive(Clone, Debug, Hash, Eq, Ord, PartialEq, PartialOrd)]
-pub enum X86Reloc<Name> {
+pub enum X86Rela<Name> {
     /// Null relocation.
     None,
     /// 32-bit absolute offset.
@@ -221,56 +385,45 @@ pub enum X86Reloc<Name> {
     }
 }
 
-/// Type synonym for [X86Reloc] as projected from a [Rel](crate::reloc::Rel).
+/// Type synonym for [X86Rel] as projected from a [Rel](crate::reloc::Rel).
 ///
 /// This is obtained directly from the [TryFrom] insance acting on a
 /// [Rel](crate::reloc::Rel).
-pub type X86RelocRaw = X86Reloc<u32>;
+pub type X86RelRaw = X86Rel<u32>;
 
-/// Type synonym for [X86Reloc] with [SymDataRaw] as the symbol type.
+/// Type synonym for [X86Rel] with [SymDataRaw] as the symbol type.
 ///
 /// This is obtained directly from the [WithSymtab] instance acting on a
-/// [X86RelocRaw].
-pub type X86RelocRawSym = X86Reloc<SymDataRaw<Elf32>>;
+/// [X86RelRaw].
+pub type X86RelRawSym = X86Rel<SymDataRaw<Elf32>>;
 
-/// Type synonym for [X86Reloc] with [SymDataStrData] as the symbol type.
+/// Type synonym for [X86Rel] with [SymDataStrData] as the symbol type.
 ///
 /// This is obtained directly from the [WithStrtab] instance acting on
-/// a [X86RelocRawSym].
-pub type X86RelocStrDataSym<'a> = X86Reloc<SymDataStrData<'a, Elf32>>;
+/// a [X86RelRawSym].
+pub type X86RelStrDataSym<'a> = X86Rel<SymDataStrData<'a, Elf32>>;
 
-/// Type synonym for [X86Reloc] with [SymDataStr] as the symbol type.
+/// Type synonym for [X86Rel] with [SymDataStr] as the symbol type.
 ///
 /// This is obtained directly from the [TryFrom] instance acting on
-/// a [X86RelocStrDataSym].
-pub type X86RelocStrData<'a> = X86Reloc<Option<Result<&'a str, &'a [u8]>>>;
+/// a [X86RelStrDataSym].
+pub type X86RelStrData<'a> = X86Rel<Option<Result<&'a str, &'a [u8]>>>;
 
-/// Type synonym for [X86Reloc] with UTF-8 decoded string data as the
+/// Type synonym for [X86Rel] with UTF-8 decoded string data as the
 /// symbol type.
 ///
 /// This is obtained directly from the [TryFrom] instance acting on
-/// a [X86RelocStrDataSym].
-pub type X86RelocStrSym<'a> = X86Reloc<SymDataStr<'a, Elf32>>;
+/// a [X86RelStrDataSym].
+pub type X86RelStrSym<'a> = X86Rel<SymDataStr<'a, Elf32>>;
 
-/// Type synonym for [X86Reloc] with a `&'a str`s as the symbol type.
+/// Type synonym for [X86Rel] with a `&'a str`s as the symbol type.
 ///
 /// This is obtained directly from the [TryFrom] instance acting on
-/// a [X86RelocStrSym].
-pub type X86RelocStr<'a> = X86Reloc<Option<&'a str>>;
-
-/// Errors that can occur converting an [X86Reloc] to a
-/// [RelData](crate::reloc::RelData).
-///
-/// At present, this can only happen with a non-zero addend.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub enum X86ToRelError {
-    /// Non-zero addend.
-    BadAddend(i32)
-}
+/// a [X86RelStrSym].
+pub type X86RelStr<'a> = X86Rel<Option<&'a str>>;
 
 /// Errors that can occur converting a
-/// [RelData](crate::reloc::RelData) or
-/// [RelData](crate::reloc::RelaData) to a [X86Reloc].
+/// [RelData](crate::reloc::RelData) to a [X86Rel].
 ///
 /// At present, this can only happen with a bad tag value.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -294,53 +447,141 @@ pub enum X86RelocApplyError {
     Copy
 }
 
-impl<Name> Display for X86Reloc<Name>
+/// Type synonym for [X86Rela] as projected from a [Rel](crate::reloc::Rel).
+///
+/// This is obtained directly from the [TryFrom] insance acting on a
+/// [Rel](crate::reloc::Rel).
+pub type X86RelaRaw = X86Rela<u32>;
+
+/// Type synonym for [X86Rela] with [SymDataRaw] as the symbol type.
+///
+/// This is obtained directly from the [WithSymtab] instance acting on a
+/// [X86RelaRaw].
+pub type X86RelaRawSym = X86Rela<SymDataRaw<Elf32>>;
+
+/// Type synonym for [X86Rela] with [SymDataStrData] as the symbol type.
+///
+/// This is obtained directly from the [WithStrtab] instance acting on
+/// a [X86RelaRawSym].
+pub type X86RelaStrDataSym<'a> = X86Rela<SymDataStrData<'a, Elf32>>;
+
+/// Type synonym for [X86Rela] with [SymDataStr] as the symbol type.
+///
+/// This is obtained directly from the [TryFrom] instance acting on
+/// a [X86RelaStrDataSym].
+pub type X86RelaStrData<'a> = X86Rela<Option<Result<&'a str, &'a [u8]>>>;
+
+/// Type synonym for [X86Rela] with UTF-8 decoded string data as the
+/// symbol type.
+///
+/// This is obtained directly from the [TryFrom] instance acting on
+/// a [X86RelaStrDataSym].
+pub type X86RelaStrSym<'a> = X86Rela<SymDataStr<'a, Elf32>>;
+
+/// Type synonym for [X86Rela] with a `&'a str`s as the symbol type.
+///
+/// This is obtained directly from the [TryFrom] instance acting on
+/// a [X86RelaStrSym].
+pub type X86RelaStr<'a> = X86Rela<Option<&'a str>>;
+
+impl<Name> Display for X86Rel<Name>
     where Name: Display {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
         match self {
-            X86Reloc::None => write!(f, "none"),
-            X86Reloc::Abs32 { offset, sym, addend } =>
+            X86Rel::None => write!(f, "none"),
+            X86Rel::Abs32 { offset, sym } =>
+                write!(f, ".section[{:x}..{:x}] += &{}",
+                       offset, offset + 4, sym),
+            X86Rel::PC32 { offset, sym } =>
+                write!(f, ".section[{}..{}] += &{} - (&.section + {})",
+                       offset, offset + 4, sym, offset),
+            X86Rel::Abs16 { offset, sym } =>
+                write!(f, ".section[{}..{}] += &{}",
+                       offset, offset + 2, sym),
+            X86Rel::PC16 { offset, sym } =>
+                write!(f, ".section[{}..{}] += &{} - (&.section + {})",
+                       offset, offset + 2, sym, offset),
+            X86Rel::Abs8 { offset, sym } =>
+                write!(f, ".section[{}] += &{}", offset, sym),
+            X86Rel::PC8 { offset, sym } =>
+                write!(f, ".section[{}] += &{} - (&.section + {})",
+                       offset, sym, offset),
+            X86Rel::GOT32 { offset } =>
+                write!(f, ".section[{}..{}] += &.got",
+                       offset, offset + 4),
+            X86Rel::PLTRel { offset, .. } =>
+                write!(f, ".section[{}..{}] += &.plt - (&.section + {})",
+                       offset, offset + 4, offset),
+            X86Rel::Copy { sym } => write!(f, "copy {}", sym),
+            X86Rel::GlobalData { offset, sym } =>
+                write!(f, ".got[{}..{}] <- &{}", offset, offset + 4, sym),
+            X86Rel::JumpSlot { offset, sym } =>
+                write!(f, ".plt[{}..{}] <- &{}", offset, offset + 4, sym),
+            X86Rel::Relative { offset } =>
+                write!(f, ".section[{}..{}] += &base",
+                       offset, offset + 4),
+            X86Rel::GOTRel { offset, sym } =>
+                write!(f, ".section[{}..{}] += &{} - &.got",
+                       offset, offset + 4, sym),
+            X86Rel::GOTPC { offset, .. } =>
+                write!(f, ".section[{}..{}] <- &.got - (&.section + {})",
+                       offset, offset + 4, offset),
+            X86Rel::PLTAbs { offset } =>
+                write!(f, ".section[{}..{}] += &.plt", offset, offset + 4),
+            X86Rel::Size { offset, sym } =>
+                write!(f, ".section[{}..{}] += sizeof({})",
+                       offset, offset + 4, sym),
+        }
+    }
+}
+
+impl<Name> Display for X86Rela<Name>
+    where Name: Display {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
+        match self {
+            X86Rela::None => write!(f, "none"),
+            X86Rela::Abs32 { offset, sym, addend } =>
                 write!(f, ".section[{:x}..{:x}] <- &{} + {:x}",
                        offset, offset + 4, sym, addend),
-            X86Reloc::PC32 { offset, sym, addend } =>
+            X86Rela::PC32 { offset, sym, addend } =>
                 write!(f, ".section[{}..{}] <- (&{} + {}) - (&.section + {})",
                        offset, offset + 4, sym, addend, offset),
-            X86Reloc::Abs16 { offset, sym, addend } =>
+            X86Rela::Abs16 { offset, sym, addend } =>
                 write!(f, ".section[{}..{}] <- &{} + {}",
                        offset, offset + 2, sym, addend),
-            X86Reloc::PC16 { offset, sym, addend } =>
+            X86Rela::PC16 { offset, sym, addend } =>
                 write!(f, ".section[{}..{}] <- (&{} + {}) - (&.section + {})",
                        offset, offset + 2, sym, addend, offset),
-            X86Reloc::Abs8 { offset, sym, addend } =>
+            X86Rela::Abs8 { offset, sym, addend } =>
                 write!(f, ".section[{}] <- &{} + {}",
                        offset, sym, addend),
-            X86Reloc::PC8 { offset, sym, addend } =>
+            X86Rela::PC8 { offset, sym, addend } =>
                 write!(f, ".section[{}] <- (&{} + {}) - (&.section + {})",
                        offset, sym, addend, offset),
-            X86Reloc::GOT32 { offset, addend } =>
+            X86Rela::GOT32 { offset, addend } =>
                 write!(f, ".section[{}..{}] <- &.got + {}",
                        offset, offset + 4, addend),
-            X86Reloc::PLTRel { offset, addend, .. } =>
+            X86Rela::PLTRel { offset, addend, .. } =>
                 write!(f, ".section[{}..{}] <- (&.plt + {}) - (&.section + {})",
                        offset, offset + 4, addend, offset),
-            X86Reloc::Copy { sym } => write!(f, "copy {}", sym),
-            X86Reloc::GlobalData { offset, sym } =>
+            X86Rela::Copy { sym } => write!(f, "copy {}", sym),
+            X86Rela::GlobalData { offset, sym } =>
                 write!(f, ".got[{}..{}] <- &{}", offset, offset + 4, sym),
-            X86Reloc::JumpSlot { offset, sym } =>
+            X86Rela::JumpSlot { offset, sym } =>
                 write!(f, ".plt[{}..{}] <- &{}", offset, offset + 4, sym),
-            X86Reloc::Relative { offset, addend } =>
+            X86Rela::Relative { offset, addend } =>
                 write!(f, ".section[{}..{}] <- &base + {}",
                        offset, offset + 4, addend),
-            X86Reloc::GOTRel { offset, sym, addend } =>
+            X86Rela::GOTRel { offset, sym, addend } =>
                 write!(f, ".section[{}..{}] <- (&{} + {}) - &.got",
                        offset, offset + 4, sym, addend),
-            X86Reloc::GOTPC { offset, addend, .. } =>
+            X86Rela::GOTPC { offset, addend, .. } =>
                 write!(f, ".section[{}..{}] <- (&.got + {}) - (&.section + {})",
                        offset, offset + 4, addend, offset),
-            X86Reloc::PLTAbs { offset, addend } =>
+            X86Rela::PLTAbs { offset, addend } =>
                 write!(f, ".section[{}..{}] <- &.plt + {}",
                        offset, offset + 4, addend),
-            X86Reloc::Size { offset, sym, addend } =>
+            X86Rela::Size { offset, sym, addend } =>
                 write!(f, ".section[{}..{}] <- sizeof({}) + {}",
                        offset, offset + 4, sym, addend),
         }
@@ -373,17 +614,8 @@ impl Display for X86RelocApplyError {
     }
 }
 
-impl Display for X86ToRelError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
-        match self {
-            X86ToRelError::BadAddend(addend) =>
-                write!(f, "non-zero addend value {}", addend)
-        }
-    }
-}
-
 impl<Name> Reloc<LittleEndian, Elf32>
-    for X86Reloc<SymData<Name, u16, Elf32>> {
+    for X86Rel<SymData<Name, u16, Elf32>> {
     type Params = BasicRelocParams<Elf32>;
     type Error = X86RelocApplyError;
 
@@ -392,8 +624,404 @@ impl<Name> Reloc<LittleEndian, Elf32>
         Result<(), Self::Error>
         where F: FnOnce(u16) -> Option<u32> {
         match self {
-            X86Reloc::None => Ok(()),
-            X86Reloc::Abs32 { sym: SymData { section: SymBase::Absolute,
+            X86Rel::None => Ok(()),
+            X86Rel::Abs32 { sym: SymData { section: SymBase::Absolute,
+                                             value, .. },
+                            offset } => {
+                let range = (*offset as usize) .. (*offset as usize) + 4;
+                let base = params.img_base() as i32;
+                let addend = Elf32::read_word
+                    ::<LittleEndian>(&target[range.clone()]) as i32;
+                let value = base + (*value as i32) + addend;
+
+                Elf32::write_word::<LittleEndian>(&mut target[range],
+                                                  value as u32);
+
+                Ok(())
+            },
+            X86Rel::Abs32 { sym: SymData { section: SymBase::Index(idx),
+                                           value, .. },
+                            offset } => match section_base(*idx) {
+                Some(section_base) => {
+                    let range = (*offset as usize) .. (*offset as usize) + 4;
+                    let base = (params.img_base() + section_base) as i32;
+                    let addend = Elf32::read_word
+                        ::<LittleEndian>(&target[range.clone()]) as i32;
+                    let value = base + (*value as i32) + addend;
+
+                    Elf32::write_word::<LittleEndian>(&mut target[range],
+                                                      value as u32);
+
+                    Ok(())
+                },
+                None => Err(X86RelocApplyError::BadSymIdx(*idx))
+            },
+            X86Rel::Abs32 { sym: SymData { section, .. }, .. } =>
+                Err(X86RelocApplyError::BadSymBase(*section)),
+            X86Rel::PC32 { sym: SymData { section: SymBase::Absolute,
+                                             value, .. },
+                           offset } => {
+                let range = (*offset as usize) .. (*offset as usize) + 4;
+                let base = params.img_base() as i32;
+                let addend = Elf32::read_word
+                    ::<LittleEndian>(&target[range.clone()]) as i32;
+                let sym_value = base + (*value as i32) + addend;
+                let pc = (params.img_base() + target_base + *offset) as i32;
+                let value = sym_value - pc;
+
+                Elf32::write_word::<LittleEndian>(&mut target[range],
+                                                  value as u32);
+
+                Ok(())
+            },
+            X86Rel::PC32 { sym: SymData { section: SymBase::Index(idx),
+                                             value, .. },
+                           offset } =>  match section_base(*idx) {
+                Some(section_base) => {
+
+                    let range = (*offset as usize) .. (*offset as usize) + 4;
+                    let base = (params.img_base() + section_base) as i32;
+                    let addend = Elf32::read_word
+                        ::<LittleEndian>(&target[range.clone()]) as i32;
+                    let sym_value = base + (*value as i32) + addend;
+                    let pc = (params.img_base() + target_base + *offset) as i32;
+                    let value = sym_value - pc;
+
+                    Elf32::write_word::<LittleEndian>(&mut target[range],
+                                                      value as u32);
+
+                    Ok(())
+                },
+                None => Err(X86RelocApplyError::BadSymIdx(*idx))
+            },
+            X86Rel::PC32 { sym: SymData { section, .. }, .. } =>
+                Err(X86RelocApplyError::BadSymBase(*section)),
+            X86Rel::Abs16 { sym: SymData { section: SymBase::Absolute,
+                                             value, .. },
+                            offset } => {
+                let range = (*offset as usize) .. (*offset as usize) + 2;
+                let base = params.img_base() as i32;
+                let addend = Elf32::read_half
+                    ::<LittleEndian>(&target[range.clone()]) as i32;
+                let value = base + (*value as i32) + addend;
+
+                Elf32::write_half::<LittleEndian>(&mut target[range],
+                                                  value as u16);
+
+                Ok(())
+            },
+            X86Rel::Abs16 { sym: SymData { section: SymBase::Index(idx),
+                                             value, .. },
+                            offset } => match section_base(*idx) {
+                Some(section_base) => {
+                    let range = (*offset as usize) .. (*offset as usize) + 2;
+                    let base = (params.img_base() + section_base) as i32;
+                    let addend = Elf32::read_half
+                        ::<LittleEndian>(&target[range.clone()]) as i32;
+                    let value = base + (*value as i32) + addend;
+
+                    Elf32::write_half::<LittleEndian>(&mut target[range],
+                                                      value as u16);
+
+                    Ok(())
+                },
+                None => Err(X86RelocApplyError::BadSymIdx(*idx))
+            },
+            X86Rel::Abs16 { sym: SymData { section, .. }, .. } =>
+                Err(X86RelocApplyError::BadSymBase(*section)),
+            X86Rel::PC16 { sym: SymData { section: SymBase::Absolute,
+                                          value, .. },
+                           offset } => {
+                let range = (*offset as usize) .. (*offset as usize) + 2;
+                let base = params.img_base() as i32;
+                let addend = Elf32::read_half
+                    ::<LittleEndian>(&target[range.clone()]) as i32;
+                let sym_value = base + (*value as i32) + addend;
+                let pc = (params.img_base() + target_base + *offset) as i32;
+                let value = sym_value - pc;
+
+                Elf32::write_half::<LittleEndian>(&mut target[range],
+                                                  value as u16);
+
+                Ok(())
+            },
+            X86Rel::PC16 { sym: SymData { section: SymBase::Index(idx),
+                                          value, .. },
+                           offset } =>  match section_base(*idx) {
+                Some(section_base) => {
+
+                    let range = (*offset as usize) .. (*offset as usize) + 2;
+                    let base = (params.img_base() + section_base) as i32;
+                    let addend = Elf32::read_half
+                        ::<LittleEndian>(&target[range.clone()]) as i32;
+                    let sym_value = base + (*value as i32) + addend;
+                    let pc = (params.img_base() + target_base + *offset) as i32;
+                    let value = sym_value - pc;
+
+                    Elf32::write_half::<LittleEndian>(&mut target[range],
+                                                      value as u16);
+
+                    Ok(())
+                },
+                None => Err(X86RelocApplyError::BadSymIdx(*idx))
+            },
+            X86Rel::PC16 { sym: SymData { section, .. }, .. } =>
+                Err(X86RelocApplyError::BadSymBase(*section)),
+            X86Rel::Abs8 { sym: SymData { section: SymBase::Absolute,
+                                          value, .. },
+                           offset } => {
+                let base = params.img_base() as i32;
+                let addend = target[base as usize] as i32;
+                let value = base + (*value as i32) + addend;
+
+                target[*offset as usize] = value as u8;
+
+                Ok(())
+            },
+            X86Rel::Abs8 { sym: SymData { section: SymBase::Index(idx),
+                                          value, .. },
+                           offset } => match section_base(*idx) {
+                Some(section_base) => {
+                    let base = (params.img_base() + section_base) as i32;
+                    let addend = target[base as usize] as i32;
+                    let value = base + (*value as i32) + addend;
+
+                    target[*offset as usize] = value as u8;
+
+                    Ok(())
+                },
+                None => Err(X86RelocApplyError::BadSymIdx(*idx))
+            },
+            X86Rel::Abs8 { sym: SymData { section, .. }, .. } =>
+                Err(X86RelocApplyError::BadSymBase(*section)),
+            X86Rel::PC8 { sym: SymData { section: SymBase::Absolute,
+                                         value, .. },
+                          offset } => {
+                let base = params.img_base() as i32;
+                let addend = target[base as usize] as i32;
+                let sym_value = base + (*value as i32) + addend;
+                let pc = (params.img_base() + target_base + *offset) as i32;
+                let value = sym_value - pc;
+
+                target[*offset as usize] = value as u8;
+
+                Ok(())
+            },
+            X86Rel::PC8 { sym: SymData { section: SymBase::Index(idx),
+                                         value, .. },
+                          offset } =>  match section_base(*idx) {
+                Some(section_base) => {
+
+                    let base = (params.img_base() + section_base) as i32;
+                    let addend = target[base as usize] as i32;
+                    let sym_value = base + (*value as i32) + addend;
+                    let pc = (params.img_base() + target_base + *offset) as i32;
+                    let value = sym_value - pc;
+
+                    target[*offset as usize] = value as u8;
+
+                    Ok(())
+                },
+                None => Err(X86RelocApplyError::BadSymIdx(*idx))
+            },
+            X86Rel::PC8 { sym: SymData { section, .. }, .. } =>
+                Err(X86RelocApplyError::BadSymBase(*section)),
+            X86Rel::GOT32 { offset } => match params.got() {
+                Some(got) => {
+                    let range = (*offset as usize) .. (*offset as usize) + 4;
+                    let addend = Elf32::read_word
+                        ::<LittleEndian>(&target[range.clone()]) as i32;
+                    let value = ((got as i32) + addend) as u32;
+
+                    Elf32::write_word::<LittleEndian>(&mut target[range],
+                                                      value);
+
+                    Ok(())
+                },
+                None => Err(X86RelocApplyError::NoGOT)
+            },
+            X86Rel::PLTRel { offset, .. } => match params.plt() {
+                Some(plt) => {
+
+                    let range = (*offset as usize) .. (*offset as usize) + 4;
+                    let pc = (params.img_base() + target_base + *offset) as i32;
+                    let addend = Elf32::read_word
+                        ::<LittleEndian>(&target[range.clone()]) as i32;
+                    let value = ((plt as i32) + addend) - pc;
+
+                    Elf32::write_word::<LittleEndian>(&mut target[range],
+                                                      value as u32);
+
+                    Ok(())
+                }
+                None => Err(X86RelocApplyError::NoPLT)
+            },
+            X86Rel::Copy { .. } => Err(X86RelocApplyError::Copy),
+            X86Rel::GlobalData { sym: SymData { section: SymBase::Absolute,
+                                                value, .. },
+                                 offset } => {
+                let range = (*offset as usize) .. (*offset as usize) + 4;
+                let base = params.img_base() as i32;
+                let value = base + (*value as i32);
+
+                Elf32::write_word::<LittleEndian>(&mut target[range],
+                                                  value as u32);
+
+                Ok(())
+            },
+            X86Rel::GlobalData { sym: SymData { section: SymBase::Index(idx),
+                                                value, .. },
+                                 offset } => match section_base(*idx) {
+                Some(section_base) => {
+                    let range = (*offset as usize) .. (*offset as usize) + 4;
+                    let base = (params.img_base() + section_base) as i32;
+                    let value = base + (*value as i32);
+
+                    Elf32::write_word::<LittleEndian>(&mut target[range],
+                                                      value as u32);
+
+                    Ok(())
+                },
+                None => Err(X86RelocApplyError::BadSymIdx(*idx))
+            },
+            X86Rel::GlobalData { sym: SymData { section, .. }, .. } =>
+                Err(X86RelocApplyError::BadSymBase(*section)),
+            X86Rel::JumpSlot { sym: SymData { section: SymBase::Absolute,
+                                              value, .. },
+                               offset } => {
+                let range = (*offset as usize) .. (*offset as usize) + 4;
+                let base = params.img_base() as i32;
+                let value = base + (*value as i32);
+
+                Elf32::write_word::<LittleEndian>(&mut target[range],
+                                                  value as u32);
+
+                Ok(())
+            },
+            X86Rel::JumpSlot { sym: SymData { section: SymBase::Index(idx),
+                                              value, .. },
+                               offset } => match section_base(*idx) {
+                Some(section_base) => {
+                    let range = (*offset as usize) .. (*offset as usize) + 4;
+                    let base = (params.img_base() + section_base) as i32;
+                    let value = base + (*value as i32);
+
+                    Elf32::write_word::<LittleEndian>(&mut target[range],
+                                                      value as u32);
+
+                    Ok(())
+                },
+                None => Err(X86RelocApplyError::BadSymIdx(*idx))
+            },
+            X86Rel::JumpSlot { sym: SymData { section, .. }, .. } =>
+                Err(X86RelocApplyError::BadSymBase(*section)),
+            X86Rel::Relative { offset } => {
+                let range = (*offset as usize) .. (*offset as usize) + 4;
+                let addend = Elf32::read_word
+                    ::<LittleEndian>(&target[range.clone()]) as i32;
+                let value = ((params.img_base() as i32) + addend) as u32;
+
+                Elf32::write_word::<LittleEndian>(&mut target[range], value);
+
+                Ok(())
+            },
+            X86Rel::GOTRel { sym: SymData { section: SymBase::Absolute,
+                                            value, .. },
+                             offset } => match params.got() {
+                Some(got) => {
+                    let range = (*offset as usize) .. (*offset as usize) + 4;
+                    let base = params.img_base() as i32;
+                    let got_base = got as i32;
+                    let addend = Elf32::read_word
+                        ::<LittleEndian>(&target[range.clone()]) as i32;
+                    let sym_value = base + (*value as i32) + addend;
+                    let value = sym_value - got_base;
+
+                    Elf32::write_word::<LittleEndian>(&mut target[range],
+                                                      value as u32);
+
+                    Ok(())
+                },
+                None => Err(X86RelocApplyError::NoGOT)
+            },
+            X86Rel::GOTRel { sym: SymData { section: SymBase::Index(idx),
+                                            value, .. },
+                             offset } => match (section_base(*idx),
+                                                params.got()) {
+                (Some(section_base), Some(got)) => {
+                    let range = (*offset as usize) .. (*offset as usize) + 4;
+                    let got_base = got as i32;
+                    let base = (params.img_base() + section_base) as i32;
+                    let addend = Elf32::read_word
+                        ::<LittleEndian>(&target[range.clone()]) as i32;
+                    let sym_value = base + (*value as i32) + addend;
+                    let value = sym_value - got_base;
+
+                    Elf32::write_word::<LittleEndian>(&mut target[range],
+                                                      value as u32);
+
+                    Ok(())
+                },
+                (None, _) => Err(X86RelocApplyError::NoGOT),
+                (_, None) => Err(X86RelocApplyError::BadSymIdx(*idx))
+            },
+            X86Rel::GOTRel { sym: SymData { section, .. }, .. } =>
+                Err(X86RelocApplyError::BadSymBase(*section)),
+            X86Rel::GOTPC { offset } => match params.got() {
+                Some(got) => {
+                    let range = (*offset as usize) .. (*offset as usize) + 4;
+                    let pc = (params.img_base() + target_base + *offset) as i32;
+                    let addend = Elf32::read_word
+                        ::<LittleEndian>(&target[range.clone()]) as i32;
+                    let value = ((got as i32) + addend) - pc;
+
+                    Elf32::write_word::<LittleEndian>(&mut target[range],
+                                                      value as u32);
+
+                    Ok(())
+                },
+                None => Err(X86RelocApplyError::NoGOT)
+            },
+            X86Rel::PLTAbs { offset } => match params.plt() {
+                Some(plt) => {
+                    let range = (*offset as usize) .. (*offset as usize) + 4;
+                    let addend = Elf32::read_word
+                        ::<LittleEndian>(&target[range.clone()]) as i32;
+                    let value = ((plt as i32) + addend) as u32;
+
+                    Elf32::write_word::<LittleEndian>(&mut target[range],
+                                                      value);
+
+                    Ok(())
+                },
+                None => Err(X86RelocApplyError::NoPLT)
+            },
+            X86Rel::Size { sym: SymData { size, .. }, offset } => {
+                let range = (*offset as usize) .. (*offset as usize) + 4;
+                let addend = Elf32::read_word
+                    ::<LittleEndian>(&target[range.clone()]) as i32;
+                let value = ((*size as i32) + addend) as u32;
+
+                Elf32::write_word::<LittleEndian>(&mut target[range], value);
+
+                Ok(())
+            }
+        }
+    }
+}
+
+impl<Name> Reloc<LittleEndian, Elf32>
+    for X86Rela<SymData<Name, u16, Elf32>> {
+    type Params = BasicRelocParams<Elf32>;
+    type Error = X86RelocApplyError;
+
+    fn reloc<'a, F>(&self, target: &mut [u8], params: &Self::Params,
+                    target_base: u32, section_base: F) ->
+        Result<(), Self::Error>
+        where F: FnOnce(u16) -> Option<u32> {
+        match self {
+            X86Rela::None => Ok(()),
+            X86Rela::Abs32 { sym: SymData { section: SymBase::Absolute,
                                              value, .. },
                               offset, addend } => {
                 let range = (*offset as usize) .. (*offset as usize) + 4;
@@ -405,7 +1033,7 @@ impl<Name> Reloc<LittleEndian, Elf32>
 
                 Ok(())
             },
-            X86Reloc::Abs32 { sym: SymData { section: SymBase::Index(idx),
+            X86Rela::Abs32 { sym: SymData { section: SymBase::Index(idx),
                                              value, .. },
                               offset, addend } => match section_base(*idx) {
                 Some(section_base) => {
@@ -420,9 +1048,9 @@ impl<Name> Reloc<LittleEndian, Elf32>
                 },
                 None => Err(X86RelocApplyError::BadSymIdx(*idx))
             },
-            X86Reloc::Abs32 { sym: SymData { section, .. }, .. } =>
+            X86Rela::Abs32 { sym: SymData { section, .. }, .. } =>
                 Err(X86RelocApplyError::BadSymBase(*section)),
-            X86Reloc::PC32 { sym: SymData { section: SymBase::Absolute,
+            X86Rela::PC32 { sym: SymData { section: SymBase::Absolute,
                                              value, .. },
                              offset, addend } => {
                 let range = (*offset as usize) .. (*offset as usize) + 4;
@@ -436,7 +1064,7 @@ impl<Name> Reloc<LittleEndian, Elf32>
 
                 Ok(())
             },
-            X86Reloc::PC32 { sym: SymData { section: SymBase::Index(idx),
+            X86Rela::PC32 { sym: SymData { section: SymBase::Index(idx),
                                              value, .. },
                              offset, addend } =>  match section_base(*idx) {
                 Some(section_base) => {
@@ -454,9 +1082,9 @@ impl<Name> Reloc<LittleEndian, Elf32>
                 },
                 None => Err(X86RelocApplyError::BadSymIdx(*idx))
             },
-            X86Reloc::PC32 { sym: SymData { section, .. }, .. } =>
+            X86Rela::PC32 { sym: SymData { section, .. }, .. } =>
                 Err(X86RelocApplyError::BadSymBase(*section)),
-            X86Reloc::Abs16 { sym: SymData { section: SymBase::Absolute,
+            X86Rela::Abs16 { sym: SymData { section: SymBase::Absolute,
                                              value, .. },
                               offset, addend } => {
                 let range = (*offset as usize) .. (*offset as usize) + 2;
@@ -468,7 +1096,7 @@ impl<Name> Reloc<LittleEndian, Elf32>
 
                 Ok(())
             },
-            X86Reloc::Abs16 { sym: SymData { section: SymBase::Index(idx),
+            X86Rela::Abs16 { sym: SymData { section: SymBase::Index(idx),
                                              value, .. },
                               offset, addend } => match section_base(*idx) {
                 Some(section_base) => {
@@ -483,9 +1111,9 @@ impl<Name> Reloc<LittleEndian, Elf32>
                 },
                 None => Err(X86RelocApplyError::BadSymIdx(*idx))
             },
-            X86Reloc::Abs16 { sym: SymData { section, .. }, .. } =>
+            X86Rela::Abs16 { sym: SymData { section, .. }, .. } =>
                 Err(X86RelocApplyError::BadSymBase(*section)),
-            X86Reloc::PC16 { sym: SymData { section: SymBase::Absolute,
+            X86Rela::PC16 { sym: SymData { section: SymBase::Absolute,
                                             value, .. },
                              offset, addend } => {
                 let range = (*offset as usize) .. (*offset as usize) + 2;
@@ -499,7 +1127,7 @@ impl<Name> Reloc<LittleEndian, Elf32>
 
                 Ok(())
             },
-            X86Reloc::PC16 { sym: SymData { section: SymBase::Index(idx),
+            X86Rela::PC16 { sym: SymData { section: SymBase::Index(idx),
                                             value, .. },
                              offset, addend } =>  match section_base(*idx) {
                 Some(section_base) => {
@@ -517,9 +1145,9 @@ impl<Name> Reloc<LittleEndian, Elf32>
                 },
                 None => Err(X86RelocApplyError::BadSymIdx(*idx))
             },
-            X86Reloc::PC16 { sym: SymData { section, .. }, .. } =>
+            X86Rela::PC16 { sym: SymData { section, .. }, .. } =>
                 Err(X86RelocApplyError::BadSymBase(*section)),
-            X86Reloc::Abs8 { sym: SymData { section: SymBase::Absolute,
+            X86Rela::Abs8 { sym: SymData { section: SymBase::Absolute,
                                             value, .. },
                              offset, addend } => {
                 let base = params.img_base() as i32;
@@ -529,7 +1157,7 @@ impl<Name> Reloc<LittleEndian, Elf32>
 
                 Ok(())
             },
-            X86Reloc::Abs8 { sym: SymData { section: SymBase::Index(idx),
+            X86Rela::Abs8 { sym: SymData { section: SymBase::Index(idx),
                                             value, .. },
                               offset, addend } => match section_base(*idx) {
                 Some(section_base) => {
@@ -542,9 +1170,9 @@ impl<Name> Reloc<LittleEndian, Elf32>
                 },
                 None => Err(X86RelocApplyError::BadSymIdx(*idx))
             },
-            X86Reloc::Abs8 { sym: SymData { section, .. }, .. } =>
+            X86Rela::Abs8 { sym: SymData { section, .. }, .. } =>
                 Err(X86RelocApplyError::BadSymBase(*section)),
-            X86Reloc::PC8 { sym: SymData { section: SymBase::Absolute,
+            X86Rela::PC8 { sym: SymData { section: SymBase::Absolute,
                                            value, .. },
                             offset, addend } => {
                 let base = params.img_base() as i32;
@@ -556,7 +1184,7 @@ impl<Name> Reloc<LittleEndian, Elf32>
 
                 Ok(())
             },
-            X86Reloc::PC8 { sym: SymData { section: SymBase::Index(idx),
+            X86Rela::PC8 { sym: SymData { section: SymBase::Index(idx),
                                            value, .. },
                             offset, addend } =>  match section_base(*idx) {
                 Some(section_base) => {
@@ -572,9 +1200,9 @@ impl<Name> Reloc<LittleEndian, Elf32>
                 },
                 None => Err(X86RelocApplyError::BadSymIdx(*idx))
             },
-            X86Reloc::PC8 { sym: SymData { section, .. }, .. } =>
+            X86Rela::PC8 { sym: SymData { section, .. }, .. } =>
                 Err(X86RelocApplyError::BadSymBase(*section)),
-            X86Reloc::GOT32 { offset, addend } => match params.got() {
+            X86Rela::GOT32 { offset, addend } => match params.got() {
                 Some(got) => {
                     let range = (*offset as usize) .. (*offset as usize) + 4;
                     let value = ((got as i32) + addend) as u32;
@@ -586,7 +1214,7 @@ impl<Name> Reloc<LittleEndian, Elf32>
                 },
                 None => Err(X86RelocApplyError::NoGOT)
             },
-            X86Reloc::PLTRel { offset, addend, .. } =>  match params.plt() {
+            X86Rela::PLTRel { offset, addend, .. } =>  match params.plt() {
                 Some(plt) => {
 
                     let range = (*offset as usize) .. (*offset as usize) + 4;
@@ -600,8 +1228,8 @@ impl<Name> Reloc<LittleEndian, Elf32>
                 }
                 None => Err(X86RelocApplyError::NoPLT)
             },
-            X86Reloc::Copy { .. } => Err(X86RelocApplyError::Copy),
-            X86Reloc::GlobalData { sym: SymData { section: SymBase::Absolute,
+            X86Rela::Copy { .. } => Err(X86RelocApplyError::Copy),
+            X86Rela::GlobalData { sym: SymData { section: SymBase::Absolute,
                                                   value, .. },
                                    offset } => {
                 let range = (*offset as usize) .. (*offset as usize) + 4;
@@ -613,7 +1241,7 @@ impl<Name> Reloc<LittleEndian, Elf32>
 
                 Ok(())
             },
-            X86Reloc::GlobalData { sym: SymData { section: SymBase::Index(idx),
+            X86Rela::GlobalData { sym: SymData { section: SymBase::Index(idx),
                                                   value, .. },
                                    offset } => match section_base(*idx) {
                 Some(section_base) => {
@@ -628,9 +1256,9 @@ impl<Name> Reloc<LittleEndian, Elf32>
                 },
                 None => Err(X86RelocApplyError::BadSymIdx(*idx))
             },
-            X86Reloc::GlobalData { sym: SymData { section, .. }, .. } =>
+            X86Rela::GlobalData { sym: SymData { section, .. }, .. } =>
                 Err(X86RelocApplyError::BadSymBase(*section)),
-            X86Reloc::JumpSlot { sym: SymData { section: SymBase::Absolute,
+            X86Rela::JumpSlot { sym: SymData { section: SymBase::Absolute,
                                                 value, .. },
                                  offset } => {
                 let range = (*offset as usize) .. (*offset as usize) + 4;
@@ -642,7 +1270,7 @@ impl<Name> Reloc<LittleEndian, Elf32>
 
                 Ok(())
             },
-            X86Reloc::JumpSlot { sym: SymData { section: SymBase::Index(idx),
+            X86Rela::JumpSlot { sym: SymData { section: SymBase::Index(idx),
                                                 value, .. },
                                  offset } => match section_base(*idx) {
                 Some(section_base) => {
@@ -657,9 +1285,9 @@ impl<Name> Reloc<LittleEndian, Elf32>
                 },
                 None => Err(X86RelocApplyError::BadSymIdx(*idx))
             },
-            X86Reloc::JumpSlot { sym: SymData { section, .. }, .. } =>
+            X86Rela::JumpSlot { sym: SymData { section, .. }, .. } =>
                 Err(X86RelocApplyError::BadSymBase(*section)),
-            X86Reloc::Relative { offset, addend } => {
+            X86Rela::Relative { offset, addend } => {
                 let range = (*offset as usize) .. (*offset as usize) + 4;
                 let value = ((params.img_base() as i32) + addend) as u32;
 
@@ -667,7 +1295,7 @@ impl<Name> Reloc<LittleEndian, Elf32>
 
                 Ok(())
             },
-            X86Reloc::GOTRel { sym: SymData { section: SymBase::Absolute,
+            X86Rela::GOTRel { sym: SymData { section: SymBase::Absolute,
                                               value, .. },
                                offset, addend } => match params.got() {
                 Some(got) => {
@@ -684,7 +1312,7 @@ impl<Name> Reloc<LittleEndian, Elf32>
                 },
                 None => Err(X86RelocApplyError::NoGOT)
             },
-            X86Reloc::GOTRel { sym: SymData { section: SymBase::Index(idx),
+            X86Rela::GOTRel { sym: SymData { section: SymBase::Index(idx),
                                               value, .. },
                                offset, addend } => match (section_base(*idx),
                                                           params.got()) {
@@ -703,9 +1331,9 @@ impl<Name> Reloc<LittleEndian, Elf32>
                 (None, _) => Err(X86RelocApplyError::NoGOT),
                 (_, None) => Err(X86RelocApplyError::BadSymIdx(*idx))
             },
-            X86Reloc::GOTRel { sym: SymData { section, .. }, .. } =>
+            X86Rela::GOTRel { sym: SymData { section, .. }, .. } =>
                 Err(X86RelocApplyError::BadSymBase(*section)),
-            X86Reloc::GOTPC { offset, addend } => match params.got() {
+            X86Rela::GOTPC { offset, addend } => match params.got() {
                 Some(got) => {
                     let range = (*offset as usize) .. (*offset as usize) + 4;
                     let pc = (params.img_base() + target_base + *offset) as i32;
@@ -718,7 +1346,7 @@ impl<Name> Reloc<LittleEndian, Elf32>
                 },
                 None => Err(X86RelocApplyError::NoGOT)
             },
-            X86Reloc::PLTAbs { offset, addend } => match params.plt() {
+            X86Rela::PLTAbs { offset, addend } => match params.plt() {
                 Some(plt) => {
                     let range = (*offset as usize) .. (*offset as usize) + 4;
                     let value = ((plt as i32) + addend) as u32;
@@ -730,7 +1358,7 @@ impl<Name> Reloc<LittleEndian, Elf32>
                 },
                 None => Err(X86RelocApplyError::NoPLT)
             },
-            X86Reloc::Size { sym: SymData { size, .. }, offset, addend } => {
+            X86Rela::Size { sym: SymData { size, .. }, offset, addend } => {
                 let range = (*offset as usize) .. (*offset as usize) + 4;
                 let value = ((*size as i32) + addend) as u32;
 
@@ -742,308 +1370,444 @@ impl<Name> Reloc<LittleEndian, Elf32>
     }
 }
 
-fn convert_to<Name>(offset: u32, sym: Name, kind: u8, addend: i32) ->
-    Result<X86Reloc<Name>, X86RelocError> {
-    match kind {
-        0 => Ok(X86Reloc::None),
-        1 => Ok(X86Reloc::Abs32 { offset: offset, sym: sym, addend: addend }),
-        2 => Ok(X86Reloc::PC32 { offset: offset, sym: sym, addend: addend }),
-        3 => Ok(X86Reloc::GOT32 { offset: offset, addend: addend }),
-        4 => Ok(X86Reloc::PLTRel { offset: offset, sym: sym, addend: addend }),
-        5 => Ok(X86Reloc::Copy { sym: sym }),
-        6 => Ok(X86Reloc::GlobalData { offset: offset, sym: sym }),
-        7 => Ok(X86Reloc::JumpSlot { offset: offset, sym: sym }),
-        8 => Ok(X86Reloc::Relative { offset: offset, addend: addend }),
-        9 => Ok(X86Reloc::GOTRel { offset: offset, sym: sym, addend: addend }),
-        10 => Ok(X86Reloc::GOTPC { offset: offset, addend: addend }),
-        11 => Ok(X86Reloc::PLTAbs { offset: offset, addend: addend }),
-        20 => Ok(X86Reloc::Abs16 { offset: offset, sym: sym, addend: addend }),
-        21 => Ok(X86Reloc::PC16 { offset: offset, sym: sym, addend: addend }),
-        22 => Ok(X86Reloc::Abs8 { offset: offset, sym: sym, addend: addend }),
-        23 => Ok(X86Reloc::PC8 { offset: offset, sym: sym, addend: addend }),
-        38 => Ok(X86Reloc::Size { offset: offset, sym: sym, addend: addend }),
-        tag => Err(X86RelocError::BadTag(tag))
-    }
-}
-
-impl<Name> TryFrom<RelData<Name, Elf32>> for X86Reloc<Name> {
+impl<Name> TryFrom<RelData<Name, Elf32>> for X86Rel<Name> {
     type Error = X86RelocError;
 
     #[inline]
-    fn try_from(rel: RelData<Name, Elf32>) -> Result<X86Reloc<Name>,
+    fn try_from(rel: RelData<Name, Elf32>) -> Result<X86Rel<Name>,
                                                      X86RelocError> {
         let RelData { offset, sym, kind } = rel;
 
-        convert_to(offset, sym, kind, 0)
-    }
-}
-
-impl TryFrom<X86Reloc<u32>> for RelData<u32, Elf32> {
-    type Error = X86ToRelError;
-
-    #[inline]
-    fn try_from(rel: X86Reloc<u32>) -> Result<RelData<u32, Elf32>,
-                                              X86ToRelError> {
-        match rel {
-            X86Reloc::None => Ok(RelData { offset: 0, sym: 0, kind: 0 }),
-            X86Reloc::Abs32 { offset, sym, addend: 0 } =>
-                Ok(RelData { offset: offset, sym: sym, kind: 1 }),
-            X86Reloc::Abs32 { addend, .. } =>
-                Err(X86ToRelError::BadAddend(addend)),
-            X86Reloc::PC32 { offset, sym, addend: 0 } =>
-                Ok(RelData { offset: offset, sym: sym, kind: 2 }),
-            X86Reloc::PC32 { addend, .. } =>
-                Err(X86ToRelError::BadAddend(addend)),
-            X86Reloc::GOT32 { offset, addend: 0 } =>
-                Ok(RelData { offset: offset, sym: 0, kind: 3 }),
-            X86Reloc::GOT32 { addend, .. } =>
-                Err(X86ToRelError::BadAddend(addend)),
-            X86Reloc::PLTRel { offset, sym, addend: 0 } =>
-                Ok(RelData { offset: offset, sym: sym, kind: 4 }),
-            X86Reloc::PLTRel { addend, .. } =>
-                Err(X86ToRelError::BadAddend(addend)),
-            X86Reloc::Copy { sym } =>
-                Ok(RelData { offset: 0, sym: sym, kind: 5 }),
-            X86Reloc::GlobalData { offset, sym } =>
-                Ok(RelData { offset: offset, sym: sym, kind: 6 }),
-            X86Reloc::JumpSlot { offset, sym } =>
-                Ok(RelData { offset: offset, sym: sym, kind: 7 }),
-            X86Reloc::Relative { offset, addend: 0 } =>
-                Ok(RelData { offset: offset, sym: 0, kind: 8 }),
-            X86Reloc::Relative { addend, .. } =>
-                Err(X86ToRelError::BadAddend(addend)),
-            X86Reloc::GOTRel { offset, sym, addend: 0 } =>
-                Ok(RelData { offset: offset, sym: sym, kind: 9 }),
-            X86Reloc::GOTRel { addend, .. } =>
-                Err(X86ToRelError::BadAddend(addend)),
-            X86Reloc::GOTPC { offset, addend: 0 } =>
-                Ok(RelData { offset: offset, sym: 0, kind: 10 }),
-            X86Reloc::GOTPC { addend, .. } =>
-                Err(X86ToRelError::BadAddend(addend)),
-            X86Reloc::PLTAbs { offset, addend: 0 } =>
-                Ok(RelData { offset: offset, sym: 0, kind: 11 }),
-            X86Reloc::PLTAbs { addend, .. } =>
-                Err(X86ToRelError::BadAddend(addend)),
-            X86Reloc::Abs16 { offset, sym, addend: 0 } =>
-                Ok(RelData { offset: offset, sym: sym, kind: 20 }),
-            X86Reloc::Abs16 { addend, .. } =>
-                Err(X86ToRelError::BadAddend(addend)),
-            X86Reloc::PC16 { offset, sym, addend: 0 } =>
-                Ok(RelData { offset: offset, sym: sym, kind: 21 }),
-            X86Reloc::PC16 { addend, .. } =>
-                Err(X86ToRelError::BadAddend(addend)),
-            X86Reloc::Abs8 { offset, sym, addend: 0 } =>
-                Ok(RelData { offset: offset, sym: sym, kind: 22 }),
-            X86Reloc::Abs8 { addend, .. } =>
-                Err(X86ToRelError::BadAddend(addend)),
-            X86Reloc::PC8 { offset, sym, addend: 0 } =>
-                Ok(RelData { offset: offset, sym: sym, kind: 23 }),
-            X86Reloc::PC8 { addend, .. } =>
-                Err(X86ToRelError::BadAddend(addend)),
-            X86Reloc::Size { offset, sym, addend: 0 } =>
-                Ok(RelData { offset: offset, sym: sym, kind: 38 }),
-            X86Reloc::Size { addend, .. } =>
-                Err(X86ToRelError::BadAddend(addend)),
+        match kind {
+            0 => Ok(X86Rel::None),
+            1 => Ok(X86Rel::Abs32 { offset: offset, sym: sym }),
+            2 => Ok(X86Rel::PC32 { offset: offset, sym: sym }),
+            3 => Ok(X86Rel::GOT32 { offset: offset }),
+            4 => Ok(X86Rel::PLTRel { offset: offset, sym: sym }),
+            5 => Ok(X86Rel::Copy { sym: sym }),
+            6 => Ok(X86Rel::GlobalData { offset: offset, sym: sym }),
+            7 => Ok(X86Rel::JumpSlot { offset: offset, sym: sym }),
+            8 => Ok(X86Rel::Relative { offset: offset }),
+            9 => Ok(X86Rel::GOTRel { offset: offset, sym: sym }),
+            10 => Ok(X86Rel::GOTPC { offset: offset }),
+            11 => Ok(X86Rel::PLTAbs { offset: offset }),
+            20 => Ok(X86Rel::Abs16 { offset: offset, sym: sym }),
+            21 => Ok(X86Rel::PC16 { offset: offset, sym: sym }),
+            22 => Ok(X86Rel::Abs8 { offset: offset, sym: sym }),
+            23 => Ok(X86Rel::PC8 { offset: offset, sym: sym }),
+            38 => Ok(X86Rel::Size { offset: offset, sym: sym }),
+            tag => Err(X86RelocError::BadTag(tag))
         }
     }
 }
 
-impl<Name> TryFrom<RelaData<Name, Elf32>> for X86Reloc<Name> {
-    type Error = X86RelocError;
-
+impl From<X86Rel<u32>> for RelData<u32, Elf32> {
     #[inline]
-    fn try_from(rela: RelaData<Name, Elf32>) -> Result<X86Reloc<Name>,
-                                                       Self::Error> {
-        let RelaData { offset, sym, kind, addend } = rela;
-
-        convert_to(offset, sym, kind, addend)
+    fn from(rel: X86Rel<u32>) -> RelData<u32, Elf32> {
+        match rel {
+            X86Rel::None => RelData { offset: 0, sym: 0, kind: 0 },
+            X86Rel::Abs32 { offset, sym } =>
+                RelData { offset: offset, sym: sym, kind: 1 },
+            X86Rel::PC32 { offset, sym } =>
+                RelData { offset: offset, sym: sym, kind: 2 },
+            X86Rel::GOT32 { offset } =>
+                RelData { offset: offset, sym: 0, kind: 3 },
+            X86Rel::PLTRel { offset, sym } =>
+                RelData { offset: offset, sym: sym, kind: 4 },
+            X86Rel::Copy { sym } =>
+                RelData { offset: 0, sym: sym, kind: 5 },
+            X86Rel::GlobalData { offset, sym } =>
+                RelData { offset: offset, sym: sym, kind: 6 },
+            X86Rel::JumpSlot { offset, sym } =>
+                RelData { offset: offset, sym: sym, kind: 7 },
+            X86Rel::Relative { offset } =>
+                RelData { offset: offset, sym: 0, kind: 8 },
+            X86Rel::GOTRel { offset, sym } =>
+                RelData { offset: offset, sym: sym, kind: 9 },
+            X86Rel::GOTPC { offset } =>
+                RelData { offset: offset, sym: 0, kind: 10 },
+            X86Rel::PLTAbs { offset } =>
+                RelData { offset: offset, sym: 0, kind: 11 },
+            X86Rel::Abs16 { offset, sym } =>
+                RelData { offset: offset, sym: sym, kind: 20 },
+            X86Rel::PC16 { offset, sym } =>
+                RelData { offset: offset, sym: sym, kind: 21 },
+            X86Rel::Abs8 { offset, sym } =>
+                RelData { offset: offset, sym: sym, kind: 22 },
+            X86Rel::PC8 { offset, sym } =>
+                RelData { offset: offset, sym: sym, kind: 23 },
+            X86Rel::Size { offset, sym } =>
+                RelData { offset: offset, sym: sym, kind: 38 },
+        }
     }
 }
 
-impl From<X86Reloc<u32>> for RelaData<u32, Elf32> {
+impl<Name> TryFrom<RelaData<Name, Elf32>> for X86Rela<Name> {
+    type Error = X86RelocError;
+
     #[inline]
-    fn from(rel: X86Reloc<u32>) -> RelaData<u32, Elf32> {
+    fn try_from(rela: RelaData<Name, Elf32>) -> Result<X86Rela<Name>,
+                                                       Self::Error> {
+        let RelaData { offset, sym, kind, addend } = rela;
+
+        match kind {
+            0 => Ok(X86Rela::None),
+            1 => Ok(X86Rela::Abs32 { offset: offset, sym: sym,
+                                     addend: addend }),
+            2 => Ok(X86Rela::PC32 { offset: offset, sym: sym,
+                                    addend: addend }),
+            3 => Ok(X86Rela::GOT32 { offset: offset, addend: addend }),
+            4 => Ok(X86Rela::PLTRel { offset: offset, sym: sym,
+                                      addend: addend }),
+            5 => Ok(X86Rela::Copy { sym: sym }),
+            6 => Ok(X86Rela::GlobalData { offset: offset, sym: sym }),
+            7 => Ok(X86Rela::JumpSlot { offset: offset, sym: sym }),
+            8 => Ok(X86Rela::Relative { offset: offset, addend: addend }),
+            9 => Ok(X86Rela::GOTRel { offset: offset, sym: sym,
+                                      addend: addend }),
+            10 => Ok(X86Rela::GOTPC { offset: offset, addend: addend }),
+            11 => Ok(X86Rela::PLTAbs { offset: offset, addend: addend }),
+            20 => Ok(X86Rela::Abs16 { offset: offset, sym: sym,
+                                      addend: addend }),
+            21 => Ok(X86Rela::PC16 { offset: offset, sym: sym,
+                                     addend: addend }),
+            22 => Ok(X86Rela::Abs8 { offset: offset, sym: sym,
+                                     addend: addend }),
+            23 => Ok(X86Rela::PC8 { offset: offset, sym: sym,
+                                    addend: addend }),
+            38 => Ok(X86Rela::Size { offset: offset, sym: sym,
+                                     addend: addend }),
+            tag => Err(X86RelocError::BadTag(tag))
+        }
+    }
+}
+
+impl From<X86Rela<u32>> for RelaData<u32, Elf32> {
+    #[inline]
+    fn from(rel: X86Rela<u32>) -> RelaData<u32, Elf32> {
         match rel {
-            X86Reloc::None =>
+            X86Rela::None =>
                 RelaData { offset: 0, sym: 0, kind: 0, addend: 0 },
-            X86Reloc::Abs32 { offset, sym, addend } =>
+            X86Rela::Abs32 { offset, sym, addend } =>
                 RelaData { offset: offset, sym: sym, kind: 1, addend: addend },
-            X86Reloc::PC32 { offset, sym, addend } =>
+            X86Rela::PC32 { offset, sym, addend } =>
                 RelaData { offset: offset, sym: sym, kind: 2, addend: addend },
-            X86Reloc::GOT32 { offset, addend } =>
+            X86Rela::GOT32 { offset, addend } =>
                 RelaData { offset: offset, sym: 0, kind: 3, addend: addend },
-            X86Reloc::PLTRel { offset, sym, addend } =>
+            X86Rela::PLTRel { offset, sym, addend } =>
                 RelaData { offset: offset, sym: sym, kind: 4, addend: addend },
-            X86Reloc::Copy { sym } =>
+            X86Rela::Copy { sym } =>
                 RelaData { offset: 0, sym: sym, kind: 5 , addend: 0 },
-            X86Reloc::GlobalData { offset, sym } =>
+            X86Rela::GlobalData { offset, sym } =>
                 RelaData { offset: offset, sym: sym, kind: 6, addend: 0 },
-            X86Reloc::JumpSlot { offset, sym } =>
+            X86Rela::JumpSlot { offset, sym } =>
                 RelaData { offset: offset, sym: sym, kind: 7, addend: 0 },
-            X86Reloc::Relative { offset, addend } =>
+            X86Rela::Relative { offset, addend } =>
                 RelaData { offset: offset, sym: 0, kind: 8, addend: addend },
-            X86Reloc::GOTRel { offset, sym, addend } =>
+            X86Rela::GOTRel { offset, sym, addend } =>
                 RelaData { offset: offset, sym: sym, kind: 9, addend: addend },
-            X86Reloc::GOTPC { offset, addend } =>
+            X86Rela::GOTPC { offset, addend } =>
                 RelaData { offset: offset, sym: 0, kind: 10, addend: addend },
-            X86Reloc::PLTAbs { offset, addend } =>
+            X86Rela::PLTAbs { offset, addend } =>
                 RelaData { offset: offset, sym: 0, kind: 11, addend: addend },
-            X86Reloc::Abs16 { offset, sym, addend } =>
+            X86Rela::Abs16 { offset, sym, addend } =>
                 RelaData { offset: offset, sym: sym, kind: 20, addend: addend },
-            X86Reloc::PC16 { offset, sym, addend } =>
+            X86Rela::PC16 { offset, sym, addend } =>
                 RelaData { offset: offset, sym: sym, kind: 21, addend: addend },
-            X86Reloc::Abs8 { offset, sym, addend } =>
+            X86Rela::Abs8 { offset, sym, addend } =>
                 RelaData { offset: offset, sym: sym, kind: 22, addend: addend },
-            X86Reloc::PC8 { offset, sym, addend } =>
+            X86Rela::PC8 { offset, sym, addend } =>
                 RelaData { offset: offset, sym: sym, kind: 23, addend: addend },
-            X86Reloc::Size { offset, sym, addend } =>
+            X86Rela::Size { offset, sym, addend } =>
                 RelaData { offset: offset, sym: sym, kind: 38, addend: addend },
         }
     }
 }
 
-impl<'a> WithSymtab<'a, LittleEndian, Elf32> for X86RelocRaw {
-    type Result = X86RelocRawSym;
+impl<'a> WithSymtab<'a, LittleEndian, Elf32> for X86RelRaw {
+    type Result = X86RelRawSym;
     type Error = RelocSymtabError<Elf32>;
 
     #[inline]
     fn with_symtab(self, symtab: Symtab<'a, LittleEndian, Elf32>) ->
         Result<Self::Result, Self::Error> {
         match self {
-            X86Reloc::None => Ok(X86Reloc::None),
-            X86Reloc::Abs32 { offset, sym, addend } =>
+            X86Rel::None => Ok(X86Rel::None),
+            X86Rel::Abs32 { offset, sym } =>
                 match symtab.idx(sym as usize) {
                     Some(sym) => match sym.try_into() {
                         Ok(symdata) => {
-                            Ok(X86Reloc::Abs32 { offset: offset, sym: symdata,
-                                                 addend: addend })
+                            Ok(X86Rel::Abs32 { offset: offset, sym: symdata })
                         },
                         Err(err) => Err(RelocSymtabError::SymError(err))
                     },
                     None => Err(RelocSymtabError::BadIdx(sym))
                 },
-            X86Reloc::PC32 { offset, sym, addend } =>
+            X86Rel::PC32 { offset, sym } =>
                 match symtab.idx(sym as usize) {
                     Some(sym) => match sym.try_into() {
                         Ok(symdata) => {
-                            Ok(X86Reloc::PC32 { offset: offset, sym: symdata,
-                                                addend: addend })
+                            Ok(X86Rel::PC32 { offset: offset, sym: symdata })
                         },
                         Err(err) => Err(RelocSymtabError::SymError(err))
                     },
                     None => Err(RelocSymtabError::BadIdx(sym))
                 },
-            X86Reloc::GOT32 { offset, addend } =>
-                Ok(X86Reloc::GOT32 { offset: offset, addend: addend }),
-            X86Reloc::PLTRel { offset, sym, addend } =>
+            X86Rel::GOT32 { offset } =>
+                Ok(X86Rel::GOT32 { offset: offset }),
+            X86Rel::PLTRel { offset, sym } =>
                 match symtab.idx(sym as usize) {
                     Some(sym) => match sym.try_into() {
                         Ok(symdata) => {
-                            Ok(X86Reloc::PLTRel { offset: offset, sym: symdata,
-                                                  addend: addend })
+                            Ok(X86Rel::PLTRel { offset: offset, sym: symdata })
                         },
                         Err(err) => Err(RelocSymtabError::SymError(err))
                     },
                     None => Err(RelocSymtabError::BadIdx(sym))
                 },
-            X86Reloc::Copy { sym } => match symtab.idx(sym as usize) {
+            X86Rel::Copy { sym } => match symtab.idx(sym as usize) {
                     Some(sym) => match sym.try_into() {
                         Ok(symdata) => {
-                            Ok(X86Reloc::Copy { sym: symdata })
+                            Ok(X86Rel::Copy { sym: symdata })
                         },
                         Err(err) => Err(RelocSymtabError::SymError(err))
                     },
                     None => Err(RelocSymtabError::BadIdx(sym))
                 },
-            X86Reloc::GlobalData { offset, sym } =>
+            X86Rel::GlobalData { offset, sym } =>
                 match symtab.idx(sym as usize) {
                     Some(sym) => match sym.try_into() {
                         Ok(symdata) => {
-                            Ok(X86Reloc::GlobalData { offset: offset,
-                                                      sym: symdata })
-                        },
-                        Err(err) => Err(RelocSymtabError::SymError(err))
-                    },
-                    None => Err(RelocSymtabError::BadIdx(sym))
-                },
-            X86Reloc::JumpSlot { offset, sym } =>
-                match symtab.idx(sym as usize) {
-                    Some(sym) => match sym.try_into() {
-                        Ok(symdata) => {
-                            Ok(X86Reloc::JumpSlot { offset: offset,
+                            Ok(X86Rel::GlobalData { offset: offset,
                                                     sym: symdata })
                         },
                         Err(err) => Err(RelocSymtabError::SymError(err))
                     },
                     None => Err(RelocSymtabError::BadIdx(sym))
                 },
-            X86Reloc::Relative { offset, addend } =>
-                Ok(X86Reloc::Relative { offset: offset, addend: addend }),
-            X86Reloc::GOTRel { offset, sym, addend } =>
+            X86Rel::JumpSlot { offset, sym } =>
                 match symtab.idx(sym as usize) {
                     Some(sym) => match sym.try_into() {
                         Ok(symdata) => {
-                            Ok(X86Reloc::GOTRel { offset: offset, sym: symdata,
-                                                  addend: addend })
+                            Ok(X86Rel::JumpSlot { offset: offset,
+                                                  sym: symdata })
                         },
                         Err(err) => Err(RelocSymtabError::SymError(err))
                     },
                     None => Err(RelocSymtabError::BadIdx(sym))
                 },
-            X86Reloc::GOTPC { offset, addend } =>
-                Ok(X86Reloc::GOTPC { offset: offset, addend: addend }),
-            X86Reloc::PLTAbs { offset, addend } =>
-                Ok(X86Reloc::PLTAbs { offset: offset, addend: addend }),
-            X86Reloc::Abs16 { offset, sym, addend } =>
+            X86Rel::Relative { offset } =>
+                Ok(X86Rel::Relative { offset: offset }),
+            X86Rel::GOTRel { offset, sym } =>
                 match symtab.idx(sym as usize) {
                     Some(sym) => match sym.try_into() {
                         Ok(symdata) => {
-                            Ok(X86Reloc::Abs16 { offset: offset, sym: symdata,
-                                                 addend: addend })
+                            Ok(X86Rel::GOTRel { offset: offset, sym: symdata })
                         },
                         Err(err) => Err(RelocSymtabError::SymError(err))
                     },
                     None => Err(RelocSymtabError::BadIdx(sym))
                 },
-            X86Reloc::PC16 { offset, sym, addend } =>
+            X86Rel::GOTPC { offset } =>
+                Ok(X86Rel::GOTPC { offset: offset }),
+            X86Rel::PLTAbs { offset } =>
+                Ok(X86Rel::PLTAbs { offset: offset }),
+            X86Rel::Abs16 { offset, sym } =>
                 match symtab.idx(sym as usize) {
                     Some(sym) => match sym.try_into() {
                         Ok(symdata) => {
-                            Ok(X86Reloc::PC16 { offset: offset, sym: symdata,
+                            Ok(X86Rel::Abs16 { offset: offset, sym: symdata })
+                        },
+                        Err(err) => Err(RelocSymtabError::SymError(err))
+                    },
+                    None => Err(RelocSymtabError::BadIdx(sym))
+                },
+            X86Rel::PC16 { offset, sym } =>
+                match symtab.idx(sym as usize) {
+                    Some(sym) => match sym.try_into() {
+                        Ok(symdata) => {
+                            Ok(X86Rel::PC16 { offset: offset, sym: symdata })
+                        },
+                        Err(err) => Err(RelocSymtabError::SymError(err))
+                    },
+                    None => Err(RelocSymtabError::BadIdx(sym))
+                },
+            X86Rel::Abs8 { offset, sym } =>
+                match symtab.idx(sym as usize) {
+                    Some(sym) => match sym.try_into() {
+                        Ok(symdata) => {
+                            Ok(X86Rel::Abs8 { offset: offset, sym: symdata })
+                        },
+                        Err(err) => Err(RelocSymtabError::SymError(err))
+                    },
+                    None => Err(RelocSymtabError::BadIdx(sym))
+                },
+            X86Rel::PC8 { offset, sym } =>
+                match symtab.idx(sym as usize) {
+                    Some(sym) => match sym.try_into() {
+                        Ok(symdata) => {
+                            Ok(X86Rel::PC8 { offset: offset, sym: symdata })
+                        },
+                        Err(err) => Err(RelocSymtabError::SymError(err))
+                    },
+                    None => Err(RelocSymtabError::BadIdx(sym))
+                },
+            X86Rel::Size { offset, sym } =>
+                match symtab.idx(sym as usize) {
+                    Some(sym) => match sym.try_into() {
+                        Ok(symdata) => {
+                            Ok(X86Rel::Size { offset: offset, sym: symdata })
+                        },
+                        Err(err) => Err(RelocSymtabError::SymError(err))
+                    },
+                    None => Err(RelocSymtabError::BadIdx(sym))
+                }
+        }
+    }
+}
+
+impl<'a> WithSymtab<'a, LittleEndian, Elf32> for X86RelaRaw {
+    type Result = X86RelaRawSym;
+    type Error = RelocSymtabError<Elf32>;
+
+    #[inline]
+    fn with_symtab(self, symtab: Symtab<'a, LittleEndian, Elf32>) ->
+        Result<Self::Result, Self::Error> {
+        match self {
+            X86Rela::None => Ok(X86Rela::None),
+            X86Rela::Abs32 { offset, sym, addend } =>
+                match symtab.idx(sym as usize) {
+                    Some(sym) => match sym.try_into() {
+                        Ok(symdata) => {
+                            Ok(X86Rela::Abs32 { offset: offset, sym: symdata,
                                                 addend: addend })
                         },
                         Err(err) => Err(RelocSymtabError::SymError(err))
                     },
                     None => Err(RelocSymtabError::BadIdx(sym))
                 },
-            X86Reloc::Abs8 { offset, sym, addend } =>
+            X86Rela::PC32 { offset, sym, addend } =>
                 match symtab.idx(sym as usize) {
                     Some(sym) => match sym.try_into() {
                         Ok(symdata) => {
-                            Ok(X86Reloc::Abs8 { offset: offset, sym: symdata,
-                                                addend: addend })
-                        },
-                        Err(err) => Err(RelocSymtabError::SymError(err))
-                    },
-                    None => Err(RelocSymtabError::BadIdx(sym))
-                },
-            X86Reloc::PC8 { offset, sym, addend } =>
-                match symtab.idx(sym as usize) {
-                    Some(sym) => match sym.try_into() {
-                        Ok(symdata) => {
-                            Ok(X86Reloc::PC8 { offset: offset, sym: symdata,
+                            Ok(X86Rela::PC32 { offset: offset, sym: symdata,
                                                addend: addend })
                         },
                         Err(err) => Err(RelocSymtabError::SymError(err))
                     },
                     None => Err(RelocSymtabError::BadIdx(sym))
                 },
-            X86Reloc::Size { offset, sym, addend } =>
+            X86Rela::GOT32 { offset, addend } =>
+                Ok(X86Rela::GOT32 { offset: offset, addend: addend }),
+            X86Rela::PLTRel { offset, sym, addend } =>
                 match symtab.idx(sym as usize) {
                     Some(sym) => match sym.try_into() {
                         Ok(symdata) => {
-                            Ok(X86Reloc::Size { offset: offset, sym: symdata,
+                            Ok(X86Rela::PLTRel { offset: offset, sym: symdata,
+                                                 addend: addend })
+                        },
+                        Err(err) => Err(RelocSymtabError::SymError(err))
+                    },
+                    None => Err(RelocSymtabError::BadIdx(sym))
+                },
+            X86Rela::Copy { sym } => match symtab.idx(sym as usize) {
+                    Some(sym) => match sym.try_into() {
+                        Ok(symdata) => {
+                            Ok(X86Rela::Copy { sym: symdata })
+                        },
+                        Err(err) => Err(RelocSymtabError::SymError(err))
+                    },
+                    None => Err(RelocSymtabError::BadIdx(sym))
+                },
+            X86Rela::GlobalData { offset, sym } =>
+                match symtab.idx(sym as usize) {
+                    Some(sym) => match sym.try_into() {
+                        Ok(symdata) => {
+                            Ok(X86Rela::GlobalData { offset: offset,
+                                                     sym: symdata })
+                        },
+                        Err(err) => Err(RelocSymtabError::SymError(err))
+                    },
+                    None => Err(RelocSymtabError::BadIdx(sym))
+                },
+            X86Rela::JumpSlot { offset, sym } =>
+                match symtab.idx(sym as usize) {
+                    Some(sym) => match sym.try_into() {
+                        Ok(symdata) => {
+                            Ok(X86Rela::JumpSlot { offset: offset,
+                                                   sym: symdata })
+                        },
+                        Err(err) => Err(RelocSymtabError::SymError(err))
+                    },
+                    None => Err(RelocSymtabError::BadIdx(sym))
+                },
+            X86Rela::Relative { offset, addend } =>
+                Ok(X86Rela::Relative { offset: offset, addend: addend }),
+            X86Rela::GOTRel { offset, sym, addend } =>
+                match symtab.idx(sym as usize) {
+                    Some(sym) => match sym.try_into() {
+                        Ok(symdata) => {
+                            Ok(X86Rela::GOTRel { offset: offset, sym: symdata,
+                                                 addend: addend })
+                        },
+                        Err(err) => Err(RelocSymtabError::SymError(err))
+                    },
+                    None => Err(RelocSymtabError::BadIdx(sym))
+                },
+            X86Rela::GOTPC { offset, addend } =>
+                Ok(X86Rela::GOTPC { offset: offset, addend: addend }),
+            X86Rela::PLTAbs { offset, addend } =>
+                Ok(X86Rela::PLTAbs { offset: offset, addend: addend }),
+            X86Rela::Abs16 { offset, sym, addend } =>
+                match symtab.idx(sym as usize) {
+                    Some(sym) => match sym.try_into() {
+                        Ok(symdata) => {
+                            Ok(X86Rela::Abs16 { offset: offset, sym: symdata,
                                                 addend: addend })
+                        },
+                        Err(err) => Err(RelocSymtabError::SymError(err))
+                    },
+                    None => Err(RelocSymtabError::BadIdx(sym))
+                },
+            X86Rela::PC16 { offset, sym, addend } =>
+                match symtab.idx(sym as usize) {
+                    Some(sym) => match sym.try_into() {
+                        Ok(symdata) => {
+                            Ok(X86Rela::PC16 { offset: offset, sym: symdata,
+                                               addend: addend })
+                        },
+                        Err(err) => Err(RelocSymtabError::SymError(err))
+                    },
+                    None => Err(RelocSymtabError::BadIdx(sym))
+                },
+            X86Rela::Abs8 { offset, sym, addend } =>
+                match symtab.idx(sym as usize) {
+                    Some(sym) => match sym.try_into() {
+                        Ok(symdata) => {
+                            Ok(X86Rela::Abs8 { offset: offset, sym: symdata,
+                                               addend: addend })
+                        },
+                        Err(err) => Err(RelocSymtabError::SymError(err))
+                    },
+                    None => Err(RelocSymtabError::BadIdx(sym))
+                },
+            X86Rela::PC8 { offset, sym, addend } =>
+                match symtab.idx(sym as usize) {
+                    Some(sym) => match sym.try_into() {
+                        Ok(symdata) => {
+                            Ok(X86Rela::PC8 { offset: offset, sym: symdata,
+                                              addend: addend })
+                        },
+                        Err(err) => Err(RelocSymtabError::SymError(err))
+                    },
+                    None => Err(RelocSymtabError::BadIdx(sym))
+                },
+            X86Rela::Size { offset, sym, addend } =>
+                match symtab.idx(sym as usize) {
+                    Some(sym) => match sym.try_into() {
+                        Ok(symdata) => {
+                            Ok(X86Rela::Size { offset: offset, sym: symdata,
+                                               addend: addend })
                         },
                         Err(err) => Err(RelocSymtabError::SymError(err))
                     },
@@ -1053,112 +1817,217 @@ impl<'a> WithSymtab<'a, LittleEndian, Elf32> for X86RelocRaw {
     }
 }
 
-impl<'a> WithStrtab<'a> for X86RelocRawSym {
-    type Result = X86RelocStrDataSym<'a>;
+impl<'a> WithStrtab<'a> for X86RelRawSym {
+    type Result = X86RelStrDataSym<'a>;
     type Error = u32;
 
     #[inline]
     fn with_strtab(self, strtab: Strtab<'a>) ->
         Result<Self::Result, Self::Error> {
         match self {
-            X86Reloc::None => Ok(X86Reloc::None),
-            X86Reloc::Abs32 { offset, sym, addend } =>
+            X86Rel::None => Ok(X86Rel::None),
+            X86Rel::Abs32 { offset, sym } =>
                 match sym.with_strtab(strtab) {
                     Ok(symdata) => {
-                        Ok(X86Reloc::Abs32 { offset: offset, sym: symdata,
+                        Ok(X86Rel::Abs32 { offset: offset, sym: symdata })
+                    },
+                    Err(err) => Err(err)
+                },
+            X86Rel::PC32 { offset, sym } =>
+                match sym.with_strtab(strtab) {
+                    Ok(symdata) => {
+                        Ok(X86Rel::PC32 { offset: offset, sym: symdata })
+                    },
+                    Err(err) => Err(err)
+                },
+            X86Rel::GOT32 { offset } =>
+                Ok(X86Rel::GOT32 { offset: offset }),
+            X86Rel::PLTRel { offset, sym } =>
+                match sym.with_strtab(strtab) {
+                    Ok(symdata) => {
+                        Ok(X86Rel::PLTRel { offset: offset, sym: symdata })
+                    },
+                    Err(err) => Err(err)
+                },
+            X86Rel::Copy { sym } => match sym.with_strtab(strtab) {
+                Ok(symdata) => {
+                    Ok(X86Rel::Copy { sym: symdata })
+                },
+                Err(err) => Err(err)
+            },
+            X86Rel::GlobalData { offset, sym } =>
+                match sym.with_strtab(strtab) {
+                    Ok(symdata) => {
+                        Ok(X86Rel::GlobalData { offset: offset,
+                                                sym: symdata })
+                    },
+                    Err(err) => Err(err)
+                },
+            X86Rel::JumpSlot { offset, sym } =>
+                match sym.with_strtab(strtab) {
+                    Ok(symdata) => {
+                        Ok(X86Rel::JumpSlot { offset: offset, sym: symdata })
+                    },
+                    Err(err) => Err(err)
+                },
+            X86Rel::Relative { offset } =>
+                Ok(X86Rel::Relative { offset: offset }),
+            X86Rel::GOTRel { offset, sym } =>
+                match sym.with_strtab(strtab) {
+                    Ok(symdata) => {
+                        Ok(X86Rel::GOTRel { offset: offset, sym: symdata })
+                    },
+                    Err(err) => Err(err)
+                },
+            X86Rel::GOTPC { offset } =>
+                Ok(X86Rel::GOTPC { offset: offset }),
+            X86Rel::PLTAbs { offset } =>
+                Ok(X86Rel::PLTAbs { offset: offset }),
+            X86Rel::Abs16 { offset, sym } =>
+                match sym.with_strtab(strtab) {
+                    Ok(symdata) => {
+                        Ok(X86Rel::Abs16 { offset: offset, sym: symdata })
+                    },
+                    Err(err) => Err(err)
+                },
+            X86Rel::PC16 { offset, sym } =>
+                match sym.with_strtab(strtab) {
+                    Ok(symdata) => {
+                        Ok(X86Rel::PC16 { offset: offset, sym: symdata })
+                    },
+                    Err(err) => Err(err)
+                },
+            X86Rel::Abs8 { offset, sym } =>
+                match sym.with_strtab(strtab) {
+                    Ok(symdata) => {
+                        Ok(X86Rel::Abs8 { offset: offset, sym: symdata })
+                    },
+                    Err(err) => Err(err)
+                },
+            X86Rel::PC8 { offset, sym } =>
+                match sym.with_strtab(strtab) {
+                    Ok(symdata) => {
+                        Ok(X86Rel::PC8 { offset: offset, sym: symdata })
+                    },
+                    Err(err) => Err(err)
+                },
+            X86Rel::Size { offset, sym } =>
+                match sym.with_strtab(strtab) {
+                    Ok(symdata) => {
+                        Ok(X86Rel::Size { offset: offset, sym: symdata })
+                    },
+                    Err(err) => Err(err)
+                }
+        }
+    }
+}
+
+impl<'a> WithStrtab<'a> for X86RelaRawSym {
+    type Result = X86RelaStrDataSym<'a>;
+    type Error = u32;
+
+    #[inline]
+    fn with_strtab(self, strtab: Strtab<'a>) ->
+        Result<Self::Result, Self::Error> {
+        match self {
+            X86Rela::None => Ok(X86Rela::None),
+            X86Rela::Abs32 { offset, sym, addend } =>
+                match sym.with_strtab(strtab) {
+                    Ok(symdata) => {
+                        Ok(X86Rela::Abs32 { offset: offset, sym: symdata,
                                              addend: addend })
                     },
                     Err(err) => Err(err)
                 },
-            X86Reloc::PC32 { offset, sym, addend } =>
+            X86Rela::PC32 { offset, sym, addend } =>
                 match sym.with_strtab(strtab) {
                     Ok(symdata) => {
-                        Ok(X86Reloc::PC32 { offset: offset, sym: symdata,
+                        Ok(X86Rela::PC32 { offset: offset, sym: symdata,
                                             addend: addend })
                     },
                     Err(err) => Err(err)
                 },
-            X86Reloc::GOT32 { offset, addend } =>
-                Ok(X86Reloc::GOT32 { offset: offset, addend: addend }),
-            X86Reloc::PLTRel { offset, sym, addend } =>
+            X86Rela::GOT32 { offset, addend } =>
+                Ok(X86Rela::GOT32 { offset: offset, addend: addend }),
+            X86Rela::PLTRel { offset, sym, addend } =>
                 match sym.with_strtab(strtab) {
                     Ok(symdata) => {
-                        Ok(X86Reloc::PLTRel { offset: offset, sym: symdata,
+                        Ok(X86Rela::PLTRel { offset: offset, sym: symdata,
                                               addend: addend })
                     },
                     Err(err) => Err(err)
                 },
-            X86Reloc::Copy { sym } => match sym.with_strtab(strtab) {
+            X86Rela::Copy { sym } => match sym.with_strtab(strtab) {
                 Ok(symdata) => {
-                    Ok(X86Reloc::Copy { sym: symdata })
+                    Ok(X86Rela::Copy { sym: symdata })
                 },
                 Err(err) => Err(err)
             },
-            X86Reloc::GlobalData { offset, sym } =>
+            X86Rela::GlobalData { offset, sym } =>
                 match sym.with_strtab(strtab) {
                     Ok(symdata) => {
-                        Ok(X86Reloc::GlobalData { offset: offset,
+                        Ok(X86Rela::GlobalData { offset: offset,
                                                   sym: symdata })
                     },
                     Err(err) => Err(err)
                 },
-            X86Reloc::JumpSlot { offset, sym } =>
+            X86Rela::JumpSlot { offset, sym } =>
                 match sym.with_strtab(strtab) {
                     Ok(symdata) => {
-                        Ok(X86Reloc::JumpSlot { offset: offset, sym: symdata })
+                        Ok(X86Rela::JumpSlot { offset: offset, sym: symdata })
                     },
                     Err(err) => Err(err)
                 },
-            X86Reloc::Relative { offset, addend } =>
-                Ok(X86Reloc::Relative { offset: offset, addend: addend }),
-            X86Reloc::GOTRel { offset, sym, addend } =>
+            X86Rela::Relative { offset, addend } =>
+                Ok(X86Rela::Relative { offset: offset, addend: addend }),
+            X86Rela::GOTRel { offset, sym, addend } =>
                 match sym.with_strtab(strtab) {
                     Ok(symdata) => {
-                        Ok(X86Reloc::GOTRel { offset: offset, sym: symdata,
+                        Ok(X86Rela::GOTRel { offset: offset, sym: symdata,
                                               addend: addend })
                     },
                     Err(err) => Err(err)
                 },
-            X86Reloc::GOTPC { offset, addend } =>
-                Ok(X86Reloc::GOTPC { offset: offset, addend: addend }),
-            X86Reloc::PLTAbs { offset, addend } =>
-                Ok(X86Reloc::PLTAbs { offset: offset, addend: addend }),
-            X86Reloc::Abs16 { offset, sym, addend } =>
+            X86Rela::GOTPC { offset, addend } =>
+                Ok(X86Rela::GOTPC { offset: offset, addend: addend }),
+            X86Rela::PLTAbs { offset, addend } =>
+                Ok(X86Rela::PLTAbs { offset: offset, addend: addend }),
+            X86Rela::Abs16 { offset, sym, addend } =>
                 match sym.with_strtab(strtab) {
                     Ok(symdata) => {
-                        Ok(X86Reloc::Abs16 { offset: offset, sym: symdata,
+                        Ok(X86Rela::Abs16 { offset: offset, sym: symdata,
                                              addend: addend })
                     },
                     Err(err) => Err(err)
                 },
-            X86Reloc::PC16 { offset, sym, addend } =>
+            X86Rela::PC16 { offset, sym, addend } =>
                 match sym.with_strtab(strtab) {
                     Ok(symdata) => {
-                        Ok(X86Reloc::PC16 { offset: offset, sym: symdata,
+                        Ok(X86Rela::PC16 { offset: offset, sym: symdata,
                                             addend: addend })
                     },
                     Err(err) => Err(err)
                 },
-            X86Reloc::Abs8 { offset, sym, addend } =>
+            X86Rela::Abs8 { offset, sym, addend } =>
                 match sym.with_strtab(strtab) {
                     Ok(symdata) => {
-                        Ok(X86Reloc::Abs8 { offset: offset, sym: symdata,
+                        Ok(X86Rela::Abs8 { offset: offset, sym: symdata,
                                             addend: addend })
                     },
                     Err(err) => Err(err)
                 },
-            X86Reloc::PC8 { offset, sym, addend } =>
+            X86Rela::PC8 { offset, sym, addend } =>
                 match sym.with_strtab(strtab) {
                     Ok(symdata) => {
-                        Ok(X86Reloc::PC8 { offset: offset, sym: symdata,
+                        Ok(X86Rela::PC8 { offset: offset, sym: symdata,
                                            addend: addend })
                     },
                     Err(err) => Err(err)
                 },
-            X86Reloc::Size { offset, sym, addend } =>
+            X86Rela::Size { offset, sym, addend } =>
                 match sym.with_strtab(strtab) {
                     Ok(symdata) => {
-                        Ok(X86Reloc::Size { offset: offset, sym: symdata,
+                        Ok(X86Rela::Size { offset: offset, sym: symdata,
                                             addend: addend })
                     },
                     Err(err) => Err(err)
@@ -1167,112 +2036,103 @@ impl<'a> WithStrtab<'a> for X86RelocRawSym {
     }
 }
 
-impl<'a> TryFrom<X86RelocStrDataSym<'a>> for X86RelocStrSym<'a> {
+impl<'a> TryFrom<X86RelStrDataSym<'a>> for X86RelStrSym<'a> {
     type Error = &'a [u8];
 
     #[inline]
-    fn try_from(reloc: X86RelocStrDataSym<'a>) ->
-        Result<X86RelocStrSym<'a>, Self::Error> {
+    fn try_from(reloc: X86RelStrDataSym<'a>) ->
+        Result<X86RelStrSym<'a>, Self::Error> {
         match reloc {
-            X86Reloc::None => Ok(X86Reloc::None),
-            X86Reloc::Abs32 { offset, sym, addend } =>
+            X86Rel::None => Ok(X86Rel::None),
+            X86Rel::Abs32 { offset, sym } =>
                 match sym.try_into() {
                     Ok(symdata) => {
-                        Ok(X86Reloc::Abs32 { offset: offset, sym: symdata,
-                                             addend: addend })
+                        Ok(X86Rel::Abs32 { offset: offset, sym: symdata })
                     },
                     Err(err) => Err(err)
                 },
-            X86Reloc::PC32 { offset, sym, addend } =>
+            X86Rel::PC32 { offset, sym } =>
                 match sym.try_into() {
                     Ok(symdata) => {
-                        Ok(X86Reloc::PC32 { offset: offset, sym: symdata,
-                                            addend: addend })
+                        Ok(X86Rel::PC32 { offset: offset, sym: symdata })
                     },
                     Err(err) => Err(err)
                 },
-            X86Reloc::GOT32 { offset, addend } =>
-                Ok(X86Reloc::GOT32 { offset: offset, addend: addend }),
-            X86Reloc::PLTRel { offset, sym, addend } =>
+            X86Rel::GOT32 { offset } =>
+                Ok(X86Rel::GOT32 { offset: offset }),
+            X86Rel::PLTRel { offset, sym } =>
                 match sym.try_into() {
                     Ok(symdata) => {
-                        Ok(X86Reloc::PLTRel { offset: offset, sym: symdata,
-                                              addend: addend })
+                        Ok(X86Rel::PLTRel { offset: offset, sym: symdata })
                     },
                     Err(err) => Err(err)
                 },
-            X86Reloc::Copy { sym } => match sym.try_into() {
+            X86Rel::Copy { sym } => match sym.try_into() {
                 Ok(symdata) => {
-                    Ok(X86Reloc::Copy { sym: symdata })
+                    Ok(X86Rel::Copy { sym: symdata })
                 },
                 Err(err) => Err(err)
             },
-            X86Reloc::GlobalData { offset, sym } =>
+            X86Rel::GlobalData { offset, sym } =>
                 match sym.try_into() {
                     Ok(symdata) => {
-                        Ok(X86Reloc::GlobalData { offset: offset,
-                                                  sym: symdata })
+                        Ok(X86Rel::GlobalData { offset: offset,
+                                                sym: symdata })
                     },
                     Err(err) => Err(err)
                 },
-            X86Reloc::JumpSlot { offset, sym } =>
+            X86Rel::JumpSlot { offset, sym } =>
                 match sym.try_into() {
                     Ok(symdata) => {
-                        Ok(X86Reloc::JumpSlot { offset: offset, sym: symdata })
+                        Ok(X86Rel::JumpSlot { offset: offset, sym: symdata })
                     },
                     Err(err) => Err(err)
                 },
-            X86Reloc::Relative { offset, addend } =>
-                Ok(X86Reloc::Relative { offset: offset, addend: addend }),
-            X86Reloc::GOTRel { offset, sym, addend } =>
+            X86Rel::Relative { offset } =>
+                Ok(X86Rel::Relative { offset: offset }),
+            X86Rel::GOTRel { offset, sym } =>
                 match sym.try_into() {
                     Ok(symdata) => {
-                        Ok(X86Reloc::GOTRel { offset: offset, sym: symdata,
-                                              addend: addend })
+                        Ok(X86Rel::GOTRel { offset: offset, sym: symdata })
                     },
                     Err(err) => Err(err)
                 },
-            X86Reloc::GOTPC { offset, addend } =>
-                Ok(X86Reloc::GOTPC { offset: offset, addend: addend }),
-            X86Reloc::PLTAbs { offset, addend } =>
-                Ok(X86Reloc::PLTAbs { offset: offset, addend: addend }),
-            X86Reloc::Abs16 { offset, sym, addend } =>
+            X86Rel::GOTPC { offset } =>
+                Ok(X86Rel::GOTPC { offset: offset }),
+            X86Rel::PLTAbs { offset } =>
+                Ok(X86Rel::PLTAbs { offset: offset }),
+            X86Rel::Abs16 { offset, sym } =>
                 match sym.try_into() {
                     Ok(symdata) => {
-                        Ok(X86Reloc::Abs16 { offset: offset, sym: symdata,
-                                             addend: addend })
+                        Ok(X86Rel::Abs16 { offset: offset, sym: symdata })
                     },
                     Err(err) => Err(err)
                 },
-            X86Reloc::PC16 { offset, sym, addend } =>
+            X86Rel::PC16 { offset, sym } =>
                 match sym.try_into() {
                     Ok(symdata) => {
-                        Ok(X86Reloc::PC16 { offset: offset, sym: symdata,
-                                            addend: addend })
+                        Ok(X86Rel::PC16 { offset: offset, sym: symdata })
                     },
                     Err(err) => Err(err)
                 },
-            X86Reloc::Abs8 { offset, sym, addend } =>
+            X86Rel::Abs8 { offset, sym } =>
                 match sym.try_into() {
                     Ok(symdata) => {
-                        Ok(X86Reloc::Abs8 { offset: offset, sym: symdata,
-                                            addend: addend })
+                        Ok(X86Rel::Abs8 { offset: offset, sym: symdata })
                     },
                     Err(err) => Err(err)
                 },
-            X86Reloc::PC8 { offset, sym, addend } =>
+            X86Rel::PC8 { offset, sym } =>
                 match sym.try_into() {
                     Ok(symdata) => {
-                        Ok(X86Reloc::PC8 { offset: offset, sym: symdata,
-                                           addend: addend })
+                        Ok(X86Rel::PC8 { offset: offset, sym: symdata })
                     },
                     Err(err) => Err(err)
                 },
-            X86Reloc::Size { offset, sym, addend } =>
+            X86Rel::Size { offset, sym } =>
                 match sym.try_into() {
                     Ok(symdata) => {
-                        Ok(X86Reloc::Size { offset: offset, sym: symdata,
-                                            addend: addend })
+                        Ok(X86Rel::Size { offset: offset, sym: symdata })
                     },
                     Err(err) => Err(err)
                 }
@@ -1280,181 +2140,452 @@ impl<'a> TryFrom<X86RelocStrDataSym<'a>> for X86RelocStrSym<'a> {
     }
 }
 
-impl<'a> From<X86RelocStrDataSym<'a>> for X86RelocStrData<'a> {
-    #[inline]
-    fn from(reloc: X86RelocStrDataSym<'a>) -> X86RelocStrData<'a> {
-        match reloc {
-            X86Reloc::None => X86Reloc::None,
-            X86Reloc::Abs32 { sym: SymData { name, .. }, offset, addend } =>
-                X86Reloc::Abs32 { offset: offset, sym: name, addend: addend },
-            X86Reloc::PC32 { sym: SymData { name, .. }, offset, addend } =>
-                X86Reloc::PC32 { offset: offset, sym: name, addend: addend },
-            X86Reloc::GOT32 { offset, addend } =>
-                X86Reloc::GOT32 { offset: offset, addend: addend },
-            X86Reloc::PLTRel { sym: SymData { name, .. }, offset, addend } =>
-                X86Reloc::PLTRel { offset: offset, sym: name, addend: addend },
-            X86Reloc::Copy { sym: SymData { name, .. } } =>
-                X86Reloc::Copy { sym: name },
-            X86Reloc::GlobalData { sym: SymData { name, .. }, offset } =>
-                X86Reloc::GlobalData { offset: offset, sym: name },
-            X86Reloc::JumpSlot { sym: SymData { name, .. }, offset } =>
-                X86Reloc::JumpSlot { offset: offset, sym: name },
-            X86Reloc::Relative { offset, addend } =>
-                X86Reloc::Relative { offset: offset, addend: addend },
-            X86Reloc::GOTRel { sym: SymData { name, .. }, offset, addend } =>
-                X86Reloc::GOTRel { offset: offset, sym: name, addend: addend },
-            X86Reloc::GOTPC { offset, addend } =>
-                X86Reloc::GOTPC { offset: offset, addend: addend },
-            X86Reloc::PLTAbs { offset, addend } =>
-                X86Reloc::PLTAbs { offset: offset, addend: addend },
-            X86Reloc::Abs16 { sym: SymData { name, .. }, offset, addend } =>
-                X86Reloc::Abs16 { offset: offset, sym: name, addend: addend },
-            X86Reloc::PC16 { sym: SymData { name, .. }, offset, addend } =>
-                X86Reloc::PC16 { offset: offset, sym: name, addend: addend },
-            X86Reloc::Abs8 { sym: SymData { name, .. }, offset, addend } =>
-                X86Reloc::Abs8 { offset: offset, sym: name, addend: addend },
-            X86Reloc::PC8 { sym: SymData { name, .. }, offset, addend } =>
-                X86Reloc::PC8 { offset: offset, sym: name, addend: addend },
-            X86Reloc::Size { sym: SymData { name, .. }, offset, addend } =>
-                X86Reloc::Size { offset: offset, sym: name, addend: addend }
-        }
-    }
-}
-
-impl<'a> TryFrom<X86RelocStrData<'a>> for X86RelocStr<'a> {
+impl<'a> TryFrom<X86RelaStrDataSym<'a>> for X86RelaStrSym<'a> {
     type Error = &'a [u8];
 
     #[inline]
-    fn try_from(reloc: X86RelocStrData<'a>) ->
-        Result<X86RelocStr<'a>, Self::Error> {
+    fn try_from(reloc: X86RelaStrDataSym<'a>) ->
+        Result<X86RelaStrSym<'a>, Self::Error> {
         match reloc {
-            X86Reloc::None => Ok(X86Reloc::None),
-            X86Reloc::Abs32 { sym: Some(Ok(name)), offset, addend } =>
-                Ok(X86Reloc::Abs32 { offset: offset, sym: Some(name),
-                                     addend: addend }),
-            X86Reloc::Abs32 { sym: Some(Err(err)), .. } => Err(err),
-            X86Reloc::Abs32 { sym: None, offset, addend } =>
-                Ok(X86Reloc::Abs32 { offset: offset, sym: None,
-                                     addend: addend }),
-            X86Reloc::PC32 { sym: Some(Ok(name)), offset, addend } =>
-                Ok(X86Reloc::PC32 { offset: offset, sym: Some(name),
-                                    addend: addend }),
-            X86Reloc::PC32 { sym: Some(Err(err)), .. } => Err(err),
-            X86Reloc::PC32 { sym: None, offset, addend } =>
-                Ok(X86Reloc::PC32 { offset: offset, sym: None,
-                                    addend: addend }),
-            X86Reloc::GOT32 { offset, addend } =>
-                Ok(X86Reloc::GOT32 { offset: offset, addend: addend }),
-            X86Reloc::PLTRel { sym: Some(Ok(name)), offset, addend } =>
-                Ok(X86Reloc::PLTRel { offset: offset, sym: Some(name),
-                                      addend: addend }),
-            X86Reloc::PLTRel { sym: Some(Err(err)), .. } => Err(err),
-            X86Reloc::PLTRel { sym: None, offset, addend } =>
-                Ok(X86Reloc::PLTRel { offset: offset, sym: None,
-                                      addend: addend }),
-            X86Reloc::Copy { sym: Some(Ok(name)) } =>
-                Ok(X86Reloc::Copy { sym: Some(name) }),
-            X86Reloc::Copy { sym: Some(Err(err)) } => Err(err),
-            X86Reloc::Copy { sym: None } => Ok(X86Reloc::Copy { sym: None }),
-            X86Reloc::GlobalData { sym: Some(Ok(name)), offset } =>
-                Ok(X86Reloc::GlobalData { offset: offset, sym: Some(name) }),
-            X86Reloc::GlobalData { sym: Some(Err(err)), .. } => Err(err),
-            X86Reloc::GlobalData { sym: None, offset } =>
-                Ok(X86Reloc::GlobalData { offset: offset, sym: None }),
-            X86Reloc::JumpSlot { sym: Some(Ok(name)), offset } =>
-                Ok(X86Reloc::JumpSlot { offset: offset, sym: Some(name) }),
-            X86Reloc::JumpSlot { sym: Some(Err(err)), .. } => Err(err),
-            X86Reloc::JumpSlot { sym: None, offset } =>
-                Ok(X86Reloc::JumpSlot { offset: offset, sym: None }),
-            X86Reloc::Relative { offset, addend } =>
-                Ok(X86Reloc::Relative { offset: offset, addend: addend }),
-            X86Reloc::GOTRel { sym: Some(Ok(name)), offset, addend } =>
-                Ok(X86Reloc::GOTRel { offset: offset, sym: Some(name),
-                                      addend: addend }),
-            X86Reloc::GOTRel { sym: Some(Err(err)), .. } => Err(err),
-            X86Reloc::GOTRel { sym: None, offset, addend } =>
-                Ok(X86Reloc::GOTRel { offset: offset, sym: None,
-                                      addend: addend }),
-            X86Reloc::GOTPC { offset, addend } =>
-                Ok(X86Reloc::GOTPC { offset: offset, addend: addend }),
-            X86Reloc::PLTAbs { offset, addend } =>
-                Ok(X86Reloc::PLTAbs { offset: offset, addend: addend }),
-            X86Reloc::Abs16 { sym: Some(Ok(name)), offset, addend } =>
-                Ok(X86Reloc::Abs16 { offset: offset, sym: Some(name),
-                                     addend: addend }),
-            X86Reloc::Abs16 { sym: Some(Err(err)), .. } => Err(err),
-            X86Reloc::Abs16 { sym: None, offset, addend } =>
-                Ok(X86Reloc::Abs16 { offset: offset, sym: None,
-                                     addend: addend }),
-            X86Reloc::PC16 { sym: Some(Ok(name)), offset, addend } =>
-                Ok(X86Reloc::PC16 { offset: offset, sym: Some(name),
-                                    addend: addend }),
-            X86Reloc::PC16 { sym: Some(Err(err)), .. } => Err(err),
-            X86Reloc::PC16 { sym: None, offset, addend } =>
-                Ok(X86Reloc::PC16 { offset: offset, sym: None,
-                                    addend: addend }),
-            X86Reloc::Abs8 { sym: Some(Ok(name)), offset, addend } =>
-                Ok(X86Reloc::Abs8 { offset: offset, sym: Some(name),
-                                    addend: addend }),
-            X86Reloc::Abs8 { sym: Some(Err(err)), .. } => Err(err),
-            X86Reloc::Abs8 { sym: None, offset, addend } =>
-                Ok(X86Reloc::Abs8 { offset: offset, sym: None,
-                                    addend: addend }),
-            X86Reloc::PC8 { sym: Some(Ok(name)), offset, addend } =>
-                Ok(X86Reloc::PC8 { offset: offset, sym: Some(name),
-                                   addend: addend }),
-            X86Reloc::PC8 { sym: Some(Err(err)), .. } => Err(err),
-            X86Reloc::PC8 { sym: None, offset, addend } =>
-                Ok(X86Reloc::PC8 { offset: offset, sym: None,
-                                   addend: addend }),
-            X86Reloc::Size { sym: Some(Ok(name)), offset, addend } =>
-                Ok(X86Reloc::Size { offset: offset, sym: Some(name),
-                                    addend: addend }),
-            X86Reloc::Size { sym: Some(Err(err)), .. } => Err(err),
-            X86Reloc::Size { sym: None, offset, addend } =>
-                Ok(X86Reloc::Size { offset: offset, sym: None,
-                                    addend: addend })
+            X86Rela::None => Ok(X86Rela::None),
+            X86Rela::Abs32 { offset, sym, addend } =>
+                match sym.try_into() {
+                    Ok(symdata) => {
+                        Ok(X86Rela::Abs32 { offset: offset, sym: symdata,
+                                            addend: addend })
+                    },
+                    Err(err) => Err(err)
+                },
+            X86Rela::PC32 { offset, sym, addend } =>
+                match sym.try_into() {
+                    Ok(symdata) => {
+                        Ok(X86Rela::PC32 { offset: offset, sym: symdata,
+                                           addend: addend })
+                    },
+                    Err(err) => Err(err)
+                },
+            X86Rela::GOT32 { offset, addend } =>
+                Ok(X86Rela::GOT32 { offset: offset, addend: addend }),
+            X86Rela::PLTRel { offset, sym, addend } =>
+                match sym.try_into() {
+                    Ok(symdata) => {
+                        Ok(X86Rela::PLTRel { offset: offset, sym: symdata,
+                                             addend: addend })
+                    },
+                    Err(err) => Err(err)
+                },
+            X86Rela::Copy { sym } => match sym.try_into() {
+                Ok(symdata) => {
+                    Ok(X86Rela::Copy { sym: symdata })
+                },
+                Err(err) => Err(err)
+            },
+            X86Rela::GlobalData { offset, sym } =>
+                match sym.try_into() {
+                    Ok(symdata) => {
+                        Ok(X86Rela::GlobalData { offset: offset,
+                                                 sym: symdata })
+                    },
+                    Err(err) => Err(err)
+                },
+            X86Rela::JumpSlot { offset, sym } =>
+                match sym.try_into() {
+                    Ok(symdata) => {
+                        Ok(X86Rela::JumpSlot { offset: offset, sym: symdata })
+                    },
+                    Err(err) => Err(err)
+                },
+            X86Rela::Relative { offset, addend } =>
+                Ok(X86Rela::Relative { offset: offset, addend: addend }),
+            X86Rela::GOTRel { offset, sym, addend } =>
+                match sym.try_into() {
+                    Ok(symdata) => {
+                        Ok(X86Rela::GOTRel { offset: offset, sym: symdata,
+                                             addend: addend })
+                    },
+                    Err(err) => Err(err)
+                },
+            X86Rela::GOTPC { offset, addend } =>
+                Ok(X86Rela::GOTPC { offset: offset, addend: addend }),
+            X86Rela::PLTAbs { offset, addend } =>
+                Ok(X86Rela::PLTAbs { offset: offset, addend: addend }),
+            X86Rela::Abs16 { offset, sym, addend } =>
+                match sym.try_into() {
+                    Ok(symdata) => {
+                        Ok(X86Rela::Abs16 { offset: offset, sym: symdata,
+                                            addend: addend })
+                    },
+                    Err(err) => Err(err)
+                },
+            X86Rela::PC16 { offset, sym, addend } =>
+                match sym.try_into() {
+                    Ok(symdata) => {
+                        Ok(X86Rela::PC16 { offset: offset, sym: symdata,
+                                           addend: addend })
+                    },
+                    Err(err) => Err(err)
+                },
+            X86Rela::Abs8 { offset, sym, addend } =>
+                match sym.try_into() {
+                    Ok(symdata) => {
+                        Ok(X86Rela::Abs8 { offset: offset, sym: symdata,
+                                           addend: addend })
+                    },
+                    Err(err) => Err(err)
+                },
+            X86Rela::PC8 { offset, sym, addend } =>
+                match sym.try_into() {
+                    Ok(symdata) => {
+                        Ok(X86Rela::PC8 { offset: offset, sym: symdata,
+                                          addend: addend })
+                    },
+                    Err(err) => Err(err)
+                },
+            X86Rela::Size { offset, sym, addend } =>
+                match sym.try_into() {
+                    Ok(symdata) => {
+                        Ok(X86Rela::Size { offset: offset, sym: symdata,
+                                           addend: addend })
+                    },
+                    Err(err) => Err(err)
+                }
         }
     }
 }
 
-impl<'a> From<X86RelocStrSym<'a>> for X86RelocStr<'a> {
+impl<'a> From<X86RelStrDataSym<'a>> for X86RelStrData<'a> {
     #[inline]
-    fn from(reloc: X86RelocStrSym<'a>) -> X86RelocStr<'a> {
+    fn from(reloc: X86RelStrDataSym<'a>) -> X86RelStrData<'a> {
         match reloc {
-            X86Reloc::None => X86Reloc::None,
-            X86Reloc::Abs32 { sym: SymData { name, .. }, offset, addend } =>
-                X86Reloc::Abs32 { offset: offset, sym: name, addend: addend },
-            X86Reloc::PC32 { sym: SymData { name, .. }, offset, addend } =>
-                X86Reloc::PC32 { offset: offset, sym: name, addend: addend },
-            X86Reloc::GOT32 { offset, addend } =>
-                X86Reloc::GOT32 { offset: offset, addend: addend },
-            X86Reloc::PLTRel { sym: SymData { name, .. }, offset, addend } =>
-                X86Reloc::PLTRel { offset: offset, sym: name, addend: addend },
-            X86Reloc::Copy { sym: SymData { name, .. } } =>
-                X86Reloc::Copy { sym: name },
-            X86Reloc::GlobalData { sym: SymData { name, .. }, offset } =>
-                X86Reloc::GlobalData { offset: offset, sym: name },
-            X86Reloc::JumpSlot { sym: SymData { name, .. }, offset } =>
-                X86Reloc::JumpSlot { offset: offset, sym: name },
-            X86Reloc::Relative { offset, addend } =>
-                X86Reloc::Relative { offset: offset, addend: addend },
-            X86Reloc::GOTRel { sym: SymData { name, .. }, offset, addend } =>
-                X86Reloc::GOTRel { offset: offset, sym: name, addend: addend },
-            X86Reloc::GOTPC { offset, addend } =>
-                X86Reloc::GOTPC { offset: offset, addend: addend },
-            X86Reloc::PLTAbs { offset, addend } =>
-                X86Reloc::PLTAbs { offset: offset, addend: addend },
-            X86Reloc::Abs16 { sym: SymData { name, .. }, offset, addend } =>
-                X86Reloc::Abs16 { offset: offset, sym: name, addend: addend },
-            X86Reloc::PC16 { sym: SymData { name, .. }, offset, addend } =>
-                X86Reloc::PC16 { offset: offset, sym: name, addend: addend },
-            X86Reloc::Abs8 { sym: SymData { name, .. }, offset, addend } =>
-                X86Reloc::Abs8 { offset: offset, sym: name, addend: addend },
-            X86Reloc::PC8 { sym: SymData { name, .. }, offset, addend } =>
-                X86Reloc::PC8 { offset: offset, sym: name, addend: addend },
-            X86Reloc::Size { sym: SymData { name, .. }, offset, addend } =>
-                X86Reloc::Size { offset: offset, sym: name, addend: addend }
+            X86Rel::None => X86Rel::None,
+            X86Rel::Abs32 { sym: SymData { name, .. }, offset } =>
+                X86Rel::Abs32 { offset: offset, sym: name },
+            X86Rel::PC32 { sym: SymData { name, .. }, offset } =>
+                X86Rel::PC32 { offset: offset, sym: name },
+            X86Rel::GOT32 { offset } =>
+                X86Rel::GOT32 { offset: offset },
+            X86Rel::PLTRel { sym: SymData { name, .. }, offset } =>
+                X86Rel::PLTRel { offset: offset, sym: name },
+            X86Rel::Copy { sym: SymData { name, .. } } =>
+                X86Rel::Copy { sym: name },
+            X86Rel::GlobalData { sym: SymData { name, .. }, offset } =>
+                X86Rel::GlobalData { offset: offset, sym: name },
+            X86Rel::JumpSlot { sym: SymData { name, .. }, offset } =>
+                X86Rel::JumpSlot { offset: offset, sym: name },
+            X86Rel::Relative { offset } =>
+                X86Rel::Relative { offset: offset },
+            X86Rel::GOTRel { sym: SymData { name, .. }, offset } =>
+                X86Rel::GOTRel { offset: offset, sym: name },
+            X86Rel::GOTPC { offset } =>
+                X86Rel::GOTPC { offset: offset },
+            X86Rel::PLTAbs { offset } =>
+                X86Rel::PLTAbs { offset: offset },
+            X86Rel::Abs16 { sym: SymData { name, .. }, offset } =>
+                X86Rel::Abs16 { offset: offset, sym: name },
+            X86Rel::PC16 { sym: SymData { name, .. }, offset } =>
+                X86Rel::PC16 { offset: offset, sym: name },
+            X86Rel::Abs8 { sym: SymData { name, .. }, offset } =>
+                X86Rel::Abs8 { offset: offset, sym: name },
+            X86Rel::PC8 { sym: SymData { name, .. }, offset } =>
+                X86Rel::PC8 { offset: offset, sym: name },
+            X86Rel::Size { sym: SymData { name, .. }, offset } =>
+                X86Rel::Size { offset: offset, sym: name }
+        }
+    }
+}
+
+impl<'a> From<X86RelaStrDataSym<'a>> for X86RelaStrData<'a> {
+    #[inline]
+    fn from(reloc: X86RelaStrDataSym<'a>) -> X86RelaStrData<'a> {
+        match reloc {
+            X86Rela::None => X86Rela::None,
+            X86Rela::Abs32 { sym: SymData { name, .. }, offset, addend } =>
+                X86Rela::Abs32 { offset: offset, sym: name, addend: addend },
+            X86Rela::PC32 { sym: SymData { name, .. }, offset, addend } =>
+                X86Rela::PC32 { offset: offset, sym: name, addend: addend },
+            X86Rela::GOT32 { offset, addend } =>
+                X86Rela::GOT32 { offset: offset, addend: addend },
+            X86Rela::PLTRel { sym: SymData { name, .. }, offset, addend } =>
+                X86Rela::PLTRel { offset: offset, sym: name, addend: addend },
+            X86Rela::Copy { sym: SymData { name, .. } } =>
+                X86Rela::Copy { sym: name },
+            X86Rela::GlobalData { sym: SymData { name, .. }, offset } =>
+                X86Rela::GlobalData { offset: offset, sym: name },
+            X86Rela::JumpSlot { sym: SymData { name, .. }, offset } =>
+                X86Rela::JumpSlot { offset: offset, sym: name },
+            X86Rela::Relative { offset, addend } =>
+                X86Rela::Relative { offset: offset, addend: addend },
+            X86Rela::GOTRel { sym: SymData { name, .. }, offset, addend } =>
+                X86Rela::GOTRel { offset: offset, sym: name, addend: addend },
+            X86Rela::GOTPC { offset, addend } =>
+                X86Rela::GOTPC { offset: offset, addend: addend },
+            X86Rela::PLTAbs { offset, addend } =>
+                X86Rela::PLTAbs { offset: offset, addend: addend },
+            X86Rela::Abs16 { sym: SymData { name, .. }, offset, addend } =>
+                X86Rela::Abs16 { offset: offset, sym: name, addend: addend },
+            X86Rela::PC16 { sym: SymData { name, .. }, offset, addend } =>
+                X86Rela::PC16 { offset: offset, sym: name, addend: addend },
+            X86Rela::Abs8 { sym: SymData { name, .. }, offset, addend } =>
+                X86Rela::Abs8 { offset: offset, sym: name, addend: addend },
+            X86Rela::PC8 { sym: SymData { name, .. }, offset, addend } =>
+                X86Rela::PC8 { offset: offset, sym: name, addend: addend },
+            X86Rela::Size { sym: SymData { name, .. }, offset, addend } =>
+                X86Rela::Size { offset: offset, sym: name, addend: addend }
+        }
+    }
+}
+
+impl<'a> TryFrom<X86RelStrData<'a>> for X86RelStr<'a> {
+    type Error = &'a [u8];
+
+    #[inline]
+    fn try_from(reloc: X86RelStrData<'a>) ->
+        Result<X86RelStr<'a>, Self::Error> {
+        match reloc {
+            X86Rel::None => Ok(X86Rel::None),
+            X86Rel::Abs32 { sym: Some(Ok(name)), offset } =>
+                Ok(X86Rel::Abs32 { offset: offset, sym: Some(name) }),
+            X86Rel::Abs32 { sym: Some(Err(err)), .. } => Err(err),
+            X86Rel::Abs32 { sym: None, offset } =>
+                Ok(X86Rel::Abs32 { offset: offset, sym: None }),
+            X86Rel::PC32 { sym: Some(Ok(name)), offset } =>
+                Ok(X86Rel::PC32 { offset: offset, sym: Some(name) }),
+            X86Rel::PC32 { sym: Some(Err(err)), .. } => Err(err),
+            X86Rel::PC32 { sym: None, offset } =>
+                Ok(X86Rel::PC32 { offset: offset, sym: None }),
+            X86Rel::GOT32 { offset } => Ok(X86Rel::GOT32 { offset: offset }),
+            X86Rel::PLTRel { sym: Some(Ok(name)), offset } =>
+                Ok(X86Rel::PLTRel { offset: offset, sym: Some(name) }),
+            X86Rel::PLTRel { sym: Some(Err(err)), .. } => Err(err),
+            X86Rel::PLTRel { sym: None, offset } =>
+                Ok(X86Rel::PLTRel { offset: offset, sym: None }),
+            X86Rel::Copy { sym: Some(Ok(name)) } =>
+                Ok(X86Rel::Copy { sym: Some(name) }),
+            X86Rel::Copy { sym: Some(Err(err)) } => Err(err),
+            X86Rel::Copy { sym: None } => Ok(X86Rel::Copy { sym: None }),
+            X86Rel::GlobalData { sym: Some(Ok(name)), offset } =>
+                Ok(X86Rel::GlobalData { offset: offset, sym: Some(name) }),
+            X86Rel::GlobalData { sym: Some(Err(err)), .. } => Err(err),
+            X86Rel::GlobalData { sym: None, offset } =>
+                Ok(X86Rel::GlobalData { offset: offset, sym: None }),
+            X86Rel::JumpSlot { sym: Some(Ok(name)), offset } =>
+                Ok(X86Rel::JumpSlot { offset: offset, sym: Some(name) }),
+            X86Rel::JumpSlot { sym: Some(Err(err)), .. } => Err(err),
+            X86Rel::JumpSlot { sym: None, offset } =>
+                Ok(X86Rel::JumpSlot { offset: offset, sym: None }),
+            X86Rel::Relative { offset } =>
+                Ok(X86Rel::Relative { offset: offset }),
+            X86Rel::GOTRel { sym: Some(Ok(name)), offset } =>
+                Ok(X86Rel::GOTRel { offset: offset, sym: Some(name) }),
+            X86Rel::GOTRel { sym: Some(Err(err)), .. } => Err(err),
+            X86Rel::GOTRel { sym: None, offset } =>
+                Ok(X86Rel::GOTRel { offset: offset, sym: None }),
+            X86Rel::GOTPC { offset } => Ok(X86Rel::GOTPC { offset: offset }),
+            X86Rel::PLTAbs { offset } => Ok(X86Rel::PLTAbs { offset: offset }),
+            X86Rel::Abs16 { sym: Some(Ok(name)), offset } =>
+                Ok(X86Rel::Abs16 { offset: offset, sym: Some(name) }),
+            X86Rel::Abs16 { sym: Some(Err(err)), .. } => Err(err),
+            X86Rel::Abs16 { sym: None, offset } =>
+                Ok(X86Rel::Abs16 { offset: offset, sym: None }),
+            X86Rel::PC16 { sym: Some(Ok(name)), offset } =>
+                Ok(X86Rel::PC16 { offset: offset, sym: Some(name) }),
+            X86Rel::PC16 { sym: Some(Err(err)), .. } => Err(err),
+            X86Rel::PC16 { sym: None, offset } =>
+                Ok(X86Rel::PC16 { offset: offset, sym: None }),
+            X86Rel::Abs8 { sym: Some(Ok(name)), offset } =>
+                Ok(X86Rel::Abs8 { offset: offset, sym: Some(name) }),
+            X86Rel::Abs8 { sym: Some(Err(err)), .. } => Err(err),
+            X86Rel::Abs8 { sym: None, offset } =>
+                Ok(X86Rel::Abs8 { offset: offset, sym: None }),
+            X86Rel::PC8 { sym: Some(Ok(name)), offset } =>
+                Ok(X86Rel::PC8 { offset: offset, sym: Some(name) }),
+            X86Rel::PC8 { sym: Some(Err(err)), .. } => Err(err),
+            X86Rel::PC8 { sym: None, offset } =>
+                Ok(X86Rel::PC8 { offset: offset, sym: None }),
+            X86Rel::Size { sym: Some(Ok(name)), offset } =>
+                Ok(X86Rel::Size { offset: offset, sym: Some(name) }),
+            X86Rel::Size { sym: Some(Err(err)), .. } => Err(err),
+            X86Rel::Size { sym: None, offset } =>
+                Ok(X86Rel::Size { offset: offset, sym: None })
+        }
+    }
+}
+
+impl<'a> TryFrom<X86RelaStrData<'a>> for X86RelaStr<'a> {
+    type Error = &'a [u8];
+
+    #[inline]
+    fn try_from(reloc: X86RelaStrData<'a>) ->
+        Result<X86RelaStr<'a>, Self::Error> {
+            match reloc {
+            X86Rela::None => Ok(X86Rela::None),
+            X86Rela::Abs32 { sym: Some(Ok(name)), offset, addend } =>
+                Ok(X86Rela::Abs32 { offset: offset, sym: Some(name),
+                                    addend: addend }),
+            X86Rela::Abs32 { sym: Some(Err(err)), .. } => Err(err),
+            X86Rela::Abs32 { sym: None, offset, addend } =>
+                Ok(X86Rela::Abs32 { offset: offset, sym: None,
+                                    addend: addend }),
+            X86Rela::PC32 { sym: Some(Ok(name)), offset, addend } =>
+                Ok(X86Rela::PC32 { offset: offset, sym: Some(name),
+                                   addend: addend }),
+            X86Rela::PC32 { sym: Some(Err(err)), .. } => Err(err),
+            X86Rela::PC32 { sym: None, offset, addend } =>
+                Ok(X86Rela::PC32 { offset: offset, sym: None,
+                                   addend: addend }),
+            X86Rela::GOT32 { offset, addend } =>
+                Ok(X86Rela::GOT32 { offset: offset, addend: addend }),
+            X86Rela::PLTRel { sym: Some(Ok(name)), offset, addend } =>
+                Ok(X86Rela::PLTRel { offset: offset, sym: Some(name),
+                                     addend: addend }),
+            X86Rela::PLTRel { sym: Some(Err(err)), .. } => Err(err),
+            X86Rela::PLTRel { sym: None, offset, addend } =>
+                Ok(X86Rela::PLTRel { offset: offset, sym: None,
+                                     addend: addend }),
+            X86Rela::Copy { sym: Some(Ok(name)) } =>
+                Ok(X86Rela::Copy { sym: Some(name) }),
+            X86Rela::Copy { sym: Some(Err(err)) } => Err(err),
+            X86Rela::Copy { sym: None } => Ok(X86Rela::Copy { sym: None }),
+            X86Rela::GlobalData { sym: Some(Ok(name)), offset } =>
+                Ok(X86Rela::GlobalData { offset: offset, sym: Some(name) }),
+            X86Rela::GlobalData { sym: Some(Err(err)), .. } => Err(err),
+            X86Rela::GlobalData { sym: None, offset } =>
+                Ok(X86Rela::GlobalData { offset: offset, sym: None }),
+            X86Rela::JumpSlot { sym: Some(Ok(name)), offset } =>
+                Ok(X86Rela::JumpSlot { offset: offset, sym: Some(name) }),
+            X86Rela::JumpSlot { sym: Some(Err(err)), .. } => Err(err),
+            X86Rela::JumpSlot { sym: None, offset } =>
+                Ok(X86Rela::JumpSlot { offset: offset, sym: None }),
+            X86Rela::Relative { offset, addend } =>
+                Ok(X86Rela::Relative { offset: offset, addend: addend }),
+            X86Rela::GOTRel { sym: Some(Ok(name)), offset, addend } =>
+                Ok(X86Rela::GOTRel { offset: offset, sym: Some(name),
+                                     addend: addend }),
+            X86Rela::GOTRel { sym: Some(Err(err)), .. } => Err(err),
+            X86Rela::GOTRel { sym: None, offset, addend } =>
+                Ok(X86Rela::GOTRel { offset: offset, sym: None,
+                                     addend: addend }),
+            X86Rela::GOTPC { offset, addend } =>
+                Ok(X86Rela::GOTPC { offset: offset, addend: addend }),
+            X86Rela::PLTAbs { offset, addend } =>
+                Ok(X86Rela::PLTAbs { offset: offset, addend: addend }),
+            X86Rela::Abs16 { sym: Some(Ok(name)), offset, addend } =>
+                Ok(X86Rela::Abs16 { offset: offset, sym: Some(name),
+                                    addend: addend }),
+            X86Rela::Abs16 { sym: Some(Err(err)), .. } => Err(err),
+            X86Rela::Abs16 { sym: None, offset, addend } =>
+                Ok(X86Rela::Abs16 { offset: offset, sym: None,
+                                    addend: addend }),
+            X86Rela::PC16 { sym: Some(Ok(name)), offset, addend } =>
+                Ok(X86Rela::PC16 { offset: offset, sym: Some(name),
+                                   addend: addend }),
+            X86Rela::PC16 { sym: Some(Err(err)), .. } => Err(err),
+            X86Rela::PC16 { sym: None, offset, addend } =>
+                Ok(X86Rela::PC16 { offset: offset, sym: None,
+                                   addend: addend }),
+            X86Rela::Abs8 { sym: Some(Ok(name)), offset, addend } =>
+                Ok(X86Rela::Abs8 { offset: offset, sym: Some(name),
+                                   addend: addend }),
+            X86Rela::Abs8 { sym: Some(Err(err)), .. } => Err(err),
+            X86Rela::Abs8 { sym: None, offset, addend } =>
+                Ok(X86Rela::Abs8 { offset: offset, sym: None,
+                                   addend: addend }),
+            X86Rela::PC8 { sym: Some(Ok(name)), offset, addend } =>
+                Ok(X86Rela::PC8 { offset: offset, sym: Some(name),
+                                  addend: addend }),
+            X86Rela::PC8 { sym: Some(Err(err)), .. } => Err(err),
+            X86Rela::PC8 { sym: None, offset, addend } =>
+                Ok(X86Rela::PC8 { offset: offset, sym: None,
+                                  addend: addend }),
+            X86Rela::Size { sym: Some(Ok(name)), offset, addend } =>
+                Ok(X86Rela::Size { offset: offset, sym: Some(name),
+                                   addend: addend }),
+            X86Rela::Size { sym: Some(Err(err)), .. } => Err(err),
+            X86Rela::Size { sym: None, offset, addend } =>
+                Ok(X86Rela::Size { offset: offset, sym: None,
+                                   addend: addend })
+        }
+    }
+}
+
+impl<'a> From<X86RelStrSym<'a>> for X86RelStr<'a> {
+    #[inline]
+    fn from(reloc: X86RelStrSym<'a>) -> X86RelStr<'a> {
+        match reloc {
+            X86Rel::None => X86Rel::None,
+            X86Rel::Abs32 { sym: SymData { name, .. }, offset } =>
+                X86Rel::Abs32 { offset: offset, sym: name },
+            X86Rel::PC32 { sym: SymData { name, .. }, offset } =>
+                X86Rel::PC32 { offset: offset, sym: name },
+            X86Rel::GOT32 { offset } =>
+                X86Rel::GOT32 { offset: offset },
+            X86Rel::PLTRel { sym: SymData { name, .. }, offset } =>
+                X86Rel::PLTRel { offset: offset, sym: name },
+            X86Rel::Copy { sym: SymData { name, .. } } =>
+                X86Rel::Copy { sym: name },
+            X86Rel::GlobalData { sym: SymData { name, .. }, offset } =>
+                X86Rel::GlobalData { offset: offset, sym: name },
+            X86Rel::JumpSlot { sym: SymData { name, .. }, offset } =>
+                X86Rel::JumpSlot { offset: offset, sym: name },
+            X86Rel::Relative { offset } =>
+                X86Rel::Relative { offset: offset },
+            X86Rel::GOTRel { sym: SymData { name, .. }, offset } =>
+                X86Rel::GOTRel { offset: offset, sym: name },
+            X86Rel::GOTPC { offset } =>
+                X86Rel::GOTPC { offset: offset },
+            X86Rel::PLTAbs { offset } =>
+                X86Rel::PLTAbs { offset: offset },
+            X86Rel::Abs16 { sym: SymData { name, .. }, offset } =>
+                X86Rel::Abs16 { offset: offset, sym: name },
+            X86Rel::PC16 { sym: SymData { name, .. }, offset } =>
+                X86Rel::PC16 { offset: offset, sym: name },
+            X86Rel::Abs8 { sym: SymData { name, .. }, offset } =>
+                X86Rel::Abs8 { offset: offset, sym: name },
+            X86Rel::PC8 { sym: SymData { name, .. }, offset } =>
+                X86Rel::PC8 { offset: offset, sym: name },
+            X86Rel::Size { sym: SymData { name, .. }, offset } =>
+                X86Rel::Size { offset: offset, sym: name }
+        }
+    }
+}
+
+impl<'a> From<X86RelaStrSym<'a>> for X86RelaStr<'a> {
+    #[inline]
+    fn from(reloc: X86RelaStrSym<'a>) -> X86RelaStr<'a> {
+        match reloc {
+            X86Rela::None => X86Rela::None,
+            X86Rela::Abs32 { sym: SymData { name, .. }, offset, addend } =>
+                X86Rela::Abs32 { offset: offset, sym: name, addend: addend },
+            X86Rela::PC32 { sym: SymData { name, .. }, offset, addend } =>
+                X86Rela::PC32 { offset: offset, sym: name, addend: addend },
+            X86Rela::GOT32 { offset, addend } =>
+                X86Rela::GOT32 { offset: offset, addend: addend },
+            X86Rela::PLTRel { sym: SymData { name, .. }, offset, addend } =>
+                X86Rela::PLTRel { offset: offset, sym: name, addend: addend },
+            X86Rela::Copy { sym: SymData { name, .. } } =>
+                X86Rela::Copy { sym: name },
+            X86Rela::GlobalData { sym: SymData { name, .. }, offset } =>
+                X86Rela::GlobalData { offset: offset, sym: name },
+            X86Rela::JumpSlot { sym: SymData { name, .. }, offset } =>
+                X86Rela::JumpSlot { offset: offset, sym: name },
+            X86Rela::Relative { offset, addend } =>
+                X86Rela::Relative { offset: offset, addend: addend },
+            X86Rela::GOTRel { sym: SymData { name, .. }, offset, addend } =>
+                X86Rela::GOTRel { offset: offset, sym: name, addend: addend },
+            X86Rela::GOTPC { offset, addend } =>
+                X86Rela::GOTPC { offset: offset, addend: addend },
+            X86Rela::PLTAbs { offset, addend } =>
+                X86Rela::PLTAbs { offset: offset, addend: addend },
+            X86Rela::Abs16 { sym: SymData { name, .. }, offset, addend } =>
+                X86Rela::Abs16 { offset: offset, sym: name, addend: addend },
+            X86Rela::PC16 { sym: SymData { name, .. }, offset, addend } =>
+                X86Rela::PC16 { offset: offset, sym: name, addend: addend },
+            X86Rela::Abs8 { sym: SymData { name, .. }, offset, addend } =>
+                X86Rela::Abs8 { offset: offset, sym: name, addend: addend },
+            X86Rela::PC8 { sym: SymData { name, .. }, offset, addend } =>
+                X86Rela::PC8 { offset: offset, sym: name, addend: addend },
+            X86Rela::Size { sym: SymData { name, .. }, offset, addend } =>
+                X86Rela::Size { offset: offset, sym: name, addend: addend }
         }
     }
 }

@@ -4,7 +4,7 @@ use core::convert::TryInto;
 use elf_utils::Elf32;
 use elf_utils::reloc::RelData;
 use elf_utils::reloc::Rels;
-use elf_utils::reloc::x86::X86Reloc;
+use elf_utils::reloc::x86::X86Rel;
 use elf_utils::reloc::x86::X86RelocError;
 
 const X86_RELS_SIZE: usize = 208;
@@ -40,33 +40,33 @@ const X86_RELS: [u8; X86_RELS_SIZE] = [
 
 const X86_NUM_RELS: usize = 26;
 
-const X86_RELS_CONTENTS: [X86Reloc<u32>; X86_NUM_RELS] = [
-    X86Reloc::Abs32 { offset: 0x15, sym: 97, addend: 0 },
-    X86Reloc::Abs32 { offset: 0x1e, sym: 97, addend: 0 },
-    X86Reloc::Abs32 { offset: 0x2d, sym: 83, addend: 0 },
-    X86Reloc::PC32 { offset: 0x39, sym: 96, addend: 0 },
-    X86Reloc::Abs32 { offset: 0x51, sym: 90, addend: 0 },
-    X86Reloc::Abs32 { offset: 0x69, sym: 92, addend: 0 },
-    X86Reloc::Abs32 { offset: 0x6f, sym: 91, addend: 0 },
-    X86Reloc::Abs32 { offset: 0xfc, sym: 91, addend: 0 },
-    X86Reloc::PC32 { offset: 0x107, sym: 95, addend: 0 },
-    X86Reloc::PC32 { offset: 0x122, sym: 99, addend: 0 },
-    X86Reloc::PC32 { offset: 0x12b, sym: 98, addend: 0 },
-    X86Reloc::Abs32 { offset: 0x140, sym: 83, addend: 0 },
-    X86Reloc::Abs32 { offset: 0x14d, sym: 62, addend: 0 },
-    X86Reloc::PC32 { offset: 0x152, sym: 96, addend: 0 },
-    X86Reloc::Abs32 { offset: 0x15a, sym: 89, addend: 0 },
-    X86Reloc::Abs32 { offset: 0x15f, sym: 88, addend: 0 },
-    X86Reloc::Abs32 { offset: 0x198, sym: 89, addend: 0 },
-    X86Reloc::PC32 { offset: 0x1b7, sym: 94, addend: 0 },
-    X86Reloc::Abs32 { offset: 0x1bc, sym: 87, addend: 0 },
-    X86Reloc::Abs32 { offset: 0x1c1, sym: 86, addend: 0 },
-    X86Reloc::Abs32 { offset: 0x1f8, sym: 87, addend: 0 },
-    X86Reloc::Abs32 { offset: 0x225, sym: 85, addend: 0 },
-    X86Reloc::Abs32 { offset: 0x22a, sym: 84, addend: 0 },
-    X86Reloc::PC32 { offset: 0x242, sym: 93, addend: 0 },
-    X86Reloc::Abs32 { offset: 0x257, sym: 85, addend: 0 },
-    X86Reloc::PC32 { offset: 0x27c, sym: 81, addend: 0 },
+const X86_RELS_CONTENTS: [X86Rel<u32>; X86_NUM_RELS] = [
+    X86Rel::Abs32 { offset: 0x15, sym: 97 },
+    X86Rel::Abs32 { offset: 0x1e, sym: 97 },
+    X86Rel::Abs32 { offset: 0x2d, sym: 83 },
+    X86Rel::PC32 { offset: 0x39, sym: 96 },
+    X86Rel::Abs32 { offset: 0x51, sym: 90 },
+    X86Rel::Abs32 { offset: 0x69, sym: 92 },
+    X86Rel::Abs32 { offset: 0x6f, sym: 91 },
+    X86Rel::Abs32 { offset: 0xfc, sym: 91 },
+    X86Rel::PC32 { offset: 0x107, sym: 95 },
+    X86Rel::PC32 { offset: 0x122, sym: 99 },
+    X86Rel::PC32 { offset: 0x12b, sym: 98 },
+    X86Rel::Abs32 { offset: 0x140, sym: 83 },
+    X86Rel::Abs32 { offset: 0x14d, sym: 62 },
+    X86Rel::PC32 { offset: 0x152, sym: 96 },
+    X86Rel::Abs32 { offset: 0x15a, sym: 89 },
+    X86Rel::Abs32 { offset: 0x15f, sym: 88 },
+    X86Rel::Abs32 { offset: 0x198, sym: 89 },
+    X86Rel::PC32 { offset: 0x1b7, sym: 94 },
+    X86Rel::Abs32 { offset: 0x1bc, sym: 87 },
+    X86Rel::Abs32 { offset: 0x1c1, sym: 86 },
+    X86Rel::Abs32 { offset: 0x1f8, sym: 87 },
+    X86Rel::Abs32 { offset: 0x225, sym: 85 },
+    X86Rel::Abs32 { offset: 0x22a, sym: 84 },
+    X86Rel::PC32 { offset: 0x242, sym: 93 },
+    X86Rel::Abs32 { offset: 0x257, sym: 85 },
+    X86Rel::PC32 { offset: 0x27c, sym: 81 },
 ];
 
 #[test]
@@ -81,7 +81,7 @@ fn test_Rels_from_bytes_iter() {
         assert!(rel.is_some());
 
         let raw: RelData<u32, Elf32> = rel.unwrap().into();
-        let data: Result<X86Reloc<u32>, X86RelocError> = raw.try_into();
+        let data: Result<X86Rel<u32>, X86RelocError> = raw.try_into();
 
         assert!(data.is_ok());
 
@@ -106,7 +106,7 @@ fn test_Rels_from_bytes_idx() {
         assert!(rel.is_some());
 
         let raw: RelData<u32, Elf32> = rel.unwrap().into();
-        let data: Result<X86Reloc<u32>, X86RelocError> = raw.try_into();
+        let data: Result<X86Rel<u32>, X86RelocError> = raw.try_into();
 
         assert!(data.is_ok());
 
