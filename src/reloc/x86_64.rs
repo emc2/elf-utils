@@ -14,6 +14,7 @@ use core::fmt::Display;
 use core::fmt::Formatter;
 use crate::elf::Elf64;
 use crate::elf::ElfClass;
+use crate::reloc::ArchReloc;
 use crate::reloc::BasicRelocParams;
 use crate::reloc::Reloc;
 use crate::reloc::RelocParams;
@@ -655,6 +656,19 @@ pub enum X86_64RelocApplyError {
     Copy
 }
 
+/// Errors that can occur when loading an x86-specific relocation.
+#[derive(Clone, Debug, Hash, Eq, Ord, PartialEq, PartialOrd)]
+pub enum X86_64RelocLoadError<'a> {
+    /// Error parsing the raw data.
+    Raw(X86_64RelocError),
+    /// Error applying symbol table.
+    Symtab(RelocSymtabError<Elf64>),
+    /// Error applying string table.
+    Strtab(u32),
+    /// UTF-8 decode error
+    UTF8(&'a [u8])
+}
+
 impl<Name> Display for X86_64Rel<Name>
     where Name: Display {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
@@ -878,14 +892,25 @@ impl Display for X86_64RelocError {
     }
 }
 
+impl<'a> Display for X86_64RelocLoadError<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
+        match self {
+            X86_64RelocLoadError::Raw(err) => Display::fmt(err, f),
+            X86_64RelocLoadError::Symtab(err) => Display::fmt(err, f),
+            X86_64RelocLoadError::Strtab(err) => Display::fmt(err, f),
+            X86_64RelocLoadError::UTF8(_) => write!(f, "UTF-8 decode error")
+        }
+    }
+}
+
 impl<Name> Reloc<LittleEndian, Elf64>
     for X86_64Rel<SymData<Name, u16, Elf64>> {
     type Params = BasicRelocParams<Elf64>;
-    type Error = X86_64RelocApplyError;
+    type RelocError = X86_64RelocApplyError;
 
     fn reloc<'a, F>(&self, target: &mut [u8], params: &Self::Params,
                     target_base: u64, section_base: F) ->
-        Result<(), Self::Error>
+        Result<(), Self::RelocError>
         where F: FnOnce(u16) -> Option<u64> {
         match self {
             X86_64Rel::None => Ok(()),
@@ -1461,11 +1486,11 @@ impl<Name> Reloc<LittleEndian, Elf64>
 impl<Name> Reloc<LittleEndian, Elf64>
     for X86_64Rela<SymData<Name, u16, Elf64>> {
     type Params = BasicRelocParams<Elf64>;
-    type Error = X86_64RelocApplyError;
+    type RelocError = X86_64RelocApplyError;
 
     fn reloc<'a, F>(&self, target: &mut [u8], params: &Self::Params,
                     target_base: u64, section_base: F) ->
-        Result<(), Self::Error>
+        Result<(), Self::RelocError>
         where F: FnOnce(u16) -> Option<u64> {
         match self {
             X86_64Rela::None => Ok(()),
@@ -2779,6 +2804,46 @@ impl<'a> WithSymtab<'a, LittleEndian, Elf64> for X86_64RelaRaw {
     }
 }
 
+impl<'a> ArchReloc<'a, LittleEndian, Elf64> for X86_64RelRawSym {
+    type Ent = RelData<u32, Elf64>;
+    type LoadError = X86_64RelocLoadError<'a>;
+
+    #[inline]
+    fn from_relent(ent: RelData<u32, Elf64>,
+                   symtab: Symtab<'a, LittleEndian, Elf64>,
+                   _strtab: Strtab<'a>) -> Result<Self, Self::LoadError> {
+        let raw: X86_64RelRaw = match X86_64Rel::try_from(ent) {
+            Ok(raw) => Ok(raw),
+            Err(err) => Err(X86_64RelocLoadError::Raw(err))
+        }?;
+
+        match raw.with_symtab(symtab) {
+            Ok(out) => Ok(out),
+            Err(err) => Err(X86_64RelocLoadError::Symtab(err))
+        }
+    }
+}
+
+impl<'a> ArchReloc<'a, LittleEndian, Elf64> for X86_64RelaRawSym {
+    type Ent = RelaData<u32, Elf64>;
+    type LoadError = X86_64RelocLoadError<'a>;
+
+    #[inline]
+    fn from_relent(ent: RelaData<u32, Elf64>,
+                   symtab: Symtab<'a, LittleEndian, Elf64>,
+                   _strtab: Strtab<'a>) -> Result<Self, Self::LoadError> {
+        let raw: X86_64RelaRaw = match X86_64Rela::try_from(ent) {
+            Ok(raw) => Ok(raw),
+            Err(err) => Err(X86_64RelocLoadError::Raw(err))
+        }?;
+
+        match raw.with_symtab(symtab) {
+            Ok(out) => Ok(out),
+            Err(err) => Err(X86_64RelocLoadError::Symtab(err))
+        }
+    }
+}
+
 impl<'a> WithStrtab<'a> for X86_64RelRawSym {
     type Result = X86_64RelStrDataSym<'a>;
     type Error = u32;
@@ -3180,6 +3245,40 @@ impl<'a> WithStrtab<'a> for X86_64RelaRawSym {
     }
 }
 
+
+impl<'a> ArchReloc<'a, LittleEndian, Elf64> for X86_64RelStrDataSym<'a> {
+    type Ent = RelData<u32, Elf64>;
+    type LoadError = X86_64RelocLoadError<'a>;
+
+    fn from_relent(ent: RelData<u32, Elf64>,
+                   symtab: Symtab<'a, LittleEndian, Elf64>,
+                   strtab: Strtab<'a>) -> Result<Self, Self::LoadError> {
+        let raw: X86_64RelRawSym = X86_64Rel::from_relent(ent, symtab, strtab)?;
+
+        match raw.with_strtab(strtab) {
+            Ok(out) => Ok(out),
+            Err(err) => Err(X86_64RelocLoadError::Strtab(err))
+        }
+    }
+}
+
+impl<'a> ArchReloc<'a, LittleEndian, Elf64> for X86_64RelaStrDataSym<'a> {
+    type Ent = RelaData<u32, Elf64>;
+    type LoadError = X86_64RelocLoadError<'a>;
+
+    fn from_relent(ent: RelaData<u32, Elf64>,
+                   symtab: Symtab<'a, LittleEndian, Elf64>,
+                   strtab: Strtab<'a>) -> Result<Self, Self::LoadError> {
+        let raw: X86_64RelaRawSym = X86_64Rela::from_relent(ent, symtab,
+                                                            strtab)?;
+
+        match raw.with_strtab(strtab) {
+            Ok(out) => Ok(out),
+            Err(err) => Err(X86_64RelocLoadError::Strtab(err))
+        }
+    }
+}
+
 impl<'a> TryFrom<X86_64RelStrDataSym<'a>> for X86_64RelStrSym<'a> {
     type Error = &'a [u8];
 
@@ -3372,11 +3471,6 @@ impl<'a> TryFrom<X86_64RelStrDataSym<'a>> for X86_64RelStrSym<'a> {
         }
     }
 }
-
-
-
-
-
 
 impl<'a> TryFrom<X86_64RelaStrDataSym<'a>> for X86_64RelaStrSym<'a> {
     type Error = &'a [u8];
@@ -3580,6 +3674,42 @@ impl<'a> TryFrom<X86_64RelaStrDataSym<'a>> for X86_64RelaStrSym<'a> {
                     },
                     Err(err) => Err(err)
                 },
+        }
+    }
+}
+
+impl<'a> ArchReloc<'a, LittleEndian, Elf64> for X86_64RelStrSym<'a> {
+    type Ent = RelData<u32, Elf64>;
+    type LoadError = X86_64RelocLoadError<'a>;
+
+    #[inline]
+    fn from_relent(ent: RelData<u32, Elf64>,
+                   symtab: Symtab<'a, LittleEndian, Elf64>,
+                   strtab: Strtab<'a>) -> Result<Self, Self::LoadError> {
+        let sym: X86_64RelStrDataSym = X86_64Rel::from_relent(ent, symtab,
+                                                              strtab)?;
+
+        match sym.try_into() {
+            Ok(out) => Ok(out),
+            Err(err) => Err(X86_64RelocLoadError::UTF8(err))
+        }
+    }
+}
+
+impl<'a> ArchReloc<'a, LittleEndian, Elf64> for X86_64RelaStrSym<'a> {
+    type Ent = RelaData<u32, Elf64>;
+    type LoadError = X86_64RelocLoadError<'a>;
+
+    #[inline]
+    fn from_relent(ent: RelaData<u32, Elf64>,
+                   symtab: Symtab<'a, LittleEndian, Elf64>,
+                   strtab: Strtab<'a>) -> Result<Self, Self::LoadError> {
+        let sym: X86_64RelaStrDataSym = X86_64Rela::from_relent(ent, symtab,
+                                                                strtab)?;
+
+        match sym.try_into() {
+            Ok(out) => Ok(out),
+            Err(err) => Err(X86_64RelocLoadError::UTF8(err))
         }
     }
 }

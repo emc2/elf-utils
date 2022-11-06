@@ -116,10 +116,10 @@ use core::fmt::Display;
 use core::fmt::Formatter;
 use core::iter::FusedIterator;
 use core::marker::PhantomData;
+use crate::dynamic::DynamicInfo;
 use crate::elf::Elf32;
 use crate::elf::Elf64;
 use crate::elf::ElfClass;
-use crate::section_hdr::SectionHdrOffsets;
 use crate::strtab::Strtab;
 use crate::strtab::WithStrtab;
 use crate::symtab::SymDataRaw;
@@ -188,11 +188,7 @@ pub trait RelaOffsets: RelOffsets {
 }
 
 pub trait RelocParams<Class: ElfClass> {
-    /*
-    fn create<'a, B>(base: Class::Addr, dynamic: Dynamic<'a, B, Class>) -> Self
-    where Class: DynamicOffsets,
-          B: ByteOrder;
-     */
+
     /// Get the base address of the entire image.
     fn img_base(&self) -> Class::Addr;
 
@@ -203,12 +199,12 @@ pub trait RelocParams<Class: ElfClass> {
     fn got(&self) -> Option<Class::Addr>;
 }
 
-pub trait Reloc<B: ByteOrder, Class: SectionHdrOffsets> {
+pub trait Reloc<B: ByteOrder, Class: ElfClass> {
     /// Type of relocation parameters needed by this `Reloc` instance.
     type Params: RelocParams<Class>;
 
     /// Type of errors from applying relocations.
-    type Error;
+    type RelocError;
 
     /// Perform the relocation.
     ///
@@ -217,7 +213,7 @@ pub trait Reloc<B: ByteOrder, Class: SectionHdrOffsets> {
     /// and is used to interpret symbol values.
     fn reloc<'a, F>(&self, target: &mut [u8], params: &Self::Params,
                     target_base: Class::Addr, section_base: F) ->
-        Result<(), Self::Error>
+        Result<(), Self::RelocError>
         where F: FnOnce(Class::Half) -> Option<Class::Addr>;
 
     /// Perform a dynamic executable relocation.
@@ -227,10 +223,20 @@ pub trait Reloc<B: ByteOrder, Class: SectionHdrOffsets> {
     /// executable are virtual addresses, and symbol values in a
     /// shared object are relative to the start of the image.
     #[inline]
-    fn reloc_dynamic<'a>(&self, target: &mut [u8], params: &Self::Params,
-                         target_base: Class::Addr) -> Result<(), Self::Error> {
-        self.reloc(target, params, target_base, |_| Some(Class::Addr::from(0)))
+    fn reloc_dynamic<'a>(&self, target: &mut [u8], params: &Self::Params) ->
+        Result<(), Self::RelocError> {
+        self.reloc(target, params, Class::Addr::from(0),
+                   |_| Some(Class::Addr::from(0)))
     }
+}
+
+pub trait ArchReloc<'a, B: ByteOrder, Class: SymOffsets>:
+    Reloc<B, Class> + Sized {
+    type Ent;
+    type LoadError;
+
+    fn from_relent(ent: Self::Ent, symtab: Symtab<'a, B, Class>,
+                   strtab: Strtab<'a>) ->  Result<Self, Self::LoadError>;
 }
 
 /// In-place read-only ELF relocation table.
@@ -1875,6 +1881,20 @@ impl<'a, B, Offsets> From<&'_ mut Rel<'a, B, Offsets>>
     }
 }
 
+impl<Class> BasicRelocParams<Class> where Class: ElfClass {
+
+    #[inline]
+    pub fn from_dynamic<B, Name, Flags, Strs, Syms, Hash, Rel, Rela>(
+            base: Class::Addr,
+            _dynamic: &DynamicInfo<Name, Flags, Strs, Syms,
+                                   Hash, Rel, Rela, B, Class>
+        ) -> Self
+    where B: ByteOrder {
+        BasicRelocParams { class: PhantomData, base: base,
+                           plt: None, got: None }
+    }
+}
+
 impl<Class> RelocParams<Class> for BasicRelocParams<Class>
     where Class: ElfClass {
     #[inline]
@@ -2015,6 +2035,17 @@ impl Display for RelasError {
         match self {
             RelasError::BadSize(size) =>
                 write!(f, "bad relocation table size {}", size)
+        }
+    }
+}
+
+impl<Class> Display for RelocSymtabError<Class>
+    where Class: ElfClass {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
+        match self {
+            RelocSymtabError::BadIdx(idx) =>
+                write!(f, "bad symbol table index {}", idx),
+            RelocSymtabError::SymError(err) => Display::fmt(err, f)
         }
     }
 }

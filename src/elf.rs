@@ -48,7 +48,8 @@ pub trait ElfClass: Copy + PartialEq + PartialOrd {
     /// A memory address.
     type Addr: Add<Self::Offset, Output = Self::Addr> + Copy + Debug +
                Display + Eq + From<u8> + Hash + LowerHex + Ord + PartialEq +
-               PartialOrd + TryFrom<usize> + TryInto<usize>;
+               PartialOrd + TryFrom<u64> + TryInto<u64> +
+               TryFrom<usize> + TryInto<usize>;
     /// An offset (into the file or memory).
     type Offset: Add<Output = Self::Offset> + BitAnd<Output = Self::Offset> +
                  Copy + Debug + Display + Eq + From<u8> + From<u32> + Hash +
@@ -222,11 +223,11 @@ pub trait WithElfData<'a> {
 }
 
 /// Sizes for 32-bit ELF data.
-#[derive(Copy, Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Copy, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Elf32;
 
 /// Sizes for 64-bit ELF data.
-#[derive(Copy, Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Copy, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Elf64;
 
 /// In-place read-only ELF header.
@@ -931,6 +932,20 @@ pub enum ElfHdrTableError {
     BadSectionHdr(SectionHdrsError),
 }
 
+/// Multiplexer for errors that can occur when loading and fully
+/// interpreting Elf headers.
+pub enum ElfHdrDataLoadError<Class: ElfClass> {
+    /// Basic ELF header errors.
+    Elf(ElfError),
+    /// Errors extracting raw elf header data.
+    ElfHdrData(ElfHdrDataError<Class>),
+    /// Errors finding program header and section header tables.
+    ElfHdrWithData(ElfHdrWithDataError<Class>),
+    /// Errors interpreting program header and section header tables.
+    ElfHdrTable(ElfHdrTableError),
+}
+
+
 fn project<'a, B, Offsets>(data: &'a [u8]) ->
     Result<ElfHdrData<B, Offsets, ElfTable<Offsets>,
                       ElfTable<Offsets>, Offsets::Half>,
@@ -1366,6 +1381,17 @@ impl Display for ElfHdrTableError {
                 write!(f, "bad program header data ({})", err),
             ElfHdrTableError::BadSectionHdr(err) =>
                 write!(f, "bad section header data ({})", err)
+        }
+    }
+}
+
+impl<Class: ElfClass> Display for ElfHdrDataLoadError<Class> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
+        match self {
+            ElfHdrDataLoadError::Elf(err) => Display::fmt(err, f),
+            ElfHdrDataLoadError::ElfHdrData(err) => Display::fmt(err, f),
+            ElfHdrDataLoadError::ElfHdrWithData(err) => Display::fmt(err, f),
+            ElfHdrDataLoadError::ElfHdrTable(err) => Display::fmt(err, f),
         }
     }
 }
@@ -1809,6 +1835,33 @@ impl<'a, B, Offsets> Elf<'a, B, Offsets>
         match Self::create_split(buf, hdr) {
             Ok((out, _)) => Ok(out),
             Err(err) => Err(err)
+        }
+    }
+}
+
+impl<'a, B, Offsets> ElfHdrDataHdrs<'a, B, Offsets>
+where Offsets: ElfHdrOffsets + ProgHdrOffsets + SectionHdrOffsets,
+      B: ElfByteOrder {
+    /// Load and fully interpret Elf header data from a buffer.
+    pub fn from_data(data: &'a [u8]) ->
+        Result<Self, ElfHdrDataLoadError<Offsets>> {
+        let elf: Elf<'a, B, Offsets> = match Elf::try_from(data) {
+            Ok(elf) => Ok(elf),
+            Err(err) => Err(ElfHdrDataLoadError::Elf(err))
+        }?;
+        let raw_hdr: ElfHdrDataRaw<B, Offsets> = match elf.try_into() {
+            Ok(hdr) => Ok(hdr),
+            Err(err) => Err(ElfHdrDataLoadError::ElfHdrData(err))
+        }?;
+        let bufs_hdr: ElfHdrDataBufs<'a, B, Offsets> =
+            match raw_hdr.with_elf_data(data) {
+                Ok(hdr) => Ok(hdr),
+                Err(err) => Err(ElfHdrDataLoadError::ElfHdrWithData(err))
+            }?;
+
+        match bufs_hdr.try_into() {
+            Ok(hdr) => Ok(hdr),
+            Err(err) => Err(ElfHdrDataLoadError::ElfHdrTable(err))
         }
     }
 }

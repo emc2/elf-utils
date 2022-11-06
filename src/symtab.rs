@@ -1682,3 +1682,14 @@ impl Display for SymtabError {
         }
     }
 }
+
+impl Display for SymError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
+        match self {
+            SymError::BadBind(val) =>
+                write!(f, "bad binding value {:x}", val),
+            SymError::BadType(val) =>
+                write!(f, "bad type value {:x}", val)
+        }
+    }
+}

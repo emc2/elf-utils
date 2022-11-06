@@ -665,6 +665,19 @@ pub enum DynamicInfoFullStrDataError<Offsets: ElfClass> {
     StrtabOutOfBounds(Offsets::Offset)
 }
 
+/// Multiplexer for errors that can occur when completely loading
+/// [DynamicInfo] from a [Dynamic] and ELF data.
+pub enum DynamicInfoLoadError<'a, Class: ElfClass> {
+    /// Errors collecting dynamic information.
+    DynamicInfo(DynamicInfoError<Class>),
+    /// Errors looking up section data.
+    WithData(DynamicInfoWithDataError<Class>),
+    /// Errors interpreting sections.
+    FullStrData(DynamicInfoFullStrDataError<Class>),
+    /// UTF-8 decode errors
+    UTF8(&'a [u8])
+}
+
 /// [DynamicInfo] as projected from a [Dynamic] using the [TryFrom]
 /// instance.
 pub type DynamicInfoRaw<B, Offsets> =
@@ -1601,6 +1614,34 @@ impl<'a, B, Offsets> Dynamic<'a, B, Offsets>
                       data: self.data, idx: 0 }
     }
 }
+
+impl<'a, B, Offsets> DynamicInfoFullStrs<'a, B, Offsets>
+    where Offsets: 'a + DynamicOffsets + RelaOffsets + RelOffsets + SymOffsets,
+          B: 'a + ByteOrder {
+    pub fn from_dynamic(dynamic: &Dynamic<'a, B, Offsets>, data: &'a [u8]) ->
+        Result<Self, DynamicInfoLoadError<'a, Offsets>> {
+        let info_raw: DynamicInfoRaw<B, Offsets> = match dynamic.try_into() {
+            Ok(ent) => Ok(ent),
+            Err(err) => Err(DynamicInfoLoadError::DynamicInfo(err)),
+        }?;
+        let info_data: DynamicInfoData<'a, B, Offsets> =
+            match info_raw.with_elf_data(data) {
+                Ok(ent) => Ok(ent),
+                Err(err) => Err(DynamicInfoLoadError::WithData(err)),
+            }?;
+        let info_full: DynamicInfoFullStrData<'a, B, Offsets> =
+            match info_data.try_into() {
+                Ok(ent) => Ok(ent),
+                Err(err) => Err(DynamicInfoLoadError::FullStrData(err)),
+            }?;
+
+        match info_full.try_into() {
+            Ok(ent) => Ok(ent),
+            Err(err) => Err(DynamicInfoLoadError::UTF8(err)),
+        }
+    }
+}
+
 
 impl<'a, B, Offsets> TryFrom<Dynamic<'a, B, Offsets>>
     for DynamicInfoRaw<B, Offsets>
@@ -2815,6 +2856,18 @@ impl<Offsets> Display for DynamicEntStrsError<Offsets>
                 write!(f, "bad type code {:x}", code),
             DynamicEntStrsError::BadName(idx) =>
                 write!(f, "bad name index {:x}", idx),
+        }
+    }
+}
+
+impl<'a, Offsets> Display for DynamicInfoLoadError<'a, Offsets>
+    where Offsets: ElfClass + DynamicOffsets {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
+        match self {
+            DynamicInfoLoadError::DynamicInfo(err) => Display::fmt(err, f),
+            DynamicInfoLoadError::WithData(err) => Display::fmt(err, f),
+            DynamicInfoLoadError::FullStrData(err) => Display::fmt(err, f),
+            DynamicInfoLoadError::UTF8(_) => write!(f, "UTF-8 decoding error")
         }
     }
 }
