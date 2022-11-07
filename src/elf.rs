@@ -934,6 +934,7 @@ pub enum ElfHdrTableError {
 
 /// Multiplexer for errors that can occur when loading and fully
 /// interpreting Elf headers.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum ElfHdrDataLoadError<Class: ElfClass> {
     /// Basic ELF header errors.
     Elf(ElfError),

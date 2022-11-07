@@ -641,6 +641,7 @@ pub enum X86_64RelocError {
 }
 
 /// Errors that can occur during relocation.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum X86_64RelocApplyError {
     /// Bad symbol base.
     BadSymBase(SymBase<u16, u16>),

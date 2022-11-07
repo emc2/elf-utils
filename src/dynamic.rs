@@ -667,6 +667,7 @@ pub enum DynamicInfoFullStrDataError<Offsets: ElfClass> {
 
 /// Multiplexer for errors that can occur when completely loading
 /// [DynamicInfo] from a [Dynamic] and ELF data.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum DynamicInfoLoadError<'a, Class: ElfClass> {
     /// Errors collecting dynamic information.
     DynamicInfo(DynamicInfoError<Class>),

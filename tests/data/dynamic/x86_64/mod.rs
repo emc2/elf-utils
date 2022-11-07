@@ -21,6 +21,8 @@ use elf_utils::symtab::SymKind;
 use std::marker::PhantomData;
 
 pub const PATH: &'static str = "tests/data/dynamic/x86_64/ld-elf.so.1";
+pub const RELOC_PATH: &'static str =
+    "tests/data/dynamic/x86_64/ld-elf.so.1.reloc";
 
 const NUM_PROG_HDRS: usize = 10;
 

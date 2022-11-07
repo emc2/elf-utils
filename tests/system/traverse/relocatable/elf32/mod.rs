@@ -11,10 +11,7 @@ fn traverse_test() {
     let data = read(PATH).expect("expected success");
     let data = data.as_slice();
 
-    println!("Read {} bytes\n", data.len());
-
     traverse_elf_file(data, &HEADER_DATA, None, &SECTION_HDR_CONTENTS_BARE,
                       &SECTION_HDR_CONTENTS_STRS, &EXPECTED);
 
-    //assert!(false);
 }

@@ -112,6 +112,7 @@ use core::borrow::Borrow;
 use byteorder::ByteOrder;
 use core::convert::TryFrom;
 use core::convert::TryInto;
+use core::fmt::Debug;
 use core::fmt::Display;
 use core::fmt::Formatter;
 use core::iter::FusedIterator;
@@ -134,7 +135,7 @@ use crate::symtab::WithSymtab;
 /// information specific to relocations.
 pub trait RelClass: ElfClass {
     /// Type used to hold relocation kind tags.
-    type RelKind: Copy + Display;
+    type RelKind: Copy + Debug + Display;
 
     /// Read the info value and split it into a kind tag and a symbol index.
     fn read_info<B: ByteOrder>(data: &[u8]) -> (Self::RelKind, Self::Word);
@@ -233,6 +234,7 @@ pub trait Reloc<B: ByteOrder, Class: ElfClass> {
 pub trait ArchReloc<'a, B: ByteOrder, Class: SymOffsets>:
     Reloc<B, Class> + Sized {
     type Ent;
+    /// Errors that can occur when converting to an architecture-specific type.
     type LoadError;
 
     fn from_relent(ent: Self::Ent, symtab: Symtab<'a, B, Class>,
@@ -734,6 +736,26 @@ pub enum RelocSymtabError<Class: ElfClass> {
     SymError(SymError)
 }
 
+/// Errors that can occur when applying groups of relocations.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum RelocsApplyError<'a, B: ByteOrder, Class: SymOffsets,
+                          R: ArchReloc<'a, B, Class>> {
+    /// Architecture-specific conversion failed.
+    Arch {
+        /// Relocation entry on which conversion failed.
+        ent: R::Ent,
+        /// Reported conversion error.
+        err: R::LoadError
+    },
+    /// Architecture-specific relocation failed to apply.
+    Apply {
+        /// Architecture-specific relocation which failed to apply.
+        ent: R,
+        /// Reported error.
+        err: R::RelocError
+    }
+}
+
 fn create_relas<'a, 'b, B, I, Offsets>(buf: &'a mut [u8], relas: I) ->
     Result<(&'a mut [u8], &'a mut [u8]), ()>
     where I: Iterator,
@@ -1066,6 +1088,16 @@ impl<'a, B, Offsets> Relas<'a, B, Offsets>
         RelaIter { byteorder: PhantomData, offsets: PhantomData,
                    data: self.data, idx: (0 as u8).into() }
     }
+
+    /// Apply all the relocations in this section to `dst`.
+    #[inline]
+    pub fn apply<'b, R>(self, dst: &'b mut [u8], params: &R::Params,
+                        symtab: Symtab<'a, B, Offsets>, strtab: Strtab<'a>) ->
+        Result<(), RelocsApplyError<'a, B, Offsets, R>>
+        where R: ArchReloc<'a, B, Offsets, Ent = RelaDataRaw<Offsets>>,
+              Offsets: SymOffsets {
+        self.iter().apply(dst, params, symtab, strtab)
+    }
 }
 
 impl<'a, B, Offsets> Rels<'a, B, Offsets>
@@ -1220,6 +1252,16 @@ impl<'a, B, Offsets> Rels<'a, B, Offsets>
     pub fn iter(&self) -> RelIter<'a, B, Offsets> {
         RelIter { byteorder: PhantomData, offsets: PhantomData,
                   data: self.data, idx: (0 as u8).into() }
+    }
+
+    /// Apply all the relocations in this section to `dst`.
+    #[inline]
+    pub fn apply<'b, R>(self, dst: &'b mut [u8], params: &R::Params,
+                        symtab: Symtab<'a, B, Offsets>, strtab: Strtab<'a>) ->
+        Result<(), RelocsApplyError<'a, B, Offsets, R>>
+        where R: ArchReloc<'a, B, Offsets, Ent = RelDataRaw<Offsets>>,
+              Offsets: SymOffsets {
+        self.iter().apply(dst, params, symtab, strtab)
     }
 }
 
@@ -1923,6 +1965,36 @@ impl<Name: Display, Class> Display for RelaData<Name, Class>
     }
 }
 
+impl<'a, B, Offsets> RelIter<'a, B, Offsets>
+    where Offsets: RelOffsets,
+          B: ByteOrder {
+    /// Apply all the relocations in this section to `dst`.
+    #[inline]
+    pub fn apply<'b, R>(self, dst: &'b mut [u8], params: &R::Params,
+                        symtab: Symtab<'a, B, Offsets>, strtab: Strtab<'a>) ->
+        Result<(), RelocsApplyError<'a, B, Offsets, R>>
+        where R: ArchReloc<'a, B, Offsets, Ent = RelDataRaw<Offsets>>,
+              Offsets: SymOffsets {
+        for rel in self {
+            let relent: RelDataRaw<Offsets> = rel.into();
+            let arch_rel = match R::from_relent(relent.clone(), symtab,
+                                                strtab) {
+                Ok(rel) => Ok(rel),
+                Err(err) => Err(RelocsApplyError::Arch { ent: relent,
+                                                         err: err })
+            }?;
+
+            match arch_rel.reloc_dynamic(dst, params) {
+                Ok(_) => {},
+                Err(err) => return Err(RelocsApplyError::Apply { ent: arch_rel,
+                                                                 err: err })
+            };
+        }
+
+        Ok(())
+    }
+}
+
 impl<'a, B, Offsets: RelOffsets> Iterator for RelIter<'a, B, Offsets>
     where B: ByteOrder {
     type Item = Rel<'a, B, Offsets>;
@@ -1969,6 +2041,36 @@ impl<'a, B, Offsets: RelOffsets> ExactSizeIterator for RelIter<'a, B, Offsets>
     #[inline]
     fn len(&self) -> usize {
         (self.data.len() / Offsets::REL_SIZE) - self.idx
+    }
+}
+
+impl<'a, B, Offsets> RelaIter<'a, B, Offsets>
+    where Offsets: RelaOffsets,
+          B: ByteOrder {
+    /// Apply all the relocations in this section to `dst`.
+    #[inline]
+    pub fn apply<'b, R>(self, dst: &'b mut [u8], params: &R::Params,
+                        symtab: Symtab<'a, B, Offsets>, strtab: Strtab<'a>) ->
+        Result<(), RelocsApplyError<'a, B, Offsets, R>>
+        where R: ArchReloc<'a, B, Offsets, Ent = RelaDataRaw<Offsets>>,
+              Offsets: SymOffsets {
+        for rel in self {
+            let relent: RelaDataRaw<Offsets> = rel.into();
+            let arch_rela = match R::from_relent(relent.clone(), symtab,
+                                                 strtab) {
+                Ok(rel) => Ok(rel),
+                Err(err) => Err(RelocsApplyError::Arch { ent: relent,
+                                                         err: err })
+            }?;
+
+            match arch_rela.reloc_dynamic(dst, params) {
+                Ok(_) => {},
+                Err(err) => return Err(RelocsApplyError::Apply { ent: arch_rela,
+                                                                 err: err })
+            };
+        }
+
+        Ok(())
     }
 }
 
@@ -2046,6 +2148,20 @@ impl<Class> Display for RelocSymtabError<Class>
             RelocSymtabError::BadIdx(idx) =>
                 write!(f, "bad symbol table index {}", idx),
             RelocSymtabError::SymError(err) => Display::fmt(err, f)
+        }
+    }
+}
+
+impl<'a, B, Class, R> Display for RelocsApplyError<'a, B, Class, R>
+    where Class: SymOffsets,
+          B: ByteOrder,
+          R: ArchReloc<'a, B, Class>,
+          R::LoadError: Display,
+          R::RelocError: Display {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
+        match self {
+            RelocsApplyError::Arch { err, .. } => Display::fmt(err, f),
+            RelocsApplyError::Apply { err, .. } => Display::fmt(err, f),
         }
     }
 }
